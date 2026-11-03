@@ -1,7 +1,7 @@
 import type { Camera } from '../render/camera';
-import { worldToTile } from '../render/iso';
 import type { Vec2 } from '../render/iso';
-import type { Tile } from '../sim/map';
+import type { Tile, TileMap } from '../sim/map';
+import { pickTile } from './pick';
 
 const PAN_SPEED = 600; // 화면 px/초 (zoom 1 기준)
 
@@ -19,6 +19,9 @@ export class Input {
   private dragging = false;
   private lastX = 0;
   private lastY = 0;
+
+  /** 지형 높이를 고려해 칸을 고르는 데 쓰는 맵(월드가 새 게임·불러오기로 바뀔 수 있어 함수로 받는다) */
+  getMap!: () => TileMap;
 
   constructor(private canvas: HTMLCanvasElement, private cam: Camera) {
     canvas.addEventListener('mousedown', this.onDown);
@@ -53,9 +56,9 @@ export class Input {
   /** 화면 좌표 → 타일 좌표. hoverPos(실수)와 hoverTile(정수)을 함께 갱신. */
   private tileAt(sx: number, sy: number): Tile {
     const w = this.cam.screenToWorld(sx, sy);
-    const t = worldToTile(w.x, w.y);
-    this.hoverPos = t;
-    return { x: Math.floor(t.x), y: Math.floor(t.y) };
+    const hit = pickTile(this.getMap!(), w.x, w.y);
+    this.hoverPos = hit.pos;
+    return hit.tile;
   }
 
   private onDown = (e: MouseEvent): void => {

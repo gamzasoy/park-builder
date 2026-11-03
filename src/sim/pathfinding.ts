@@ -5,6 +5,14 @@ const DIRS: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0, 1],
 const MAX_CACHE = 4000;
 
 /**
+ * 인접한 두 칸이 길로 이어지는가: 둘 다 길이고 지형 높이 차가 1 이하여야 한다(차 1은 경사로).
+ * 길 그래프를 따라가는 모든 코드(BFS·경로·직원 배회)는 이 함수로 이웃을 판정한다.
+ */
+export function connected(map: TileMap, ax: number, ay: number, bx: number, by: number): boolean {
+  return map.isPath(ax, ay) && map.isPath(bx, by) && Math.abs(map.heightAt(ax, ay) - map.heightAt(bx, by)) <= 1;
+}
+
+/**
  * 길 타일 위의 4방향 그래프.
  * - 공원 입구에서 닿을 수 있는 타일 집합(reach)과 BFS 최단 경로를 제공
  * - 결과는 map.version이 바뀌면(길 설치/철거) 전부 무효화
@@ -63,7 +71,7 @@ export class PathNetwork {
       for (const [dx, dy] of DIRS) {
         const nx = cx + dx;
         const ny = cy + dy;
-        if (!map.isPath(nx, ny)) continue;
+        if (!connected(map, cx, cy, nx, ny)) continue;
         const ni = map.index(nx, ny);
         if (this.reach[ni]) continue;
         this.reach[ni] = 1;
@@ -88,7 +96,7 @@ export class PathNetwork {
       for (const [dx, dy] of DIRS) {
         const nx = cx + dx;
         const ny = cy + dy;
-        if (!map.isPath(nx, ny)) continue;
+        if (!connected(map, cx, cy, nx, ny)) continue;
         const ni = map.index(nx, ny);
         if (prev[ni] !== -1) continue;
         prev[ni] = cur;

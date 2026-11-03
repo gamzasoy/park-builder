@@ -134,6 +134,7 @@ export class World {
     this.map.occupant.set(src.map.occupant);
     this.map.scenery.set(src.map.scenery);
     this.map.litter.set(src.map.litter);
+    this.map.terrain.set(src.map.terrain);
     this.map.version++; // 길찾기 캐시 무효화
     this.money = src.money;
     this.buildings.clear();

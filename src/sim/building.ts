@@ -12,7 +12,7 @@ export const PATH_REFUND = 5;
 export const REFUND_RATE = 0.5;
 
 export interface Footprint { x: number; y: number; w: number; h: number }
-export type PlaceFailure = 'bounds' | 'occupied' | 'path' | 'money';
+export type PlaceFailure = 'bounds' | 'occupied' | 'path' | 'slope' | 'money';
 export type PlaceCheck = { ok: true } | { ok: false; reason: PlaceFailure };
 
 /** 회전(0~3)에 따른 풋프린트 크기. 홀수 회전은 가로/세로 교환. */
@@ -54,6 +54,14 @@ export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: n
       if (occ.has(map.index(tx, ty))) return { ok: false, reason: 'occupied' };
     }
   }
+  // 건물은 풋프린트와 입구 칸이 모두 같은 높이(평평한 땅)여야 한다.
+  // 입구 칸이 맵 밖이면 높이를 비교하지 않는다(기존 동작 유지).
+  const base = map.heightAt(f.x, f.y);
+  for (let ty = f.y; ty < f.y + f.h; ty++) {
+    for (let tx = f.x; tx < f.x + f.w; tx++) if (map.heightAt(tx, ty) !== base) return { ok: false, reason: 'slope' };
+  }
+  const e = entranceOf(f, rot);
+  if (map.inBounds(e.x, e.y) && map.heightAt(e.x, e.y) !== base) return { ok: false, reason: 'slope' };
   if (world.money < def.cost) return { ok: false, reason: 'money' };
   return { ok: true };
 }

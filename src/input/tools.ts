@@ -7,8 +7,9 @@ import {
   isPathPlaceable, isSceneryPlaceable, lineTiles, PATH_COST, placeBuilding, placePaths, placeScenery,
   type PlaceFailure,
 } from '../sim/building';
+import { paintTerrain, canChangeTerrain, TERRAIN_COST, type TerrainFailure, type TerrainMode } from '../sim/terrain';
 import { buildingTiles, TRACK_TYPES, type Cursor, type TrackType } from '../sim/coaster';
-import type { Tile } from '../sim/map';
+import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { appendPiece, beginEdit, canAppendPiece, clearTrack, TRACK_FAIL_TEXT, undoPiece } from '../sim/trackedit';
 import type { Building, World } from '../sim/world';
 
@@ -20,7 +21,9 @@ export type Tool =
   /** 나무·꽃: 길처럼 드래그로 한 줄을 칠한다 */
   | { kind: 'scenery'; def: SceneryDef }
   /** 롤러코스터 트랙 편집: 조각 팔레트/단축키로 다음 조각을 잇는다 */
-  | { kind: 'track'; buildingId: number };
+  | { kind: 'track'; buildingId: number }
+  /** 지형 올리기/내리기: 클릭 또는 드래그(직선)로 칸마다 ±1단계 */
+  | { kind: 'terrain'; mode: TerrainMode };
 
 /** 효과음 등 부가 반응을 위한 이벤트 */
 export type ToolEvent = 'build' | 'path' | 'demolish' | 'error' | 'chime';
@@ -28,7 +31,11 @@ export type ToolEvent = 'build' | 'path' | 'demolish' | 'error' | 'chime';
 /** 손님 클릭 선택 반경(타일). 렌더 오프셋과 틱 사이 보간을 고려해 넉넉하게. */
 export const GUEST_PICK_RADIUS = 0.6;
 
-export interface PreviewTile extends Tile { ok: boolean }
+export interface PreviewTile extends Tile {
+  ok: boolean;
+  /** 지형 도구: 바뀐 뒤의 땅 높이. 있으면 그 높이의 평평한 칸으로 그린다 */
+  level?: number;
+}
 export interface Preview {
   tiles: PreviewTile[];
   entrance?: Tile;
@@ -40,6 +47,17 @@ const FAIL_TEXT: Record<PlaceFailure, string> = {
   bounds: '맵 밖에는 지을 수 없습니다',
   occupied: '이미 건물이 있습니다',
   path: '길 위에는 지을 수 없습니다',
+  slope: '건물 자리와 입구 칸은 평평해야 합니다 (높이가 같아야 함)',
+  money: '돈이 부족합니다',
+};
+
+const TERRAIN_FAIL_TEXT: Record<TerrainFailure, string> = {
+  bounds: '맵 밖입니다',
+  limit: '더 이상 올리거나 내릴 수 없습니다 (높이 0~4)',
+  path: '길이 있는 칸은 지형을 바꿀 수 없습니다',
+  occupied: '건물이나 트랙이 있는 칸은 지형을 바꿀 수 없습니다',
+  entrance: '건물 입구 칸은 지형을 바꿀 수 없습니다',
+  step: '이웃 칸과의 높이 차가 1단계를 넘을 수 없습니다',
   money: '돈이 부족합니다',
 };
 
@@ -64,6 +82,7 @@ export class ToolController {
     const t = this.tool;
     if (t.kind === 'build') return `build:${t.def.id}`;
     if (t.kind === 'scenery') return `scenery:${t.def.id}`;
+    if (t.kind === 'terrain') return `terrain:${t.mode}`;
     return t.kind;
   }
 
@@ -206,7 +225,7 @@ export class ToolController {
       this.selectedStaffId = sid;
       this.selectedGuestId = gid;
       this.selectedId = sid === null && gid === null ? (buildingAt(this.world, t.x, t.y)?.id ?? null) : null;
-    } else if (tool.kind === 'path' || tool.kind === 'scenery') {
+    } else if (tool.kind === 'path' || tool.kind === 'scenery' || tool.kind === 'terrain') {
       this.dragStart = t;
     } else if (tool.kind === 'build') {
       const a = anchorFor(tool.def, this.rot, t);
@@ -236,8 +255,15 @@ export class ToolController {
     const start = this.dragStart;
     this.dragStart = null;
     const tool = this.tool;
-    if ((tool.kind !== 'path' && tool.kind !== 'scenery') || !start || !t) return;
+    if ((tool.kind !== 'path' && tool.kind !== 'scenery' && tool.kind !== 'terrain') || !start || !t) return;
     const line = lineTiles(start, t);
+    if (tool.kind === 'terrain') {
+      const { changed, short, firstFail } = paintTerrain(this.world, line, tool.mode);
+      if (short) this.notify('돈이 부족합니다');
+      else if (changed === 0) this.notify(firstFail ? TERRAIN_FAIL_TEXT[firstFail] : '지형을 바꿀 수 없습니다');
+      this.onEvent?.(short || changed === 0 ? 'error' : 'build');
+      return;
+    }
     const { placed, short } = tool.kind === 'path' ? placePaths(this.world, line) : placeScenery(this.world, line, tool.def);
     if (short) this.notify('돈이 부족합니다');
     else if (placed === 0) this.notify(tool.kind === 'path' ? '길을 깔 수 없는 위치입니다' : '빈 잔디에만 심을 수 있습니다');
@@ -259,6 +285,21 @@ export class ToolController {
     }
 
     if (!hover) return null;
+
+    if (tool.kind === 'terrain') {
+      // 드래그 중에는 칸마다 독립적으로 검사한다(실제 적용은 앞 칸의 변경이 뒤 칸에 반영되므로 약간 다를 수 있다)
+      const line = this.dragStart ? lineTiles(this.dragStart, hover) : [hover];
+      let afford = Math.floor(this.world.money / TERRAIN_COST);
+      const tiles = line
+        .filter((t) => map.inBounds(t.x, t.y))
+        .map((t) => {
+          const ok = canChangeTerrain(this.world, t.x, t.y, tool.mode).ok && afford > 0;
+          if (ok) afford--;
+          const level = Math.max(0, Math.min(MAX_TERRAIN, map.heightAt(t.x, t.y) + (tool.mode === 'raise' ? 1 : -1)));
+          return { ...t, ok, level: ok ? level : map.heightAt(t.x, t.y) };
+        });
+      return { tiles };
+    }
 
     if (tool.kind === 'path' || tool.kind === 'scenery') {
       const line = this.dragStart ? lineTiles(this.dragStart, hover) : [hover];

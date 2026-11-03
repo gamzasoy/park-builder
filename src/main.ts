@@ -3,7 +3,7 @@ import { Rng } from './core/rng';
 import { Input } from './input/input';
 import { ToolController } from './input/tools';
 import { Camera } from './render/camera';
-import { tileToWorld } from './render/iso';
+import { tileToWorld, tileToWorldZ } from './render/iso';
 import { drawFrame } from './render/renderer';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
@@ -29,6 +29,7 @@ const cam = new Camera();
 const world = new World();
 const tools = new ToolController(world);
 const input = new Input(canvas, cam);
+input.getMap = () => world.map;
 const modal = new Modal();
 const sound = new Sound();
 tools.onEvent = (e) => sound.play(e);
@@ -232,7 +233,7 @@ if (import.meta.env.DEV) {
     step: (n: number) => { for (let i = 0; i < n; i++) stepWorld(world); },
     /** 타일 중앙의 화면 좌표(E2E에서 실제 마우스 입력용) */
     tileToScreen: (tx: number, ty: number) => {
-      const w = tileToWorld(tx + 0.5, ty + 0.5);
+      const w = tileToWorldZ(tx + 0.5, ty + 0.5, world.map.heightAt(tx, ty));
       const s = cam.worldToScreen(w.x, w.y);
       const r = canvas.getBoundingClientRect();
       return { x: s.x + r.left, y: s.y + r.top };
@@ -252,5 +253,13 @@ if (import.meta.env.DEV) {
     }),
     setSpeed: (s: 0 | 1 | 2 | 4) => { loop.speed = s; },
     setZoom: (z: number) => { cam.zoom = z; },
+    /** 마우스 아래로 판정된 칸(높이 보정 피킹 확인용) */
+    hover: () => input.hoverTile,
+    /** 카메라를 타일 (tx, ty)의 윗면 중앙으로 */
+    focus: (tx: number, ty: number) => {
+      const w = tileToWorldZ(tx + 0.5, ty + 0.5, world.map.heightAt(tx, ty));
+      cam.x = w.x;
+      cam.y = w.y;
+    },
   };
 }

@@ -6,7 +6,7 @@ import { fairPrice, setPrice } from './economy';
 import { evictAll } from './venue';
 import type { Building, World } from './world';
 
-export type TrackFailure = 'notrack' | 'closed' | 'max' | 'bounds' | 'occupied' | 'height' | 'entrance' | 'money';
+export type TrackFailure = 'notrack' | 'closed' | 'max' | 'bounds' | 'occupied' | 'height' | 'underground' | 'entrance' | 'money';
 export type TrackCheck = { ok: true } | { ok: false; reason: TrackFailure };
 
 export const TRACK_FAIL_TEXT: Record<TrackFailure, string> = {
@@ -16,6 +16,7 @@ export const TRACK_FAIL_TEXT: Record<TrackFailure, string> = {
   bounds: '맵 밖으로 나갈 수 없습니다',
   occupied: '다음 칸에 놓을 수 없습니다 (건물·길 위는 높이 2 이상, 다른 트랙과는 높이가 2단계 이상 떨어져야 합니다)',
   height: '더 올라가거나 내려갈 수 없습니다',
+  underground: '지형 아래로 파고들 수 없습니다 (트랙 높이는 지형 높이 이상이어야 합니다)',
   entrance: '건물 입구를 막을 수 없습니다',
   money: '돈이 부족합니다',
 };
@@ -52,6 +53,14 @@ export function separated(a: { hMin: number; hMax: number }, b: { hMin: number; 
   return a.hMin >= b.hMax + CLEARANCE || a.hMax <= b.hMin - CLEARANCE;
 }
 
+/**
+ * 지형과 트랙 높이: 트랙 조각의 높이 h는 지형 높이와 같은 단위의 **절대 높이**다(역 기준 상대값이 아님).
+ * 조각의 가장 낮은 높이(hMin)가 그 타일의 지형 높이보다 낮으면(땅속) 놓을 수 없다.
+ * 코스가 높이 0의 역 시작 칸으로 돌아와야 하므로, 실질적으로 역은 지형 높이 0 위에 지어야 완성할 수 있다.
+ */
+export const belowTerrain = (world: World, p: PlacedPiece): boolean =>
+  pieceRange(p).hMin < world.map.heightAt(p.x, p.y);
+
 /** 타일이 건물(역 포함)의 풋프린트인가 */
 function inFootprint(world: World, x: number, y: number): boolean {
   const id = world.map.occupant[world.map.index(x, y)];
@@ -82,7 +91,7 @@ export function claimLoadedTracks(world: World): void {
   const bs = [...world.buildings.values()].filter((b) => b.track);
   for (const b of bs) {
     for (const p of b.track!.placed) {
-      if (!map.inBounds(p.x, p.y)) throw new Error('bad track footprint');
+      if (!map.inBounds(p.x, p.y) || belowTerrain(world, p)) throw new Error('bad track footprint');
       const r = pieceRange(p);
       const idx = map.index(p.x, p.y);
       if (inFootprint(world, p.x, p.y) || (map.path[idx] === 1 && r.hMin < GROUND_LEVELS)) {
@@ -138,7 +147,9 @@ export function canAppendPiece(world: World, b: Building, type: TrackType): Trac
     if (o.entrance.x === c.x && o.entrance.y === c.y) return { ok: false, reason: 'entrance' };
   }
   if (!heightOk(c, type)) return { ok: false, reason: 'height' };
-  if (!tileFits(world, trackOccupancy(world), applyPiece(c, type).placed)) return { ok: false, reason: 'occupied' };
+  const next = applyPiece(c, type).placed;
+  if (belowTerrain(world, next)) return { ok: false, reason: 'underground' };
+  if (!tileFits(world, trackOccupancy(world), next)) return { ok: false, reason: 'occupied' };
   if (world.money < PIECE_COST[type]) return { ok: false, reason: 'money' };
   return { ok: true };
 }

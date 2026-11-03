@@ -6,7 +6,8 @@ import { PATH_COST } from '../sim/building';
 import { WAGE } from '../sim/economy';
 import type { StaffKind } from '../sim/staff';
 import { won } from './hud';
-import { buildingIcon, demolishIcon, pathIcon, sceneryIcon, staffIcon } from './icons';
+import { buildingIcon, demolishIcon, pathIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
+import { TERRAIN_COST } from '../sim/terrain';
 
 export class Toolbar {
   private buttons = new Map<string, HTMLButtonElement>();
@@ -21,6 +22,10 @@ export class Toolbar {
     this.group('놀이기구', RIDES.map((d) => this.defButton(d)));
     this.group('매점', SHOPS.map((d) => this.defButton(d)));
     this.group('장식', SCENERY.map((d) => this.sceneryButton(d)));
+    this.group('지형', [
+      this.button('terrain:raise', '지형 올리기', TERRAIN_COST, { kind: 'terrain', mode: 'raise' }, terrainIcon('raise')),
+      this.button('terrain:lower', '지형 내리기', TERRAIN_COST, { kind: 'terrain', mode: 'lower' }, terrainIcon('lower')),
+    ]);
     this.group('직원', [this.hireButton('janitor', '청소부 고용', onHire), this.hireButton('mechanic', '정비공 고용', onHire)]);
   }
 

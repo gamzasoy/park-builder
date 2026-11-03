@@ -164,3 +164,36 @@ export function demolishIcon(): string {
     ctx.stroke();
   });
 }
+
+/** 지형 도구: 흙 블록 위에 올림(▲)/내림(▼) 화살표 */
+export function terrainIcon(mode: 'raise' | 'lower'): string {
+  return render(`terrain:${mode}`, (ctx) => {
+    const { q } = fit(2, 2, 0);
+    const d = 7; // 블록 옆면 두께
+    const lift = mode === 'raise' ? -d : 0;
+    const sh = (p: Vec2): Vec2 => ({ x: p.x, y: p.y + lift });
+    const t = sh(q.top), r = sh(q.right), b = sh(q.bottom), l = sh(q.left);
+    poly(ctx, [l, b, { x: b.x, y: b.y + d }, { x: l.x, y: l.y + d }], '#7a5a3a', 'rgba(0,0,0,0.3)');
+    poly(ctx, [b, r, { x: r.x, y: r.y + d }, { x: b.x, y: b.y + d }], '#5f4529', 'rgba(0,0,0,0.3)');
+    poly(ctx, [t, r, b, l], '#4f9a45', 'rgba(0,0,0,0.25)');
+    // 화살표
+    const cx = (t.x + b.x) / 2;
+    const cy = (t.y + b.y) / 2;
+    const up = mode === 'raise';
+    ctx.fillStyle = up ? '#fff3b0' : '#d8e6ff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const s = up ? -1 : 1;
+    ctx.moveTo(cx, cy + s * 9);
+    ctx.lineTo(cx - 7, cy + s * 1);
+    ctx.lineTo(cx - 3, cy + s * 1);
+    ctx.lineTo(cx - 3, cy - s * 7);
+    ctx.lineTo(cx + 3, cy - s * 7);
+    ctx.lineTo(cx + 3, cy + s * 1);
+    ctx.lineTo(cx + 7, cy + s * 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
+}

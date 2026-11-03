@@ -2,6 +2,7 @@ import { hash32 } from '../core/hash';
 import type { Tile } from './map';
 import { advance, setPath, type Walker } from './guest';
 import { buildingDef } from './coaster';
+import { connected } from './pathfinding';
 import { INSPECT_BELOW, MAX_RELIABILITY } from './ride';
 import type { Building, World } from './world';
 
@@ -251,7 +252,7 @@ function nearestDirty(world: World, from: Tile, claimed: ReadonlySet<number>): T
     for (const [dx, dy] of NEIGHBORS) {
       const nx = cx + dx;
       const ny = cy + dy;
-      if (!m.isPath(nx, ny)) continue;
+      if (!connected(m, cx, cy, nx, ny)) continue;
       const ni = m.index(nx, ny);
       if (prev[ni] !== -1) continue;
       prev[ni] = cur;
@@ -266,7 +267,7 @@ function wander(world: World, s: Staff): void {
   const m = world.map;
   const opts: Tile[] = [];
   for (const [dx, dy] of NEIGHBORS) {
-    if (m.isPath(s.tile.x + dx, s.tile.y + dy)) opts.push({ x: s.tile.x + dx, y: s.tile.y + dy });
+    if (connected(m, s.tile.x, s.tile.y, s.tile.x + dx, s.tile.y + dy)) opts.push({ x: s.tile.x + dx, y: s.tile.y + dy });
   }
   if (opts.length === 0) return;
   const next = opts[hash32(s.id, world.tick, 3) % opts.length];

@@ -83,7 +83,8 @@ try {
     tick: window.__game.world.tick,
   }));
   check(after.buildings === before.buildings, `건물 복원 (${after.buildings}개)`);
-  check(after.money === before.money && after.tick === before.tick, '돈·시간 복원');
+  // 불러온 직후 루프가 1배속으로 돌기 시작하므로 읽기 전에 몇 틱 지났을 수 있다(그 경우 돈은 비교하지 않는다)
+  check(after.tick >= before.tick && after.tick - before.tick < 60 && (after.tick !== before.tick || after.money === before.money), '돈·시간 복원');
   check(await game(() => window.__game.world.tutorial.completed.length >= 5), '안내 진행 상황 복원');
   await shot('04-restored');
 
@@ -157,6 +158,45 @@ try {
   });
   check(back.n === 21 && back.ok, '새로고침 후 롤러코스터 트랙 복원');
   await page.screenshot({ path: 'e2e-out/07-coaster-restored.png' });
+
+  // ---- 지형: 지형 도구로 클릭 → 높이 변경, 높이 보정된 마우스 피킹, 규칙 위반은 거절 ----
+  await page.click('#new-btn');
+  await page.click('#m-buttons button.primary');
+  await page.click('[data-tool="terrain:raise"]');
+  const heightAt = (x, y) => game(([a, b]) => window.__game.world.map.heightAt(a, b), [x, y]);
+  const money1 = await game(() => window.__game.world.money);
+  await click(21, 40);
+  await click(22, 40);
+  await click(21, 40); // 이웃(20,40)이 0이라 2단계는 안 됨 → 거절
+    check((await heightAt(21, 40)) === 1 && (await heightAt(22, 40)) === 1, '지형 올리기 클릭으로 높이 1 (이웃과의 차이 규칙으로 두 번째는 거절)');
+  check((await game(() => window.__game.world.money)) === money1 - 40, '지형 비용 칸당 ₩20');
+  // 언덕: 드래그로 한 줄, 클릭으로 앞뒤 칸을 올린 뒤 가운데를 한 단 더 올린다(이웃과 1단계 차이 규칙)
+  await click(22, 33); // 뒤쪽 칸부터: 앞 칸이 솟으면 뒤 칸 중앙은 그 뒤에 가려진다
+  const da = await at(21, 34);
+  const db = await at(23, 34);
+  await page.mouse.move(da.x, da.y);
+  await page.mouse.down();
+  await page.mouse.move(db.x, db.y, { steps: 6 });
+  await page.mouse.up();
+  check((await heightAt(22, 34)) === 1 && (await heightAt(23, 34)) === 1, '지형 도구 드래그로 한 줄 올림');
+  await click(22, 35);
+  await click(22, 34);
+  check((await heightAt(22, 34)) === 2, '언덕 한가운데를 한 단 더 올리면 높이 2');
+  // 마우스가 윗면 위에 있으면 그 칸이 호버로 잡혀야 한다(높이 보정)
+  for (const [x, y] of [[22, 34], [21, 40], [30, 30]]) {
+    const p = await at(x, y);
+    await page.mouse.move(p.x, p.y);
+    const hv = await game(() => window.__game.hover());
+    check(hv && hv.x === x && hv.y === y, `높이가 있는 칸 위에서도 호버 칸이 맞음 (${x},${y})`);
+  }
+  await page.mouse.move(await (async () => { const p = await at(30, 30); return p.x; })(), 600);
+  await game(() => { window.__game.setZoom(1.3); window.__game.focus(22, 37); });
+  await page.waitForTimeout(150);
+  await shot('08-terrain');
+  // 내리기
+  await page.click('[data-tool="terrain:lower"]');
+  await click(22, 40);
+  check((await heightAt(22, 40)) === 0, '지형 내리기 클릭으로 평지로');
 
   console.log('\nE2E 통과. 스크린샷: e2e-out/');
 } catch (e) {

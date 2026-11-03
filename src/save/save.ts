@@ -5,7 +5,7 @@ import { claimLoadedTracks } from '../sim/trackedit';
 import type { Guest } from '../sim/guest';
 import type { Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
-import type { Tile } from '../sim/map';
+import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
 import {
   emptyLedger, type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
@@ -51,6 +51,8 @@ export interface SaveData {
   scenery?: string;
   /** v4에서 추가. 쓰레기 레이어: 타일마다 0~3 한 글자. 없으면 깨끗한 공원 */
   litter?: string;
+  /** 지형 높이 레이어: 타일마다 0~4 한 글자. 없으면(이전 저장본) 평지. 키 이름이 `height`가 아닌 것은 맵 세로 크기와 겹치기 때문 */
+  terrain?: string;
   tick: number;
   money: number;
   rngState: number;
@@ -96,6 +98,7 @@ export function serializeWorld(world: World): SaveData {
     path: Array.from(m.path, (v) => (v ? '1' : '0')).join(''),
     scenery: Array.from(m.scenery, (v) => String(v)).join(''),
     litter: Array.from(m.litter, (v) => String(v)).join(''),
+    terrain: Array.from(m.terrain, (v) => String(v)).join(''),
     tick: world.tick,
     money: world.money,
     rngState: world.rng.state,
@@ -162,6 +165,16 @@ export function deserializeWorld(data: SaveData): World {
     for (let i = 0; i < data.litter.length; i++) {
       const k = data.litter.charCodeAt(i) - 48;
       m.litter[i] = m.path[i] === 1 && k >= 1 && k <= 3 ? k : 0;
+    }
+  }
+
+  // 지형은 길·건물·트랙 검사보다 먼저 읽는다(트랙의 땅속 검사에 쓰인다). 없으면 평지
+  if (data.terrain !== undefined) {
+    if (typeof data.terrain !== 'string' || data.terrain.length !== m.width * m.height) throw new Error('bad terrain layer');
+    for (let i = 0; i < data.terrain.length; i++) {
+      const k = data.terrain.charCodeAt(i) - 48;
+      if (!(k >= 0 && k <= MAX_TERRAIN)) throw new Error('bad terrain layer');
+      m.terrain[i] = k;
     }
   }
 
