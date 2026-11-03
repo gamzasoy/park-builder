@@ -1,6 +1,8 @@
 import { getDef } from '../data';
 import type { Preview } from '../input/tools';
-import { buildingDef, DIRS, LEVEL_PX, routeAt, type PlacedPiece } from '../sim/coaster';
+import { buildingDef, DIRS, LEVEL_PX, LOOP_RISE, pieceRange, routeAt, type PlacedPiece } from '../sim/coaster';
+import { supportBase, trackOccupancy, type TrackSeg } from '../sim/trackedit';
+import type { TestRun } from './testrun';
 import { tileHash, type Tile, type TileMap } from '../sim/map';
 import { MAX_QUEUE, type Guest } from '../sim/guest';
 import type { WeatherKind } from '../sim/weather';
@@ -22,6 +24,8 @@ export interface View {
   selectedId: number | null;
   selectedGuestId: number | null;
   selectedStaffId?: number | null;
+  /** 시운전 애니메이션(렌더 전용 상태) */
+  testRun?: TestRun;
 }
 
 const groundCache = new GroundCache();
@@ -83,12 +87,14 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   walkers.sort((a, b) => a.x + a.y - (b.x + b.y));
 
   // 건물, 롤러코스터 트랙 조각, 열차는 같은 깊이 키로 한꺼번에 정렬해 손님과 섞어 그린다
+  let occCache: Map<number, TrackSeg[]> | null = null;
+  const trackOcc = (): Map<number, TrackSeg[]> => (occCache ??= trackOccupancy(world));
   const scenery: Scenery[] = buildings.map((b) => ({ key: bKey(b), draw: () => drawBuilding(ctx, cam, b, time) }));
   for (const b of buildings) {
     if (!b.track) continue;
     // 역 바닥은 열차보다 먼저(뒤 모서리 기준), 지붕은 건물 키로 그린다
     scenery.push({ key: b.x + b.y, draw: () => drawStationFloor(ctx, footprintQuad(cam, b), spriteOpts(cam, b, time), b.w >= b.h) });
-    addTrackScenery(scenery, ctx, cam, b, alpha);
+    addTrackScenery(scenery, ctx, cam, b, alpha, trackOcc(), world, view.testRun);
   }
   addSceneryTiles(scenery, ctx, cam, map, tileScreen, visible, hh);
   const gs = tileScreen(map.gate.x, map.gate.y);
@@ -297,7 +303,7 @@ function railPoint(cam: Camera, x: number, y: number, h: number): Vec2 {
 }
 
 /** 트랙 조각 한 칸의 기둥 + 침목 + 레일. 회전 조각은 모서리를 제어점으로 하는 곡선. */
-function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPiece, finished: boolean): void {
+function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPiece, finished: boolean, base: number | null): void {
   const [idx, idy] = DIRS[p.dirIn];
   const [odx, ody] = DIRS[p.dirOut];
   const cx = p.x + 0.5;
@@ -307,12 +313,12 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
   const m = railPoint(cam, cx, cy, hMid);
   const b = railPoint(cam, cx + odx * 0.5, cy + ody * 0.5, p.hOut);
   if (Math.max(a.x, b.x) < -40 || Math.min(a.x, b.x) > cam.viewW + 40) return;
-  if (Math.min(a.y, b.y) > cam.viewH + 40 || Math.max(a.y, b.y) < -40) return;
+  if (Math.min(a.y, b.y) > cam.viewH + 40 || Math.max(a.y, b.y) < -40 - (p.type === 'loop' ? LOOP_RISE * LEVEL_PX * cam.zoom : 0)) return;
   const z = cam.zoom;
 
-  if (hMid > 0.01) {
-    // 나무 격자 지지대: 기둥 두 개 + X자 가새
-    const g = railPoint(cam, cx, cy, 0);
+  if (base !== null && hMid - base > 0.01) {
+    // 나무 격자 지지대: 기둥 두 개 + X자 가새. 아래 트랙 위에서 끝나고, 길 위에서는 세우지 않는다
+    const g = railPoint(cam, cx, cy, base);
     const w = 3.5 * z;
     ctx.strokeStyle = '#7a5230';
     ctx.lineWidth = Math.max(1, 1.6 * z);
@@ -325,10 +331,12 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
       ctx.moveTo(g.x + w, y); ctx.lineTo(g.x - w, y - step);
     }
     ctx.stroke();
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.beginPath();
-    ctx.ellipse(g.x, g.y, 5 * z, 2.5 * z, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (base === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y, 5 * z, 2.5 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   const turn = p.dirIn !== p.dirOut;
@@ -361,6 +369,16 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
   ctx.lineWidth = Math.max(0.8, 1.5 * z);
   ctx.stroke();
   ctx.restore();
+  if (p.type === 'loop') drawLoopRing(ctx, cam, p, finished, base);
+  if (p.type === 'brake') {
+    // 붉은 제동 블록 줄무늬
+    trace();
+    ctx.setLineDash([3 * z, 4 * z]);
+    ctx.strokeStyle = '#c0392b';
+    ctx.lineWidth = Math.max(2, 5 * z);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (p.type === 'lift') {
     trace();
     ctx.setLineDash([2 * z, 5 * z]);
@@ -371,6 +389,54 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
   }
   ctx.lineCap = 'butt';
   ctx.lineJoin = 'miter';
+}
+
+/** 루프: 진행 방향 수직면에 서 있는 레일 원 + 받침 */
+function drawLoopRing(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPiece, finished: boolean, base: number | null): void {
+  const [dx, dy] = DIRS[p.dirOut];
+  const cx = p.x + 0.5;
+  const cy = p.y + 0.5;
+  const z = cam.zoom;
+  const lx = -dy * 0.1; // 두 줄의 레일이 나란히 보이도록 옆으로 살짝 벌린다
+  const ly = dx * 0.1;
+  const N = 28;
+  const ring = (off: number): void => {
+    ctx.beginPath();
+    for (let k = 0; k <= N; k++) {
+      const th = (k / N) * Math.PI * 2;
+      const along = 0.42 * Math.sin(th);
+      const q = railPoint(cam, cx + dx * along + lx * off, cy + dy * along + ly * off, p.hIn + (1 - Math.cos(th)) * (LOOP_RISE / 2));
+      if (k === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
+    }
+  };
+  // 받침: 꼭대기에서 레일 높이까지 기둥, 옆구리에서 지면 쪽으로 버팀대
+  const top = railPoint(cam, cx, cy, p.hIn + LOOP_RISE);
+  const mid = railPoint(cam, cx, cy, p.hIn);
+  ctx.strokeStyle = '#7a5230';
+  ctx.lineWidth = Math.max(1, 1.6 * z);
+  ctx.beginPath();
+  ctx.moveTo(top.x, top.y); ctx.lineTo(mid.x, mid.y);
+  for (const sgn of [-1, 1]) {
+    const side = railPoint(cam, cx + dx * 0.42 * sgn, cy + dy * 0.42 * sgn, p.hIn + LOOP_RISE / 2);
+    const foot = railPoint(cam, cx + dx * 0.5 * sgn, cy + dy * 0.5 * sgn, base === null ? p.hIn : Math.max(base, p.hIn - 0.01));
+    ctx.moveTo(side.x, side.y); ctx.lineTo(foot.x, foot.y);
+  }
+  ctx.stroke();
+  ctx.lineCap = 'round';
+  ctx.save();
+  if (!finished) ctx.globalAlpha = 0.75;
+  for (const off of [-1, 1]) {
+    ring(off);
+    ctx.strokeStyle = finished ? '#6b4a12' : '#7a4a1a';
+    ctx.lineWidth = Math.max(3, 7 * z);
+    ctx.stroke();
+    ring(off);
+    ctx.strokeStyle = finished ? '#f2c230' : '#f0943a';
+    ctx.lineWidth = Math.max(2, 4.5 * z);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.lineCap = 'butt';
 }
 
 /** 열차 한 칸: 차체 + 앞쪽 덮개 + 탑승객 머리 둘 */
@@ -397,11 +463,37 @@ function drawCar(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: numbe
 
 const CARS = 3;
 
+/** 높이를 깊이 키에 조금 더해, 같은 타일에서 높은 트랙이 낮은 트랙 위에 그려지게 한다 */
+const heightKey = (h: number): number => 0.04 * h;
+
 /** 코스터의 트랙 조각과 열차를 깊이 정렬 대상으로 추가 */
-function addTrackScenery(list: Scenery[], ctx: CanvasRenderingContext2D, cam: Camera, b: Building, alpha: number): void {
+function addTrackScenery(
+  list: Scenery[], ctx: CanvasRenderingContext2D, cam: Camera, b: Building, alpha: number,
+  occ: Map<number, TrackSeg[]>, world: World, testRun?: TestRun,
+): void {
   const t = b.track!;
   for (const p of t.placed) {
-    list.push({ key: p.x + p.y + 1.5, draw: () => drawTrackPiece(ctx, cam, p, t.ok) });
+    const r = pieceRange(p);
+    const base = supportBase(world, occ, p);
+    list.push({ key: p.x + p.y + 1.5 + heightKey((r.hMin + r.hMax) / 2), draw: () => drawTrackPiece(ctx, cam, p, t.ok, base) });
+  }
+
+  const trial = testRun && testRun.active(b.id) ? testRun : undefined;
+  if (trial) {
+    // 시운전: 선두가 정해진 지점까지 달리고, 멈추면 그 자리에 표시
+    const gap = 0.9 / (t.placed.length + 4);
+    for (let i = 0; i < CARS; i++) {
+      const pos = routeAt(t.route, Math.max(0, trial.t - i * gap));
+      list.push({
+        key: pos.x + pos.y + 0.6 + heightKey(pos.h),
+        draw: () => drawCar(ctx, cam, pos.x, pos.y, pos.h, i === 0 ? '#2f6fd0' : '#d9443a'),
+      });
+    }
+    if (trial.stalled && trial.finished) {
+      const pos = routeAt(t.route, trial.t);
+      list.push({ key: pos.x + pos.y + 0.7 + heightKey(pos.h), draw: () => drawStallMarker(ctx, cam, pos.x, pos.y, pos.h) });
+    }
+    return;
   }
   if (!t.ok || t.route.length < 2) return;
 
@@ -414,10 +506,29 @@ function addTrackScenery(list: Scenery[], ctx: CanvasRenderingContext2D, cam: Ca
   for (let i = 0; i < CARS; i++) {
     const pos = routeAt(t.route, Math.max(0, head - i * gap));
     list.push({
-      key: pos.x + pos.y + 0.6,
+      key: pos.x + pos.y + 0.6 + heightKey(pos.h),
       draw: () => drawCar(ctx, cam, pos.x, pos.y, pos.h, i === 0 ? '#2f6fd0' : '#d9443a'),
     });
   }
+}
+
+/** 시운전에서 열차가 멈춘 자리: 빨간 X와 문구 */
+function drawStallMarker(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, h: number): void {
+  const s = railPoint(cam, x, y, h);
+  const z = cam.zoom;
+  ctx.strokeStyle = '#e03b2e';
+  ctx.lineWidth = Math.max(2, 3 * z);
+  ctx.beginPath();
+  ctx.moveTo(s.x - 6 * z, s.y - 34 * z); ctx.lineTo(s.x + 6 * z, s.y - 22 * z);
+  ctx.moveTo(s.x + 6 * z, s.y - 34 * z); ctx.lineTo(s.x - 6 * z, s.y - 22 * z);
+  ctx.stroke();
+  ctx.font = `bold ${Math.max(9, 11 * z)}px "Trebuchet MS", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+  ctx.strokeText('여기서 멈춤', s.x, s.y - 38 * z);
+  ctx.fillStyle = '#ffd7d2';
+  ctx.fillText('여기서 멈춤', s.x, s.y - 38 * z);
 }
 
 /** 선택한 코스터의 트랙이 차지한 타일 윤곽 */

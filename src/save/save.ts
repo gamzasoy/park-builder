@@ -1,6 +1,7 @@
 import { getDef } from '../data';
 import { sceneryDef } from '../data/scenery';
-import { buildingTiles, restoreTrack, type TrackType } from '../sim/coaster';
+import { restoreTrack, type TrackType } from '../sim/coaster';
+import { claimLoadedTracks } from '../sim/trackedit';
 import type { Guest } from '../sim/guest';
 import type { Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
@@ -184,17 +185,12 @@ export function deserializeWorld(data: SaveData): World {
       cycles: isNum(b.cycles) ? b.cycles : 0,
     };
     if (savedTrack) {
-      // 트랙 상태를 다시 계산하고, 트랙이 차지한 타일도 점유로 표시
+      // 트랙 상태를 다시 계산한다. 다른 건물과의 충돌 검사·지면 점유는 모든 건물을 읽은 뒤에 한다
       building.track = restoreTrack(building, savedTrack.pieces, savedTrack.spent);
-      for (const t of buildingTiles(building).slice(b.w * b.h)) {
-        if (!m.inBounds(t.x, t.y) || m.occupant[m.index(t.x, t.y)] !== 0 || m.path[m.index(t.x, t.y)] === 1) {
-          throw new Error('bad track footprint');
-        }
-        m.occupant[m.index(t.x, t.y)] = b.id;
-      }
     }
     w.buildings.set(b.id, building);
   }
+  claimLoadedTracks(w);
   // 길·건물·트랙 아래에는 장식이 있을 수 없다(이전 저장본에 기본 숲을 깔았을 때 겹친 것 정리)
   for (let i = 0; i < m.scenery.length; i++) if (m.path[i] === 1 || m.occupant[i] !== 0) m.scenery[i] = 0;
 

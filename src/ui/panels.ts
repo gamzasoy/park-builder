@@ -1,6 +1,7 @@
 import { getDef } from '../data';
 import { buildingDef } from '../sim/coaster';
 import type { ToolController } from '../input/tools';
+import type { TestRun } from '../render/testrun';
 import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
 import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
@@ -31,12 +32,13 @@ export class BuildingPanel {
   private price: Stepper;
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
   private editBtn = $<HTMLButtonElement>('p-edit');
+  private testBtn = $<HTMLButtonElement>('p-test');
   private relRow = $('p-rel-row');
   private rel = $('p-rel');
   private thrillRow = $('p-thrill-row');
   private thrill = $('p-thrill');
 
-  constructor(private world: World, private tools: ToolController) {
+  constructor(private world: World, private tools: ToolController, private testRun: TestRun) {
     this.price = new Stepper(1, 5, (d) => {
       const b = this.current();
       if (b) setPrice(b, b.price + d);
@@ -46,6 +48,11 @@ export class BuildingPanel {
     this.editBtn.addEventListener('click', () => {
       const b = this.current();
       if (b) this.tools.beginTrackEdit(b.id);
+    });
+    this.testBtn.addEventListener('click', () => {
+      const b = this.current();
+      if (b && this.testRun.start(b)) this.tools.notify(this.testRun.result);
+      else this.tools.notify('시운전할 트랙이 없습니다');
     });
     this.demolishBtn.addEventListener('click', () => {
       const b = this.current();
@@ -83,6 +90,7 @@ export class BuildingPanel {
     if (def.kind === 'ride') setText(this.rel, `${Math.round(b.reliability)} / 100${b.broken ? ' · 고장' : ''}`);
     this.thrillRow.hidden = !b.track;
     this.editBtn.hidden = !b.track;
+    this.testBtn.hidden = !b.track;
     if (b.track) {
       setText(this.thrill, def.intensity !== undefined ? `${def.intensity} / ${def.nausea ?? 0}` : '–');
     }

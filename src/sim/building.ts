@@ -2,6 +2,7 @@ import { sceneryDef, type SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef, buildingTiles, newTrack } from './coaster';
 import type { Tile } from './map';
+import { trackOccupancy } from './trackedit';
 import { evictAll } from './venue';
 import { MAX_RELIABILITY } from './ride';
 import { type Building, World } from './world';
@@ -43,11 +44,14 @@ export function anchorFor(def: BuildingDef, rot: number, cursor: Tile): Tile {
 export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: number, rot: number): PlaceCheck {
   const f = footprintAt(def, x, y, rot);
   const map = world.map;
+  const occ = trackOccupancy(world);
   for (let ty = f.y; ty < f.y + f.h; ty++) {
     for (let tx = f.x; tx < f.x + f.w; tx++) {
       if (!map.inBounds(tx, ty)) return { ok: false, reason: 'bounds' };
       if (map.occupant[map.index(tx, ty)] !== 0) return { ok: false, reason: 'occupied' };
       if (map.path[map.index(tx, ty)] === 1) return { ok: false, reason: 'path' };
+      // 머리 위로 지나가는 트랙 아래에도 지을 수 없다
+      if (occ.has(map.index(tx, ty))) return { ok: false, reason: 'occupied' };
     }
   }
   if (world.money < def.cost) return { ok: false, reason: 'money' };
@@ -100,8 +104,11 @@ export function demolishAt(world: World, x: number, y: number): number | null {
   const b = buildingAt(world, x, y);
   if (b) {
     evictAll(world, b);
-    // 롤러코스터는 역 풋프린트뿐 아니라 트랙이 차지한 타일도 비운다
-    for (const t of buildingTiles(b)) map.occupant[map.index(t.x, t.y)] = 0;
+    // 롤러코스터는 역 풋프린트뿐 아니라 트랙이 차지한 타일도 비운다(다른 건물/코스터의 점유는 건드리지 않는다)
+    for (const t of buildingTiles(b)) {
+      const i = map.index(t.x, t.y);
+      if (map.occupant[i] === b.id) map.occupant[i] = 0;
+    }
     world.buildings.delete(b.id);
     // 코스터의 cost는 지금까지 쓴 돈(역 + 조각)이라 환급도 그 절반
     const refund = Math.floor(buildingDef(b).cost * REFUND_RATE);

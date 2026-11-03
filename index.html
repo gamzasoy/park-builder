@@ -123,7 +123,7 @@
       .p-row:nth-child(odd) { background: rgba(0,0,0,0.1); }
       .p-row > span:first-child { color: var(--muted); }
       #p-status[data-ok="0"] { color: #ffb0a8; }
-      #p-demolish, #p-edit { width: 100%; margin-top: 8px; padding: 4px; }
+      #p-demolish, #p-edit, #p-test { width: 100%; margin-top: 8px; padding: 4px; }
       #finance table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.12); }
       #finance th { text-align: left; font-weight: 400; color: var(--muted); padding: 3px 4px; }
       #finance td { text-align: right; padding: 3px 4px 3px 8px; font-variant-numeric: tabular-nums; }
@@ -204,6 +204,7 @@
       <div class="p-row"><span>이용 요금</span><span id="p-price-ctl"></span></div>
       <div class="p-row"><span>적정 요금</span><span id="p-fair"></span></div>
       <button id="p-edit" hidden>트랙 편집</button>
+      <button id="p-test" hidden>시운전</button>
       <button id="p-demolish"></button>
     </div>
     <div id="finance" class="card" hidden>

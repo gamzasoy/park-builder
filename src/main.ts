@@ -16,6 +16,7 @@ import { Modal } from './ui/modal';
 import { BuildingPanel, FinancePanel, GuestPanel, StaffPanel } from './ui/panels';
 import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
+import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
 import type { TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
@@ -123,13 +124,16 @@ function watchStatus(): void {
 }
 
 // ---- 루프 ----
+const testRun = new TestRun();
 let lastFrame = performance.now();
 const loop = new GameLoop(
   () => stepWorld(world),
   (alpha) => {
     const now = performance.now();
     input.arrowsPan = tools.tool.kind !== 'track';
-    input.update(Math.min((now - lastFrame) / 1000, 0.1));
+    const frameDt = Math.min((now - lastFrame) / 1000, 0.1);
+    input.update(frameDt);
+    testRun.update(world, frameDt);
     lastFrame = now;
     drawFrame(ctx, cam, world, {
       hover: input.hoverTile,
@@ -138,6 +142,7 @@ const loop = new GameLoop(
       selectedId: tools.selectedId,
       selectedGuestId: tools.selectedGuestId,
       selectedStaffId: tools.selectedStaffId,
+      testRun,
     });
     hud.update();
     toolbar.sync();
@@ -169,16 +174,16 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     sound.play('error');
   }
 });
-const buildingPanel = new BuildingPanel(world, tools);
+const buildingPanel = new BuildingPanel(world, tools, testRun);
 const guestPanel = new GuestPanel(world, tools);
 const staffPanel = new StaffPanel(world, tools);
-const trackEditor = new TrackEditor(world, tools);
+const trackEditor = new TrackEditor(world, tools, testRun);
 const tutorialPanel = new TutorialPanel(world, toolbar);
 
 input.onLeftDown = (t, pos) => tools.onDown(t, pos);
 input.onLeftUp = (t) => tools.onUp(t);
 const TRACK_KEYS: Record<string, TrackType> = {
-  arrowup: 'straight', arrowleft: 'left', arrowright: 'right', pageup: 'up', pagedown: 'down', c: 'lift',
+  arrowup: 'straight', arrowleft: 'left', arrowright: 'right', pageup: 'up', pagedown: 'down', c: 'lift', b: 'brake', l: 'loop',
 };
 input.onKeyDown = (k) => {
   // 트랙 편집 중에는 방향키·PgUp/PgDn·C로 다음 조각을 잇는다
