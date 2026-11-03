@@ -9,15 +9,37 @@ import type { TileMap } from '../sim/map';
 /** 윗면 네 모서리의 높이(단계, 실수): [위(T), 오른쪽(R), 아래(B), 왼쪽(L)] — 마름모 꼭짓점 순서 */
 export type Corners = [number, number, number, number];
 
+/**
+ * 격자 꼭짓점 (vx, vy)의 높이. 그 꼭짓점에 닿은 길 칸 가운데, 그 꼭짓점을 지나는 변으로 이웃 길과 이어진 칸들의
+ * 높이 평균이다(그런 칸이 없으면 undefined). 꼭짓점마다 값이 하나라서 이어진 두 칸의 맞닿은 변이 항상 맞는다.
+ */
+function vertexLevel(map: TileMap, vx: number, vy: number): number | undefined {
+  let sum = 0;
+  let n = 0;
+  for (const [tx, ty] of [[vx - 1, vy - 1], [vx, vy - 1], [vx - 1, vy], [vx, vy]]) {
+    if (!map.isPath(tx, ty)) continue;
+    // 이 꼭짓점이 칸의 어느 모서리인지 → 그 모서리를 지나는 두 변의 이웃
+    const right = vx === tx + 1;
+    const bottom = vy === ty + 1;
+    const nx = right ? tx + 1 : tx - 1;
+    const ny = bottom ? ty + 1 : ty - 1;
+    if (connected(map, tx, ty, nx, ty) || connected(map, tx, ty, tx, ny)) {
+      sum += map.heightAt(tx, ty);
+      n++;
+    }
+  }
+  return n > 0 ? sum / n : undefined;
+}
+
 export function cornerLevels(map: TileMap, tx: number, ty: number): Corners {
   const t = map.heightAt(tx, ty);
   if (!map.isPath(tx, ty)) return [t, t, t, t];
-  const d = (nx: number, ny: number): number => (connected(map, tx, ty, nx, ny) ? (map.heightAt(nx, ny) - t) / 2 : 0);
-  const n = d(tx, ty - 1);
-  const e = d(tx + 1, ty);
-  const s = d(tx, ty + 1);
-  const w = d(tx - 1, ty);
-  return [t + n + w, t + n + e, t + s + e, t + s + w];
+  return [
+    vertexLevel(map, tx, ty) ?? t,
+    vertexLevel(map, tx + 1, ty) ?? t,
+    vertexLevel(map, tx + 1, ty + 1) ?? t,
+    vertexLevel(map, tx, ty + 1) ?? t,
+  ];
 }
 
 /** 연속 타일 좌표 (x, y) 위 윗면의 높이(단계). 맵 밖은 0. */
