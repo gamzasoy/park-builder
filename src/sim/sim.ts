@@ -5,6 +5,7 @@ import { trackDebt, updateGoals } from './goals';
 import { RATING_EVERY, updateRating } from './rating';
 import { updateRide } from './ride';
 import { updateShop } from './shop';
+import { updateStaff } from './staff';
 import { TUTORIAL_EVERY, updateTutorial } from './tutorial';
 import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
@@ -21,6 +22,7 @@ export function stepGuests(world: World): void {
     renumberQueue(world, b);
   }
   for (const g of world.guests) updateGuest(world, g);
+  for (const s of world.staff) updateStaff(world, s);
   if (world.guests.some((g) => g.state === 'gone')) {
     world.guests = world.guests.filter((g) => g.state !== 'gone');
   }

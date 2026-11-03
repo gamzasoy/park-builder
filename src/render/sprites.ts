@@ -3,7 +3,7 @@
  * 모든 함수는 화면 좌표(이미 카메라 변환된 값)와 확대율 z를 받으므로
  * 게임 화면(renderer.ts)과 툴바 아이콘(ui/icons.ts)에서 함께 쓴다.
  */
-import { FLOWERS, OAK, PINE } from '../data/scenery';
+import { BIN, FLOWERS, OAK, PINE } from '../data/scenery';
 import { shade } from './color';
 import type { Vec2 } from './iso';
 
@@ -501,6 +501,33 @@ export function drawScenery(ctx: CanvasRenderingContext2D, kind: number, x: numb
       ctx.arc(x + Math.cos(a) * r * 13 * z, y + Math.sin(a) * r * 6.5 * z - 1.5 * z, 1.8 * z, 0, TAU);
       ctx.fill();
     }
+    return;
+  }
+  if (kind === BIN) {
+    // 초록 쓰레기통: 몸통 + 뚜껑 + 투입구
+    const bs = z * 1.1;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1.5 * bs, y + 0.5 * bs, 6 * bs, 3 * bs, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#2f7d4a';
+    ctx.beginPath();
+    ctx.moveTo(x - 4.5 * bs, y - 11 * bs);
+    ctx.lineTo(x + 4.5 * bs, y - 11 * bs);
+    ctx.lineTo(x + 3.6 * bs, y);
+    ctx.lineTo(x - 3.6 * bs, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#245f39';
+    ctx.fillRect(x + 0.5 * bs, y - 11 * bs, 4 * bs, 11 * bs);
+    ctx.fillStyle = '#3f9a5e';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 11 * bs, 5.4 * bs, 2.4 * bs, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#10261a';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 11.2 * bs, 3 * bs, 1.1 * bs, 0, 0, TAU);
+    ctx.fill();
     return;
   }
   ctx.fillStyle = 'rgba(0,0,0,0.22)';

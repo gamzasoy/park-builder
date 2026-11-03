@@ -19,6 +19,8 @@ export class TileMap {
   readonly occupant: Int32Array;
   /** 장식 종류(0 = 없음, data/scenery.ts의 kind) */
   readonly scenery: Uint8Array;
+  /** 길 위 쓰레기 양(0~3). 길 타일에만 쌓인다 */
+  readonly litter: Uint8Array;
   /** 공원 입구(맵 아래쪽 가장자리 중앙). 항상 길이며 철거 불가 */
   readonly gate: Tile;
   /** 길 구성이 바뀔 때마다 증가 — 길찾기 캐시 무효화에 사용 */
@@ -28,6 +30,7 @@ export class TileMap {
     this.path = new Uint8Array(width * height);
     this.occupant = new Int32Array(width * height);
     this.scenery = new Uint8Array(width * height);
+    this.litter = new Uint8Array(width * height);
     this.gate = { x: Math.floor(width / 2), y: height - 1 };
     this.path[this.index(this.gate.x, this.gate.y)] = 1;
     this.plantNaturalTrees();
@@ -60,11 +63,16 @@ export class TileMap {
   setPath(x: number, y: number, on: boolean): void {
     this.path[this.index(x, y)] = on ? 1 : 0;
     if (on) this.scenery[this.index(x, y)] = 0;
+    else this.litter[this.index(x, y)] = 0;
     this.version++;
   }
 
   isGate(x: number, y: number): boolean {
     return x === this.gate.x && y === this.gate.y;
+  }
+
+  litterAt(x: number, y: number): number {
+    return this.inBounds(x, y) ? this.litter[this.index(x, y)] : 0;
   }
 
   sceneryAt(x: number, y: number): number {

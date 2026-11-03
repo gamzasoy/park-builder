@@ -1,5 +1,6 @@
 import { Rng } from '../core/rng';
 import type { Guest } from './guest';
+import type { Staff } from './staff';
 import { TileMap, type Tile } from './map';
 import type { Track } from './coaster';
 import { START_FEE } from './economy';
@@ -37,7 +38,7 @@ export interface Building {
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */
 export type GameStatus = 'playing' | 'won' | 'lost' | 'sandbox';
 
-export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'construction' | 'upkeep';
+export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'construction' | 'upkeep' | 'wages';
 export type Ledger = Record<LedgerKey, number>;
 
 export interface MonthReport {
@@ -59,9 +60,11 @@ export interface RatingParts {
   variety: number;
   flow: number;
   complaints: number;
+  /** 청결(0~100). 100이면 길이 깨끗해 감점이 없다 */
+  cleanliness: number;
 }
 
-const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, construction: 0, upkeep: 0 });
+export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, construction: 0, upkeep: 0, wages: 0 });
 
 export class World {
   readonly map = new TileMap();
@@ -74,6 +77,9 @@ export class World {
   /** 틱마다 재구성되는 id 조회용(저장 대상 아님) */
   guestById = new Map<number, Guest>();
   nextGuestId = 1;
+  /** 고용한 직원(청소부 등) */
+  staff: Staff[] = [];
+  nextStaffId = 1;
   /** 시뮬레이션 틱 카운터 */
   tick = 0;
   rng = new Rng(12345);
@@ -98,7 +104,7 @@ export class World {
   tutorial: TutorialState = newTutorial();
   /** 공원 평점(0~1000, 천천히 변동) */
   rating = 400;
-  ratingParts: RatingParts = { base: 0, satisfaction: 0, variety: 0, flow: 0, complaints: 0 };
+  ratingParts: RatingParts = { base: 0, satisfaction: 0, variety: 0, flow: 0, complaints: 0, cleanliness: 100 };
 
   /** 돈을 증감하고 장부에 기록 */
   transact(key: LedgerKey, amount: number): void {
@@ -115,6 +121,7 @@ export class World {
     this.map.path.set(src.map.path);
     this.map.occupant.set(src.map.occupant);
     this.map.scenery.set(src.map.scenery);
+    this.map.litter.set(src.map.litter);
     this.map.version++; // 길찾기 캐시 무효화
     this.money = src.money;
     this.buildings.clear();
@@ -125,6 +132,9 @@ export class World {
     for (const g of this.guests) g.pathVersion = this.map.version;
     this.guestById = new Map();
     this.nextGuestId = src.nextGuestId;
+    this.staff = src.staff;
+    for (const s of this.staff) s.pathVersion = this.map.version;
+    this.nextStaffId = src.nextStaffId;
     this.tick = src.tick;
     this.rng.state = src.rng.state;
     this.stats = src.stats;

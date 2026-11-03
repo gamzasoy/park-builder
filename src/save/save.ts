@@ -2,19 +2,27 @@ import { getDef } from '../data';
 import { sceneryDef } from '../data/scenery';
 import { buildingTiles, restoreTrack, type TrackType } from '../sim/coaster';
 import type { Guest } from '../sim/guest';
+import type { Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import type { Tile } from '../sim/map';
 import {
-  type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
+  emptyLedger, type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
 } from '../sim/world';
 
 /** 저장 형식 버전. 형식을 바꾸면 올리고 migrate에서 이전 버전을 변환한다. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'park-builder-save';
 export const BACKUP_KEY = 'park-builder-save.bak';
 
 /** 걷는 손님의 경로는 [x0, y0, x1, y1, ...]로 납작하게 저장 */
-interface GuestSave extends Omit<Guest, 'path'> {
+interface GuestSave extends Omit<Guest, 'path' | 'trash'> {
+  path: number[];
+  /** v4에서 추가. 없으면 0 */
+  trash?: number;
+}
+
+/** 직원도 걷는 중일 때만 경로를 저장한다 */
+interface StaffSave extends Omit<Staff, 'path'> {
   path: number[];
 }
 
@@ -32,6 +40,8 @@ export interface SaveData {
   path: string;
   /** v3에서 추가. 장식 레이어: 타일마다 kind 한 글자('0' = 없음). 없으면(이전 저장본) 새 맵의 기본 숲을 쓴다 */
   scenery?: string;
+  /** v4에서 추가. 쓰레기 레이어: 타일마다 0~3 한 글자. 없으면 깨끗한 공원 */
+  litter?: string;
   tick: number;
   money: number;
   rngState: number;
@@ -52,6 +62,9 @@ export interface SaveData {
   guests: GuestSave[];
   /** v2에서 추가. 없으면(이전 저장본) 안내를 이미 끝낸 것으로 본다 */
   tutorial?: TutorialState;
+  /** v4에서 추가. 없으면 직원 없음 */
+  staff?: StaffSave[];
+  nextStaffId?: number;
 }
 
 const flatten = (path: readonly Tile[]): number[] => path.flatMap((t) => [t.x, t.y]);
@@ -70,11 +83,13 @@ export function serializeWorld(world: World): SaveData {
     height: m.height,
     path: Array.from(m.path, (v) => (v ? '1' : '0')).join(''),
     scenery: Array.from(m.scenery, (v) => String(v)).join(''),
+    litter: Array.from(m.litter, (v) => String(v)).join(''),
     tick: world.tick,
     money: world.money,
     rngState: world.rng.state,
     nextBuildingId: world.nextBuildingId,
     nextGuestId: world.nextGuestId,
+    nextStaffId: world.nextStaffId,
     entranceFee: world.entranceFee,
     rating: world.rating,
     ratingParts: world.ratingParts,
@@ -90,6 +105,12 @@ export function serializeWorld(world: World): SaveData {
     buildings: [...world.buildings.values()].map(({ track, ...b }): BuildingSave => (
       track ? { ...b, track: { pieces: [...track.pieces], spent: track.spent } } : b
     )),
+    staff: world.staff.map((s) => ({
+      ...s,
+      tile: { ...s.tile },
+      target: s.target ? { ...s.target } : null,
+      path: s.state === 'walking' ? flatten(s.path) : [],
+    })),
     guests: world.guests.map((g) => ({
       ...g,
       // 이동 중이 아니면 경로는 필요 없다(필요할 때 다시 계산)
@@ -119,6 +140,14 @@ export function deserializeWorld(data: SaveData): World {
     for (let i = 0; i < data.scenery.length; i++) {
       const k = data.scenery.charCodeAt(i) - 48;
       m.scenery[i] = sceneryDef(k) ? k : 0;
+    }
+  }
+
+  if (data.litter !== undefined) {
+    if (typeof data.litter !== 'string' || data.litter.length !== m.width * m.height) throw new Error('bad litter layer');
+    for (let i = 0; i < data.litter.length; i++) {
+      const k = data.litter.charCodeAt(i) - 48;
+      m.litter[i] = m.path[i] === 1 && k >= 1 && k <= 3 ? k : 0;
     }
   }
 
@@ -158,7 +187,31 @@ export function deserializeWorld(data: SaveData): World {
     // 이 필드가 생기기 전의 저장본도 읽을 수 있게 기본값 지정
     thought: g.thought ?? null,
     thoughtTimer: g.thoughtTimer ?? 0,
+    trash: g.trash ?? 0,
   }));
+
+  w.staff = (data.staff ?? []).map((s) => {
+    // 서 있던 길이 없거나 좌표가 이상하면 입구에서 다시 시작
+    const onPath = isNum(s.tile?.x) && isNum(s.tile?.y) && m.isPath(s.tile.x, s.tile.y);
+    const home = onPath ? s.tile : m.gate;
+    const reset = !onPath || !isNum(s.x) || !isNum(s.y);
+    return {
+      ...s,
+      kind: s.kind === 'mechanic' ? 'mechanic' : 'janitor',
+      x: reset ? home.x + 0.5 : s.x,
+      y: reset ? home.y + 0.5 : s.y,
+      px: reset ? home.x + 0.5 : s.px ?? s.x,
+      py: reset ? home.y + 0.5 : s.py ?? s.y,
+      tile: { ...home },
+      path: unflatten(s.path ?? []),
+      pathIdx: s.pathIdx ?? 0,
+      pathVersion: m.version,
+      state: reset ? 'idle' : s.state,
+      target: reset || !s.target ? null : { ...s.target },
+      timer: s.timer ?? 0,
+    } satisfies Staff;
+  });
+  w.nextStaffId = isNum(data.nextStaffId) ? data.nextStaffId : w.staff.reduce((a, s) => Math.max(a, s.id + 1), 1);
 
   w.tick = data.tick;
   w.money = data.money;
@@ -167,9 +220,10 @@ export function deserializeWorld(data: SaveData): World {
   w.nextGuestId = data.nextGuestId;
   w.entranceFee = data.entranceFee;
   w.rating = data.rating;
-  w.ratingParts = { ...data.ratingParts };
-  w.ledger = { ...data.ledger };
-  w.reports = data.reports.map((r) => ({ ...r, ledger: { ...r.ledger } }));
+  w.ratingParts = { ...data.ratingParts, cleanliness: data.ratingParts.cleanliness ?? 100 };
+  // v4 이전 저장본에는 급여(wages) 항목이 없다
+  w.ledger = { ...emptyLedger(), ...data.ledger };
+  w.reports = data.reports.map((r) => ({ ...r, ledger: { ...emptyLedger(), ...r.ledger } }));
   w.monthStartEntered = data.monthStartEntered;
   w.stats = { ...data.stats };
   w.status = data.status;
@@ -187,10 +241,11 @@ export function deserializeWorld(data: SaveData): World {
 
 /**
  * 이전 버전 저장을 현재 형식으로 변환. 지원하지 않는 버전이면 null.
- * v1 → v2: 트랙 필드 추가 / v2 → v3: 장식 레이어 추가. 둘 다 선택 필드라 그대로 읽는다.
+ * v1 → v2: 트랙 필드 추가 / v2 → v3: 장식 레이어 추가 / v3 → v4: 쓰레기 레이어·직원·급여 추가.
+ * 모두 선택 필드라 그대로 읽는다(없으면 기본값).
  */
 function migrate(data: { version?: unknown }): SaveData | null {
-  return data.version === SAVE_VERSION || data.version === 1 || data.version === 2 ? (data as SaveData) : null;
+  return data.version === SAVE_VERSION || data.version === 1 || data.version === 2 || data.version === 3 ? (data as SaveData) : null;
 }
 
 export type LoadResult =

@@ -3,11 +3,12 @@ import type { Preview } from '../input/tools';
 import { buildingDef, DIRS, LEVEL_PX, routeAt, type PlacedPiece } from '../sim/coaster';
 import { tileHash, type Tile, type TileMap } from '../sim/map';
 import { MAX_QUEUE, type Guest } from '../sim/guest';
+import type { Staff } from '../sim/staff';
 import type { Building, World } from '../sim/world';
 import type { Camera } from './camera';
 import { shade } from './color';
-import { guestDisplayPos } from './guestpos';
-import { POSITIVE, THOUGHT_TEXT } from './thoughts';
+import { guestDisplayPos, staffDisplayPos } from './guestpos';
+import { BUBBLE_FONT, POSITIVE, THOUGHT_TEXT } from './thoughts';
 import { GroundCache } from './ground';
 import { drawRideSprite, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, tileToWorld, type Vec2 } from './iso';
@@ -19,12 +20,14 @@ export interface View {
   alpha: number;
   selectedId: number | null;
   selectedGuestId: number | null;
+  selectedStaffId?: number | null;
 }
 
 const groundCache = new GroundCache();
 
 export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: World, view: View): void {
   const { hover, preview, alpha, selectedId, selectedGuestId } = view;
+  const selectedStaffId = view.selectedStaffId ?? null;
   const map = world.map;
   ctx.fillStyle = '#1f3a1c';
   ctx.fillRect(0, 0, cam.viewW, cam.viewH);
@@ -41,6 +44,9 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
 
   // 1) 지면: 공원 밖 숲 바닥 → 잔디(질감) → 돌길(연석). 정적이라 조각별로 캐시해 둔다
   groundCache.draw(ctx, cam, map);
+
+  // 1.5) 길 위 쓰레기: 지면 캐시와 분리해 매 프레임 겹쳐 그린다(쌓이고 치워져도 캐시가 무효화되지 않는다)
+  drawLitter(ctx, cam, map, visible);
 
   // 2) 건물 입구 표시
   for (const b of world.buildings.values()) {
@@ -62,11 +68,15 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   //    건물 키 = 풋프린트 앞쪽 모서리 합 - 0.5, 손님 키 = 보간된 위치 x+y. 동률이면 손님이 앞.
   const bKey = (b: Building): number => b.x + b.w + b.y + b.h - 0.5;
   const buildings = [...world.buildings.values()].sort((a, b) => bKey(a) - bKey(b));
-  const walkers: { g: Guest; x: number; y: number }[] = [];
+  const walkers: { g?: Guest; s?: Staff; x: number; y: number }[] = [];
   for (const g of world.guests) {
     if (g.state === 'visiting' || g.state === 'gone') continue; // 시설 안에 있는 손님은 그리지 않음
     const pos = guestDisplayPos(g, alpha);
     walkers.push({ g, x: pos.x, y: pos.y });
+  }
+  for (const s of world.staff) {
+    const pos = staffDisplayPos(s, alpha);
+    walkers.push({ s, x: pos.x, y: pos.y });
   }
   walkers.sort((a, b) => a.x + a.y - (b.x + b.y));
 
@@ -86,8 +96,14 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   let si = 0;
   for (const w of walkers) {
     while (si < scenery.length && scenery[si].key <= w.x + w.y) scenery[si++].draw();
-    if (w.g.id === selectedGuestId) drawGuestRing(ctx, cam, w.x, w.y);
-    drawGuest(ctx, cam, w.g, w.x, w.y);
+    if (w.s) {
+      if (w.s.id === selectedStaffId) drawGuestRing(ctx, cam, w.x, w.y);
+      drawStaff(ctx, cam, w.s, w.x, w.y, time);
+      continue;
+    }
+    const g = w.g!;
+    if (g.id === selectedGuestId) drawGuestRing(ctx, cam, w.x, w.y);
+    drawGuest(ctx, cam, g, w.x, w.y);
   }
   while (si < scenery.length) scenery[si++].draw();
 
@@ -98,7 +114,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     let shown = 0;
     for (const w of walkers) {
       // 줄 선 손님은 한 타일에 몰려 있어 말풍선이 대기 배지를 가린다. 상태는 배지와 클릭 패널로 확인한다.
-      if (w.g.thought === null || w.g.state === 'queueing' || shown >= 40) continue;
+      if (!w.g || w.g.thought === null || w.g.state === 'queueing' || shown >= 40) continue;
       const sp = tileToWorld(w.x, w.y);
       const sc = cam.worldToScreen(sp.x, sp.y);
       const cell = Math.round(sc.x / (70 * cam.zoom)) * 100_000 + Math.round(sc.y / (22 * cam.zoom));
@@ -111,7 +127,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   }
 
   // 대기 인원 표시
-  ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px system-ui, sans-serif`;
+  ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px ${BUBBLE_FONT}`;
   ctx.textAlign = 'center';
   for (const b of buildings) {
     if (b.queue.length === 0) continue;
@@ -469,6 +485,83 @@ function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: num
   }
 }
 
+/** 길 위 쓰레기: 타일마다 양(1~3)만큼 작은 종이·캔 조각을 고정 위치에 흩뿌린다 */
+function drawLitter(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, visible: (s: Vec2) => boolean): void {
+  const colors = ['#f4efe0', '#d8b35a', '#8fb7d6', '#c46a5a'];
+  const z = cam.zoom;
+  for (let i = 0; i < map.litter.length; i++) {
+    const n = map.litter[i];
+    if (n === 0) continue;
+    const tx = i % map.width;
+    const ty = (i / map.width) | 0;
+    const w0 = tileToWorld(tx, ty);
+    if (!visible(cam.worldToScreen(w0.x, w0.y))) continue;
+    for (let k = 0; k < n * 2; k++) {
+      // 마름모 안쪽의 한 점(타일 좌표 0.2~0.8)
+      const w = tileToWorld(tx + 0.2 + tileHash(tx, ty, 20 + k) * 0.6, ty + 0.2 + tileHash(tx, ty, 40 + k) * 0.6);
+      const p = cam.worldToScreen(w.x, w.y);
+      ctx.fillStyle = colors[(tx * 7 + ty * 3 + k) % colors.length];
+      ctx.fillRect(p.x - 1.5 * z, p.y - 1 * z, Math.max(2, 3 * z), Math.max(1.5, 2 * z));
+    }
+  }
+}
+
+/** 직원: 눈에 띄는 작업복(청소부 = 주황 조끼 + 모자). 작업 중이면 빗자루를 쓴다. */
+function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: number, ty: number, time: number): void {
+  const w = tileToWorld(tx, ty);
+  const s = cam.worldToScreen(w.x, w.y);
+  const z = cam.zoom;
+  if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -40 || s.y > cam.viewH + 30) return;
+  const vest = st.kind === 'janitor' ? '#f08a24' : '#2f78d0';
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(s.x, s.y, 5 * z, 2.5 * z, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const swing = st.state === 'walking' ? Math.sin((tx + ty) * 14) * 1.6 * z : 0;
+  ctx.strokeStyle = '#2a3342';
+  ctx.lineWidth = Math.max(1, 1.8 * z);
+  ctx.beginPath();
+  ctx.moveTo(s.x - 1.2 * z, s.y - 5 * z); ctx.lineTo(s.x - 1.2 * z + swing, s.y - 0.5 * z);
+  ctx.moveTo(s.x + 1.2 * z, s.y - 5 * z); ctx.lineTo(s.x + 1.2 * z - swing, s.y - 0.5 * z);
+  ctx.stroke();
+
+  if (st.state === 'working') {
+    // 빗자루 쓸기
+    const sweep = Math.sin(time * 1.4) * 3 * z;
+    ctx.strokeStyle = '#7a5230';
+    ctx.lineWidth = Math.max(1, 1.2 * z);
+    ctx.beginPath();
+    ctx.moveTo(s.x + 3 * z, s.y - 9 * z);
+    ctx.lineTo(s.x + 6 * z + sweep, s.y);
+    ctx.stroke();
+    ctx.strokeStyle = '#d9b85a';
+    ctx.lineWidth = Math.max(1.5, 2.4 * z);
+    ctx.beginPath();
+    ctx.moveTo(s.x + 4 * z + sweep, s.y);
+    ctx.lineTo(s.x + 8 * z + sweep, s.y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = vest;
+  ctx.beginPath();
+  ctx.roundRect(s.x - 3.4 * z, s.y - 11.4 * z, 6.8 * z, 7 * z, 1.5 * z);
+  ctx.fill();
+  ctx.fillStyle = '#fff3b0';
+  ctx.fillRect(s.x - 3.4 * z, s.y - 8.4 * z, 6.8 * z, 1.2 * z);
+  ctx.fillStyle = '#f1d3b0';
+  ctx.beginPath();
+  ctx.arc(s.x, s.y - 13.5 * z, 2.6 * z, 0, Math.PI * 2);
+  ctx.fill();
+  // 모자
+  ctx.fillStyle = vest;
+  ctx.beginPath();
+  ctx.arc(s.x, s.y - 14.2 * z, 2.8 * z, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(s.x - 3.6 * z, s.y - 14.4 * z, 7.2 * z, 1.1 * z);
+}
+
 function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): void {
   const m = 0.14;
   const P = (tx: number, ty: number): Vec2 => {
@@ -506,11 +599,11 @@ function drawBubble(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: nu
   if (s.x < -60 || s.x > cam.viewW + 60 || s.y < 0 || s.y > cam.viewH + 30) return false;
 
   const text = THOUGHT_TEXT[g.thought];
-  const fontPx = Math.max(10, 11 * z);
-  ctx.font = `${fontPx}px system-ui, sans-serif`;
-  const padX = 6 * z;
+  const fontPx = Math.max(9, 10 * z);
+  ctx.font = `500 ${fontPx}px ${BUBBLE_FONT}`;
+  const padX = 5 * z;
   const bw = ctx.measureText(text).width + padX * 2;
-  const bh = fontPx + 7 * z;
+  const bh = fontPx + 5 * z;
   const x = s.x - bw / 2;
   const y = s.y - 20 * z - bh;
 
@@ -520,17 +613,17 @@ function drawBubble(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: nu
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(x, y, bw, bh, 5 * z);
+  ctx.roundRect(x, y, bw, bh, 4 * z);
   ctx.fill();
   ctx.stroke();
   // 꼬리
   ctx.beginPath();
-  ctx.moveTo(s.x - 3 * z, y + bh);
-  ctx.lineTo(s.x, y + bh + 5 * z);
-  ctx.lineTo(s.x + 3 * z, y + bh);
+  ctx.moveTo(s.x - 2.5 * z, y + bh);
+  ctx.lineTo(s.x, y + bh + 4 * z);
+  ctx.lineTo(s.x + 2.5 * z, y + bh);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#222';
+  ctx.fillStyle = '#1a1a1a';
   ctx.textAlign = 'center';
   ctx.fillText(text, s.x, y + bh / 2 + fontPx * 0.35);
   ctx.textAlign = 'start';

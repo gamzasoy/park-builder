@@ -83,6 +83,51 @@ export function sceneryIcon(def: SceneryDef): string {
   });
 }
 
+export function staffIcon(kind: 'janitor' | 'mechanic'): string {
+  return render(`staff:${kind}`, (ctx) => {
+    const vest = kind === 'janitor' ? '#f08a24' : '#2f78d0';
+    const cx = W / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#2a3342';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, H - 16); ctx.lineTo(cx - 3, H - 6);
+    ctx.moveTo(cx + 3, H - 16); ctx.lineTo(cx + 3, H - 6);
+    ctx.stroke();
+    ctx.fillStyle = vest;
+    ctx.beginPath();
+    ctx.roundRect(cx - 8, H - 30, 16, 15, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff3b0';
+    ctx.fillRect(cx - 8, H - 23, 16, 3);
+    ctx.fillStyle = '#f1d3b0';
+    ctx.beginPath();
+    ctx.arc(cx, H - 34, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = vest;
+    ctx.beginPath();
+    ctx.arc(cx, H - 35.5, 6.4, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(cx - 8, H - 36, 16, 2.5);
+    if (kind === 'janitor') {
+      // 빗자루
+      ctx.strokeStyle = '#7a5230';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + 11, H - 30); ctx.lineTo(cx + 15, H - 7);
+      ctx.stroke();
+      ctx.strokeStyle = '#d9b85a';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(cx + 12, H - 6); ctx.lineTo(cx + 19, H - 6);
+      ctx.stroke();
+    }
+  });
+}
+
 export function pathIcon(): string {
   return render('path', (ctx) => {
     const { q } = fit(2, 2, 0);

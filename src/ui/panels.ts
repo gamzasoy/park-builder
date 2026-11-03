@@ -3,8 +3,9 @@ import { buildingDef } from '../sim/coaster';
 import type { ToolController } from '../input/tools';
 import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
+import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
 import { demolishAt, REFUND_RATE } from '../sim/building';
-import { dailyUpkeep, fairPrice, setPrice } from '../sim/economy';
+import { dailyUpkeep, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
 import { Stepper } from './stepper';
@@ -109,6 +110,7 @@ const ROWS: [LedgerKey, string][] = [
   ['shops', '매점 수익'],
   ['construction', '건설/철거'],
   ['upkeep', '유지비'],
+  ['wages', '직원 급여'],
 ];
 
 /** 이번 달 진행 상황과 지난 달 보고서 */
@@ -167,7 +169,7 @@ export class FinancePanel {
 
     setText(
       this.extra,
-      `하루 유지비 ${won(dailyUpkeep(w))}` +
+      `하루 유지비 ${won(dailyUpkeep(w))} · 급여 ${won(WAGE * w.staff.length)}` +
         (last ? ` · 지난 달 입장 ${last.entered}명 · 월말 평점 ${last.rating}` : ''),
     );
   }
@@ -262,5 +264,70 @@ export class GuestPanel {
       fill.style.width = `${v.toFixed(0)}%`;
       bar.classList.toggle('bad', bad ? v > 70 : v < 30);
     }
+  }
+}
+
+const STAFF_STATE_TEXT: Record<Staff['state'], string> = {
+  idle: '순찰 중',
+  walking: '이동 중',
+  working: '작업 중',
+};
+
+/** 선택한 직원의 상태와 해고 */
+export class StaffPanel {
+  private root = document.createElement('div');
+  private title = document.createElement('b');
+  private state = document.createElement('span');
+  private wage = document.createElement('span');
+  private fireBtn = document.createElement('button');
+
+  constructor(private world: World, private tools: ToolController) {
+    this.root.id = 'spanel';
+    this.root.className = 'card';
+    this.root.hidden = true;
+
+    const head = document.createElement('div');
+    head.className = 'head';
+    const close = document.createElement('button');
+    close.textContent = '×';
+    close.title = '닫기 (Esc)';
+    close.addEventListener('click', () => { this.tools.selectedStaffId = null; });
+    head.append(this.title, close);
+    this.root.append(head);
+
+    const row = (label: string, value: HTMLElement): void => {
+      const r = document.createElement('div');
+      r.className = 'p-row';
+      const l = document.createElement('span');
+      l.textContent = label;
+      r.append(l, value);
+      this.root.append(r);
+    };
+    row('상태', this.state);
+    row('급여', this.wage);
+
+    this.fireBtn.id = 's-fire';
+    this.fireBtn.textContent = '해고';
+    this.fireBtn.addEventListener('click', () => {
+      const id = this.tools.selectedStaffId;
+      if (id !== null) fireStaff(this.world, id);
+      this.tools.selectedStaffId = null;
+    });
+    this.root.append(this.fireBtn);
+    document.body.append(this.root);
+  }
+
+  update(): void {
+    const id = this.tools.selectedStaffId;
+    const s = id !== null ? this.world.staff.find((x) => x.id === id) : undefined;
+    if (!s) {
+      if (id !== null) this.tools.selectedStaffId = null; // 해고되었거나 불러오기로 사라진 직원
+      if (!this.root.hidden) this.root.hidden = true;
+      return;
+    }
+    if (this.root.hidden) this.root.hidden = false;
+    setText(this.title, `${STAFF_NAME[s.kind]} #${s.id}`);
+    setText(this.state, STAFF_STATE_TEXT[s.state]);
+    setText(this.wage, `${won(WAGE)} / 일`);
   }
 }

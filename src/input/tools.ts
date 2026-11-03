@@ -1,6 +1,6 @@
 import type { SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
-import { guestDisplayPos } from '../render/guestpos';
+import { guestDisplayPos, staffDisplayPos } from '../render/guestpos';
 import type { Vec2 } from '../render/iso';
 import {
   anchorFor, buildingAt, canPlaceBuilding, demolishAt, entranceOf, footprintAt,
@@ -50,6 +50,8 @@ export class ToolController {
   selectedId: number | null = null;
   /** 선택된 손님 id (건물 선택과 동시에 선택되지 않음) */
   selectedGuestId: number | null = null;
+  /** 선택된 직원 id (건물·손님과 동시에 선택되지 않음) */
+  selectedStaffId: number | null = null;
   onEvent?: (e: ToolEvent) => void;
   message = '';
   messageUntil = 0;
@@ -70,6 +72,7 @@ export class ToolController {
     this.tool = { kind: 'none' };
     this.selectedId = null;
     this.selectedGuestId = null;
+    this.selectedStaffId = null;
     this.rot = 0;
     this.dragStart = null;
     this.message = '';
@@ -81,6 +84,7 @@ export class ToolController {
     if (t.kind !== 'none') {
       this.selectedId = null;
       this.selectedGuestId = null;
+      this.selectedStaffId = null;
     }
     this.dragStart = null;
   }
@@ -97,6 +101,7 @@ export class ToolController {
     else {
       this.selectedId = null;
       this.selectedGuestId = null;
+      this.selectedStaffId = null;
     }
   }
 
@@ -118,6 +123,7 @@ export class ToolController {
     const id = this.tool.kind === 'track' ? this.tool.buildingId : null;
     this.tool = { kind: 'none' };
     this.selectedGuestId = null;
+    this.selectedStaffId = null;
     this.selectedId = id !== null && this.world.buildings.has(id) ? id : null;
   }
 
@@ -176,13 +182,30 @@ export class ToolController {
     return best;
   }
 
+  /** 직원은 손님보다 우선해서 고른다(손님 틈에 섞여 있어도 클릭할 수 있게) */
+  private staffNear(pos: Vec2): number | null {
+    let best: number | null = null;
+    let bestD = GUEST_PICK_RADIUS * GUEST_PICK_RADIUS;
+    for (const s of this.world.staff) {
+      const p = staffDisplayPos(s, 1);
+      const d = (p.x - pos.x) ** 2 + (p.y - pos.y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = s.id;
+      }
+    }
+    return best;
+  }
+
   onDown(t: Tile | null, pos: Vec2 | null = null): void {
     if (!t) return;
     const tool = this.tool;
     if (tool.kind === 'none') {
-      const gid = pos ? this.guestNear(pos) : null;
+      const sid = pos ? this.staffNear(pos) : null;
+      const gid = pos && sid === null ? this.guestNear(pos) : null;
+      this.selectedStaffId = sid;
       this.selectedGuestId = gid;
-      this.selectedId = gid === null ? (buildingAt(this.world, t.x, t.y)?.id ?? null) : null;
+      this.selectedId = sid === null && gid === null ? (buildingAt(this.world, t.x, t.y)?.id ?? null) : null;
     } else if (tool.kind === 'path' || tool.kind === 'scenery') {
       this.dragStart = t;
     } else if (tool.kind === 'build') {

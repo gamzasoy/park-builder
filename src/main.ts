@@ -6,13 +6,14 @@ import { Camera } from './render/camera';
 import { tileToWorld } from './render/iso';
 import { drawFrame } from './render/renderer';
 import { loadFromStorage, saveToStorage } from './save/save';
-import { DAY_TICKS, DAYS_PER_MONTH } from './sim/economy';
+import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
 import { createGuest } from './sim/guest';
 import { stepWorld } from './sim/sim';
+import { hireStaff, STAFF_NAME } from './sim/staff';
 import { World } from './sim/world';
 import { Hud, won } from './ui/hud';
 import { Modal } from './ui/modal';
-import { BuildingPanel, FinancePanel, GuestPanel } from './ui/panels';
+import { BuildingPanel, FinancePanel, GuestPanel, StaffPanel } from './ui/panels';
 import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TutorialPanel } from './ui/tutorial';
@@ -135,11 +136,13 @@ const loop = new GameLoop(
       alpha,
       selectedId: tools.selectedId,
       selectedGuestId: tools.selectedGuestId,
+      selectedStaffId: tools.selectedStaffId,
     });
     hud.update();
     toolbar.sync();
     buildingPanel.update();
     guestPanel.update();
+    staffPanel.update();
     trackEditor.update();
     tutorialPanel.update();
     financePanel.update();
@@ -155,9 +158,19 @@ const hud = new Hud(world, tools, loop, {
   onSave: () => tools.notify(saveNow() ? '저장했습니다' : '저장할 수 없습니다 (브라우저 저장소 사용 불가)'),
   onNewGame: confirmNewGame,
 });
-const toolbar = new Toolbar(document.getElementById('toolbar')!, tools);
+const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
+  const s = hireStaff(world, kind);
+  if (s) {
+    tools.notify(`${STAFF_NAME[kind]}를 고용했습니다 (하루 급여 ${won(WAGE)})`);
+    sound.play('build');
+  } else {
+    tools.notify('더 이상 고용할 수 없습니다');
+    sound.play('error');
+  }
+});
 const buildingPanel = new BuildingPanel(world, tools);
 const guestPanel = new GuestPanel(world, tools);
+const staffPanel = new StaffPanel(world, tools);
 const trackEditor = new TrackEditor(world, tools);
 const tutorialPanel = new TutorialPanel(world, toolbar);
 

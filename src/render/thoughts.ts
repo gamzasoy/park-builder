@@ -1,5 +1,8 @@
 import type { Thought } from '../sim/guest';
 
+/** 말풍선·대기열 배지 글꼴: 시스템 한글 폰트만 쓴다(외부 폰트 없음) */
+export const BUBBLE_FONT = '"Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif';
+
 export const THOUGHT_TEXT: Record<Thought, string> = {
   hungry: '배고파',
   thirsty: '목말라',
@@ -15,6 +18,7 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   bored: '할 게 없네',
   expensive: '너무 비싸',
   scenery: '경치가 좋네',
+  litter: '너무 더러워!',
 };
 
 /** 긍정적인 생각은 초록 말풍선 */
