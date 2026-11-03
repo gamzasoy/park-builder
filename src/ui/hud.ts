@@ -12,9 +12,11 @@ const HINTS: Record<string, string> = {
 
 export class Hud {
   private money = document.getElementById('money')!;
+  private guests = document.getElementById('guests')!;
   private hint = document.getElementById('hint')!;
   private lastMoney = NaN;
   private lastHint = '';
+  private lastGuests = -1;
 
   constructor(private world: World, private tools: ToolController) {}
 
@@ -22,6 +24,10 @@ export class Hud {
     if (this.world.money !== this.lastMoney) {
       this.lastMoney = this.world.money;
       this.money.textContent = won(this.world.money);
+    }
+    if (this.world.guests.length !== this.lastGuests) {
+      this.lastGuests = this.world.guests.length;
+      this.guests.textContent = `손님 ${this.lastGuests}명`;
     }
     const text = performance.now() < this.tools.messageUntil
       ? this.tools.message

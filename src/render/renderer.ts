@@ -1,6 +1,7 @@
 import { getDef } from '../data';
 import type { Preview } from '../input/tools';
 import type { Tile } from '../sim/map';
+import type { Guest } from '../sim/guest';
 import type { Building, World } from '../sim/world';
 import type { Camera } from './camera';
 import { shade } from './color';
@@ -12,6 +13,7 @@ export function drawFrame(
   world: World,
   hover: Tile | null,
   preview: Preview | null,
+  alpha: number,
 ): void {
   const map = world.map;
   ctx.fillStyle = '#1b2a1f';
@@ -48,9 +50,25 @@ export function drawFrame(
     inset(ctx, s, hw, hh, ok ? undefined : 'rgba(235,70,70,0.35)', ok ? 'rgba(255,220,80,0.9)' : 'rgba(235,70,70,0.95)');
   }
 
-  // 3) 건물: 풋프린트의 가장 앞쪽 타일(x+y 최대) 순으로 뒤에서 앞으로
-  const sorted = [...world.buildings.values()].sort((a, b) => (a.x + a.w + a.y + a.h) - (b.x + b.w + b.y + b.h));
-  for (const b of sorted) drawBuilding(ctx, cam, b);
+  // 3) 건물 + 손님: 깊이(타일 x+y 합) 순으로 뒤에서 앞으로.
+  //    건물 키 = 풋프린트 앞쪽 모서리 합 - 0.5, 손님 키 = 보간된 위치 x+y. 동률이면 손님이 앞.
+  const bKey = (b: Building): number => b.x + b.w + b.y + b.h - 0.5;
+  const buildings = [...world.buildings.values()].sort((a, b) => bKey(a) - bKey(b));
+  const walkers: { g: Guest; x: number; y: number }[] = [];
+  for (const g of world.guests) {
+    if (g.state === 'visiting' || g.state === 'gone') continue; // 시설 안에 있는 손님은 그리지 않음
+    const x = g.px + (g.x - g.px) * alpha + laneOffset(g.id, 7919);
+    const y = g.py + (g.y - g.py) * alpha + laneOffset(g.id, 104729);
+    walkers.push({ g, x, y });
+  }
+  walkers.sort((a, b) => a.x + a.y - (b.x + b.y));
+
+  let bi = 0;
+  for (const w of walkers) {
+    while (bi < buildings.length && bKey(buildings[bi]) <= w.x + w.y) drawBuilding(ctx, cam, buildings[bi++]);
+    drawGuest(ctx, cam, w.g, w.x, w.y);
+  }
+  while (bi < buildings.length) drawBuilding(ctx, cam, buildings[bi++]);
 
   // 4) 미리보기 / 호버
   if (preview) {
@@ -86,6 +104,32 @@ function drawBuilding(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): 
   poly(ctx, [left, bottom, up(bottom), up(left)], shade(def.color, 0.78));
   poly(ctx, [bottom, right, up(right), up(bottom)], shade(def.color, 0.55));
   poly(ctx, [up(top), up(right), up(bottom), up(left)], def.color);
+}
+
+const LOOKS = ['#e8564a', '#4a8fe8', '#e8c24a', '#7bc86c', '#b06ce0', '#ef8fb4', '#4ac9c0', '#f08a3c'];
+
+/** 같은 길 위에서 손님이 한 점에 겹치지 않도록 하는 고정 오프셋(타일 단위, 렌더 전용) */
+function laneOffset(id: number, salt: number): number {
+  return (((id * salt) % 100) / 100 - 0.5) * 0.3;
+}
+
+function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number): void {
+  const w = tileToWorld(tx, ty);
+  const s = cam.worldToScreen(w.x, w.y);
+  const z = cam.zoom;
+  if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -30 || s.y > cam.viewH + 30) return;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(s.x, s.y, 6 * z, 3 * z, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = LOOKS[g.look % LOOKS.length];
+  ctx.fillRect(s.x - 3 * z, s.y - 11 * z, 6 * z, 9 * z);
+  ctx.fillStyle = '#f1d3b0';
+  ctx.beginPath();
+  ctx.arc(s.x, s.y - 14 * z, 3 * z, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function poly(ctx: CanvasRenderingContext2D, pts: Vec2[], fill: string): void {

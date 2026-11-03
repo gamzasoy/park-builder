@@ -12,6 +12,7 @@
         padding: 8px 16px; background: rgba(15, 25, 20, 0.85); color: #fff; pointer-events: none;
       }
       #money { font-weight: 700; font-size: 18px; color: #ffd75a; min-width: 110px; }
+      #guests { font-size: 14px; min-width: 80px; }
       #hint { font-size: 14px; opacity: 0.9; }
       #toolbar {
         position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 20px; flex-wrap: wrap;
@@ -30,7 +31,7 @@
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="hud"><span id="money"></span><span id="hint"></span></div>
+    <div id="hud"><span id="money"></span><span id="guests"></span><span id="hint"></span></div>
     <div id="toolbar"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

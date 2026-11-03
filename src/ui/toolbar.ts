@@ -35,6 +35,7 @@ export class Toolbar {
     b.dataset.tool = key;
     b.innerHTML = `<span>${label}</span>${cost !== undefined ? `<small>${won(cost)}</small>` : ''}`;
     b.addEventListener('click', () => {
+      b.blur(); // Space 단축키(일시정지)가 버튼을 다시 누르지 않도록
       // 같은 도구를 다시 누르면 해제
       this.tools.setTool(this.tools.toolKey === key ? { kind: 'none' } : tool);
     });

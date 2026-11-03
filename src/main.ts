@@ -4,6 +4,7 @@ import { ToolController } from './input/tools';
 import { Camera } from './render/camera';
 import { tileToWorld } from './render/iso';
 import { drawFrame } from './render/renderer';
+import { stepWorld } from './sim/sim';
 import { World } from './sim/world';
 import { Hud } from './ui/hud';
 import { Toolbar } from './ui/toolbar';
@@ -22,6 +23,11 @@ input.onLeftUp = (t) => tools.onUp(t);
 input.onKeyDown = (k) => {
   if (k === 'r') tools.rotate();
   else if (k === 'escape') tools.cancel();
+  // 임시 속도 단축키 (7단계에서 HUD 버튼으로 대체): Space 일시정지, 1/2/3 = 1x/2x/4x
+  else if (k === ' ') loop.speed = loop.speed === 0 ? 1 : 0;
+  else if (k === '1') loop.speed = 1;
+  else if (k === '2') loop.speed = 2;
+  else if (k === '3') loop.speed = 4;
 };
 
 // 시작 시 공원 입구가 보이도록 입구와 맵 중앙 사이를 화면 중앙에
@@ -42,12 +48,12 @@ resize();
 
 let lastFrame = performance.now();
 const loop = new GameLoop(
-  () => { /* 시뮬레이션 틱: 이후 단계에서 채움 */ },
-  () => {
+  () => stepWorld(world),
+  (alpha) => {
     const now = performance.now();
     input.update(Math.min((now - lastFrame) / 1000, 0.1));
     lastFrame = now;
-    drawFrame(ctx, cam, world, input.hoverTile, tools.preview(input.hoverTile));
+    drawFrame(ctx, cam, world, input.hoverTile, tools.preview(input.hoverTile), alpha);
     hud.update();
     toolbar.sync();
   },
