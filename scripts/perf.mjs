@@ -2,8 +2,11 @@
 // 헤드리스 Chromium(소프트웨어 렌더링)이라 절대값은 대략적이다. 기준: 프레임당 렌더+시뮬 합계 16ms 미만.
 import { check, launch } from './lib.mjs';
 
-const N = Number(process.argv[2] ?? 500);
-const { server, page, close } = await launch();
+// 사용법: node scripts/perf.mjs [손님 수=500] [--mobile]   (--mobile: 가로 폰 화면 + CPU 4배 감속)
+const MOBILE = process.argv.includes('--mobile');
+const N = Number(process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 500);
+const { server, page, close } = await launch({ mobile: MOBILE });
+if (MOBILE) console.log('[모바일 에뮬레이션: 863x360, DPR 2, CPU 4배 감속]');
 
 try {
   await page.goto(server.url);
@@ -108,9 +111,16 @@ try {
   console.log(`1배속 프레임: 평균 ${f(result.x1.avg)}ms / 중앙값 ${f(result.x1.median)}ms / p95 ${f(result.x1.p95)}ms (${result.x1.frames}프레임)`);
   console.log(`4배속 프레임: 평균 ${f(result.x4.avg)}ms / 중앙값 ${f(result.x4.median)}ms / p95 ${f(result.x4.p95)}ms (${result.x4.frames}프레임)`);
   await page.screenshot({ path: 'e2e-out/perf.png' });
-  check(result.tickMs < 8, '시뮬레이션 1틱 < 8ms');
-  check(result.render1 + result.tickMs * 4 < 16, '4배속 기준 렌더+시뮬 < 16ms');
-  check(result.x1.median < 17, '1배속 중앙값 프레임 < 17ms (≈60fps)');
+  if (MOBILE) {
+    // 4배 감속 + 소프트웨어 렌더링(GPU 없음)은 실제 폰보다 훨씬 가혹하다. 목표 수치가 아니라 회귀 방지선(현재 약 96ms)이다.
+    check(result.tickMs < 32, '시뮬레이션 1틱 < 32ms (감속 포함)');
+    check(result.render1 < 130, '렌더 1회 < 130ms (회귀 방지선)');
+    check(result.x1.median < 134, '1배속 중앙값 프레임 < 134ms (회귀 방지선)');
+  } else {
+    check(result.tickMs < 8, '시뮬레이션 1틱 < 8ms');
+    check(result.render1 + result.tickMs * 4 < 16, '4배속 기준 렌더+시뮬 < 16ms');
+    check(result.x1.median < 17, '1배속 중앙값 프레임 < 17ms (≈60fps)');
+  }
 } catch (e) {
   console.error(e.message ?? e);
   process.exitCode = 1;

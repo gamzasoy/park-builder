@@ -13,10 +13,14 @@ export async function startServer() {
   return { url: `http://127.0.0.1:${addr.port}/`, close: () => server.close() };
 }
 
-export async function launch() {
+/** mobile: 가로 폰 화면(863x360, DPR 2) + CPU 4배 감속 */
+export async function launch({ mobile = false } = {}) {
   const server = await startServer();
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await browser.newPage(mobile
+    ? { viewport: { width: 863, height: 360 }, deviceScaleFactor: Number(process.env.DPR ?? 2), isMobile: true, hasTouch: true }
+    : { viewport: { width: 1280, height: 800 } });
+  if (mobile) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 4 });
   page.on('pageerror', (e) => { throw e; });
   return { server, browser, page, close: async () => { await browser.close(); await server.close(); } };
 }

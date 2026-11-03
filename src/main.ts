@@ -251,6 +251,11 @@ function resize(): void {
 window.addEventListener('resize', resize);
 resize();
 
+// 프로덕션 빌드에서만 서비스 워커 등록(오프라인 실행·홈 화면 앱)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* 지원 안 되는 환경은 무시 */ }); });
+}
+
 seenReports = world.reports.length;
 financePanel.sync(); // 불러온 보고서 때문에 재무 패널이 저절로 열리지 않게
 loop.start();
@@ -282,6 +287,7 @@ if (import.meta.env.DEV) {
     }),
     setSpeed: (s: 0 | 1 | 2 | 4) => { loop.speed = s; },
     setZoom: (z: number) => { cam.zoom = z; },
+    camera: () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }),
     /** 마우스 아래로 판정된 칸(높이 보정 피킹 확인용) */
     hover: () => input.hoverTile,
     /** 카메라를 타일 (tx, ty)의 윗면 중앙으로 */

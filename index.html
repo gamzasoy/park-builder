@@ -171,6 +171,7 @@
       #tool-actions { position: fixed; right: 12px; bottom: 118px; display: flex; flex-direction: column; gap: 6px; z-index: 4; }
       #tool-actions button { min-width: 64px; min-height: 40px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
       #rotate-hint { display: none; }
+      @media (pointer: fine) { #tool-actions { display: none; } } /* 마우스·키보드(R/Esc)가 있는 PC에서는 숨김 */
 
       /* ===== 휴대폰 가로 화면 (PC 화면은 바뀌지 않음) ===== */
       @media (pointer: coarse) and (max-height: 520px) {
@@ -204,7 +205,7 @@
         /* 패널: HUD(약 36px)와 툴바(약 70px) 사이에서 스크롤 */
         .card {
           top: calc(36px + var(--sat)); width: 230px; font-size: 12px;
-          max-height: calc(100dvh - 36px - var(--sat) - 76px - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
+          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - 92px - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
         }
         #panel, #gpanel, #spanel { right: calc(8px + var(--sar)); }
         #finance { left: calc(8px + var(--sal)); width: min(330px, 46vw); }
@@ -217,7 +218,7 @@
         #m-buttons button { min-height: 38px; }
         #track-bar {
           bottom: calc(72px + var(--sab)); width: min(620px, calc(100vw - 24px - var(--sal) - var(--sar)));
-          max-height: calc(100dvh - 36px - var(--sat) - 76px - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: 12px;
+          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - 92px - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: 12px;
         }
         #t-buttons { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
         #t-buttons button { flex: none; min-width: 60px; min-height: 40px; padding: 3px 6px; }
