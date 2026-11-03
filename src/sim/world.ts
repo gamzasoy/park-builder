@@ -1,6 +1,7 @@
 import { Rng } from '../core/rng';
 import type { Guest } from './guest';
 import { TileMap, type Tile } from './map';
+import type { Track } from './coaster';
 import { PathNetwork } from './pathfinding';
 
 export const START_MONEY = 10000;
@@ -27,6 +28,8 @@ export interface Building {
   /** 누적 이용 손님 수 / 누적 수익 */
   served: number;
   income: number;
+  /** 롤러코스터의 트랙(역 건물에만 있다) */
+  track?: Track;
 }
 
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */

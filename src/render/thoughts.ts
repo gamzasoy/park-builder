@@ -7,6 +7,7 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   tired: '지쳤어',
   unhappy: '별로야',
   fun: '재밌다!',
+  tooIntense: '너무 무서워!',
   queueFull: '줄이 너무 길어',
   waited: '너무 오래 기다렸어',
   broke: '돈이 없어',

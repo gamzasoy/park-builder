@@ -1,4 +1,4 @@
-import { getDef } from '../data';
+import { buildingDef } from './coaster';
 import { DAY_TICKS, settleDay } from './economy';
 import { updateGuest } from './guest';
 import { trackDebt, updateGoals } from './goals';
@@ -14,7 +14,7 @@ export function stepGuests(world: World): void {
   world.tick++;
   world.guestById = new Map(world.guests.map((g) => [g.id, g]));
   for (const b of world.buildings.values()) {
-    const def = getDef(b.defId);
+    const def = buildingDef(b);
     if (def.kind === 'ride') updateRide(world, b, def);
     else updateShop(world, b, def);
     renumberQueue(world, b);

@@ -1,5 +1,5 @@
-import { getDef } from '../data';
 import type { BuildingDef } from '../data/types';
+import { buildingDef } from './coaster';
 import type { Building, MonthReport, World } from './world';
 
 /** 하루 = 600틱(1배속 60초), 한 달 = 10일(1배속 10분) */
@@ -29,7 +29,7 @@ export function fairPrice(def: BuildingDef): number {
 
 export function dailyUpkeep(world: World): number {
   let sum = 0;
-  for (const b of world.buildings.values()) sum += getDef(b.defId).upkeep;
+  for (const b of world.buildings.values()) sum += buildingDef(b).upkeep;
   return sum;
 }
 

@@ -1,4 +1,5 @@
 import { getDef } from '../data';
+import { buildingDef } from '../sim/coaster';
 import type { ToolController } from '../input/tools';
 import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
@@ -28,6 +29,9 @@ export class BuildingPanel {
   private wait = $('p-wait');
   private price: Stepper;
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
+  private editBtn = $<HTMLButtonElement>('p-edit');
+  private thrillRow = $('p-thrill-row');
+  private thrill = $('p-thrill');
 
   constructor(private world: World, private tools: ToolController) {
     this.price = new Stepper(1, 5, (d) => {
@@ -36,6 +40,10 @@ export class BuildingPanel {
     });
     $('p-price-ctl').append(this.price.el);
     $('p-close').addEventListener('click', () => { this.tools.selectedId = null; });
+    this.editBtn.addEventListener('click', () => {
+      const b = this.current();
+      if (b) this.tools.beginTrackEdit(b.id);
+    });
     this.demolishBtn.addEventListener('click', () => {
       const b = this.current();
       if (!b) return;
@@ -56,15 +64,28 @@ export class BuildingPanel {
     }
     if (this.root.hidden) this.root.hidden = false;
 
-    const def = getDef(b.defId);
+    const def = buildingDef(b);
     const operational = this.world.network.isOperational(b);
+    const trackPending = !!b.track && !b.track.ok;
     setText(this.name, def.name);
-    setText(this.status, !operational ? '운영 불가 (입구가 길과 끊김)' : def.kind === 'ride' ? PHASE_TEXT[b.phase] : '영업 중');
+    setText(
+      this.status,
+      !operational
+        ? (trackPending ? `운영 불가 (${b.track!.error ?? '트랙이 아직 완성되지 않음'})` : '운영 불가 (입구가 길과 끊김)')
+        : def.kind === 'ride' ? PHASE_TEXT[b.phase] : '영업 중',
+    );
+    this.thrillRow.hidden = !b.track;
+    this.editBtn.hidden = !b.track;
+    if (b.track) {
+      setText(this.thrill, def.intensity !== undefined ? `${def.intensity} / ${def.nausea ?? 0}` : '–');
+    }
     this.status.dataset.ok = operational ? '1' : '0';
     setText(this.queue, `${b.queue.length}명 대기 · ${b.inside.length}/${def.capacity} 이용 중`);
     setText(
       this.trait,
-      def.kind === 'ride'
+      b.track && !b.track.ok
+        ? `조각 ${b.track.pieces.length}개 · 미완성`
+        : def.kind === 'ride'
         ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초`
         : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소 · 동시 ${def.capacity}명`,
     );

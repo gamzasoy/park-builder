@@ -66,6 +66,17 @@
       #m-rows td { text-align: right; padding: 4px 0; font-variant-numeric: tabular-nums; }
       #m-buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
       #m-buttons button { padding: 7px 14px; }
+      #track-bar { position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%); z-index: 5; width: min(760px, calc(100vw - 24px)); padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+      #t-info { font-weight: 600; }
+      #t-stats { color: var(--gold); margin: 2px 0 6px; }
+      #t-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+      #t-buttons button { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 70px; padding: 5px 8px; }
+      #t-buttons button small { font-size: 10px; opacity: 0.7; }
+      #t-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
+      #t-buttons button.primary { background: var(--accent); border-color: #8fe0aa; margin-left: auto; }
+      #t-msg { margin-top: 6px; color: var(--muted); }
+      #t-msg[data-bad="1"] { color: #ff8a80; }
+      #p-edit { width: 100%; margin-top: 8px; padding: 5px; }
       #m-buttons button.primary { background: var(--accent); border-color: #8fe0aa; font-weight: 600; }
     </style>
   </head>
@@ -94,6 +105,7 @@
       <div class="head"><b id="p-name"></b><button id="p-close" title="닫기 (Esc)">×</button></div>
       <div class="p-row"><span>상태</span><span id="p-status"></span></div>
       <div class="p-row"><span>특징</span><span id="p-trait"></span></div>
+      <div class="p-row" id="p-thrill-row"><span>강도 / 멀미</span><span id="p-thrill"></span></div>
       <div class="p-row"><span>대기/이용</span><span id="p-queue"></span></div>
       <div class="p-row"><span>예상 대기</span><span id="p-wait"></span></div>
       <div class="p-row"><span>누적 이용</span><span id="p-served"></span></div>
@@ -101,6 +113,7 @@
       <div class="p-row"><span>하루 유지비</span><span id="p-upkeep"></span></div>
       <div class="p-row"><span>이용 요금</span><span id="p-price-ctl"></span></div>
       <div class="p-row"><span>적정 요금</span><span id="p-fair"></span></div>
+      <button id="p-edit" hidden>트랙 편집</button>
       <button id="p-demolish"></button>
     </div>
     <div id="finance" class="card" hidden>
@@ -110,6 +123,12 @@
         <tbody id="f-body"></tbody>
       </table>
       <div id="f-extra"></div>
+    </div>
+    <div id="track-bar" hidden>
+      <div id="t-info"></div>
+      <div id="t-stats"></div>
+      <div id="t-buttons"></div>
+      <div id="t-msg"></div>
     </div>
     <div id="toolbar"></div>
     <div id="modal" hidden>
