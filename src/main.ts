@@ -147,6 +147,7 @@ const loop = new GameLoop(
     });
     hud.update();
     toolbar.sync();
+    syncToolActions();
     buildingPanel.update();
     guestPanel.update();
     staffPanel.update();
@@ -182,6 +183,25 @@ const trackEditor = new TrackEditor(world, tools, testRun);
 const tutorialPanel = new TutorialPanel(world, toolbar);
 
 input.onLeftDown = (t, pos) => tools.onDown(t, pos);
+input.onTouchCancel = () => tools.cancelDrag();
+// 한 손가락: 건설 도구가 켜져 있으면 건설 입력, 아니면 화면 이동/탭 선택
+input.buildMode = () => tools.isBuilding;
+// 건물·철거는 누르는 순간 실행되므로 터치에서는 손가락을 뗄 때 실행(위치를 맞춘 뒤 놓을 수 있게)
+input.deferOnTouch = () => tools.tool.kind === 'build' || tools.tool.kind === 'demolish';
+
+// 도구가 켜져 있을 때만 보이는 화면 버튼(R / Esc 대응)
+const toolActions = document.getElementById('tool-actions')!;
+document.getElementById('act-rotate')!.addEventListener('click', () => tools.rotate());
+document.getElementById('act-cancel')!.addEventListener('click', () => tools.cancel());
+function syncToolActions(): void {
+  const k = tools.tool.kind;
+  const show = k !== 'none' && k !== 'track';
+  if (toolActions.hidden === show) toolActions.hidden = !show;
+  const rot = document.getElementById('act-rotate')!;
+  const canRotate = k === 'build';
+  if (rot.hidden === canRotate) rot.hidden = !canRotate;
+}
+
 input.onLeftUp = (t) => tools.onUp(t);
 const TRACK_KEYS: Record<string, TrackType> = {
   arrowup: 'straight', arrowleft: 'left', arrowright: 'right', pageup: 'up', pagedown: 'down', c: 'lift', b: 'brake', l: 'loop',
@@ -204,7 +224,16 @@ input.onKeyDown = (k) => {
 
 // 탭을 닫거나 숨길 때 저장
 window.addEventListener('pagehide', saveNow);
-document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+// 백그라운드로 가면 즉시 저장하고 루프를 멈춘다(폰에서는 앱 전환 중 탭이 종료될 수 있다)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    saveNow();
+    loop.stop();
+  } else {
+    lastFrame = performance.now();
+    loop.start();
+  }
+});
 
 // 시작 시 공원 입구가 보이도록 입구와 맵 중앙 사이를 화면 중앙에
 const focus = tileToWorld(world.map.width / 2, world.map.height * 0.8);
@@ -212,7 +241,7 @@ cam.x = focus.x;
 cam.y = focus.y;
 
 function resize(): void {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // 고해상도 폰에서 픽셀 수 폭증 방지
   cam.viewW = window.innerWidth;
   cam.viewH = window.innerHeight;
   canvas.width = Math.floor(cam.viewW * dpr);

@@ -2,7 +2,15 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#1f3a1c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Park Builder" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
     <title>Park Builder</title>
     <style>
       /* 롤러코스터 타이쿤풍 창: 올리브색 본문 + 빨간 제목줄 + 밝은/어두운 테두리(베벨) */
@@ -15,8 +23,8 @@
         --text-shadow: 1px 1px 0 rgba(0,0,0,0.65);
         --font: "Trebuchet MS", Verdana, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
       }
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #1f3a1c; font-family: var(--font); color: #fff; }
-      canvas { display: block; width: 100vw; height: 100vh; }
+      html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; background: #1f3a1c; font-family: var(--font); color: #fff; }
+      canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; }
       button {
         font: inherit; color: #fff; text-shadow: var(--text-shadow); cursor: pointer;
         background: linear-gradient(var(--btn), var(--btn-2));
@@ -158,6 +166,73 @@
       #t-buttons button.primary { margin-left: auto; }
       #t-msg { margin-top: 6px; color: var(--muted); }
       #t-msg[data-bad="1"] { color: #ffb0a8; }
+
+      /* 도구가 켜져 있을 때 오른쪽 아래에 뜨는 버튼 (R / Esc 키 대응) */
+      #tool-actions { position: fixed; right: 12px; bottom: 118px; display: flex; flex-direction: column; gap: 6px; z-index: 4; }
+      #tool-actions button { min-width: 64px; min-height: 40px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
+      #rotate-hint { display: none; }
+
+      /* ===== 휴대폰 가로 화면 (PC 화면은 바뀌지 않음) ===== */
+      @media (pointer: coarse) and (max-height: 520px) {
+        :root { --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px); --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); }
+        button { min-height: 32px; }
+        #hud {
+          flex-wrap: nowrap; overflow-x: auto; gap: 4px 8px; font-size: 12px;
+          padding: calc(2px + var(--sat)) calc(6px + var(--sar)) 2px calc(6px + var(--sal)); scrollbar-width: none;
+        }
+        #hud::-webkit-scrollbar { display: none; }
+        #hud > * { flex: none; }
+        #money { font-size: 14px; min-width: 0; }
+        #hud > span:not(.speed):not(.fee) { padding: 1px 6px; }
+        .speed button { min-width: 34px; min-height: 30px; }
+        #finance-btn, #save-btn, #new-btn, #sound-btn, #help-btn { padding: 2px 8px; min-height: 30px; }
+        .stepper button { min-width: 30px; min-height: 30px; }
+        #hint, #goal { top: calc(36px + var(--sat)); font-size: 11px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #hint { left: calc(8px + var(--sal)); }
+        #goal { right: calc(8px + var(--sar)); }
+        #toolbar {
+          flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 10px; -webkit-overflow-scrolling: touch;
+          padding: 2px calc(6px + var(--sar)) calc(3px + var(--sab)) calc(6px + var(--sal)); scrollbar-width: none;
+        }
+        #toolbar::-webkit-scrollbar { display: none; }
+        #toolbar .group { flex: none; }
+        #toolbar .title { font-size: 10px; margin: 0 0 1px 2px; }
+        #toolbar button { min-width: 52px; padding: 1px 3px 2px; font-size: 11px; }
+        #toolbar button img { width: 32px; height: 29px; }
+        #toolbar button small { font-size: 9px; }
+        #tool-actions { right: calc(10px + var(--sar)); bottom: calc(72px + var(--sab)); }
+        /* 패널: HUD(약 36px)와 툴바(약 70px) 사이에서 스크롤 */
+        .card {
+          top: calc(36px + var(--sat)); width: 230px; font-size: 12px;
+          max-height: calc(100dvh - 36px - var(--sat) - 76px - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
+        }
+        #panel, #gpanel, #spanel { right: calc(8px + var(--sar)); }
+        #finance { left: calc(8px + var(--sal)); width: min(330px, 46vw); }
+        #tutorial { left: calc(8px + var(--sal)); width: 220px; }
+        .card .head { position: sticky; top: 0; z-index: 1; }
+        .card .head button, .card .head div button { min-width: 36px; height: 30px; font-size: 16px; }
+        .p-row { padding: 4px; }
+        #p-demolish, #p-edit, #p-test, #s-fire { min-height: 36px; }
+        #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
+        #m-buttons button { min-height: 38px; }
+        #track-bar {
+          bottom: calc(72px + var(--sab)); width: min(620px, calc(100vw - 24px - var(--sal) - var(--sar)));
+          max-height: calc(100dvh - 36px - var(--sat) - 76px - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: 12px;
+        }
+        #t-buttons { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+        #t-buttons button { flex: none; min-width: 60px; min-height: 40px; padding: 3px 6px; }
+        #t-stats { margin: 1px 0 4px; }
+      }
+
+      /* 세로로 들면 가로 안내를 덮어서 보여 준다 (터치 기기만) */
+      @media (pointer: coarse) and (orientation: portrait) {
+        #rotate-hint {
+          display: flex; position: fixed; inset: 0; z-index: 100; flex-direction: column; align-items: center; justify-content: center;
+          gap: 14px; padding: 24px; text-align: center; font-size: 18px; font-weight: 700; background: #1f3a1c; text-shadow: var(--text-shadow);
+        }
+        #rotate-hint .phone { font-size: 64px; display: inline-block; animation: rot-phone 2.4s ease-in-out infinite; }
+        @keyframes rot-phone { 0%, 20% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+      }
     </style>
   </head>
   <body>
@@ -221,7 +296,12 @@
       <div id="t-buttons"></div>
       <div id="t-msg"></div>
     </div>
+    <div id="tool-actions" hidden>
+      <button id="act-rotate" title="회전 (R)">회전</button>
+      <button id="act-cancel" title="취소 (Esc)">취소</button>
+    </div>
     <div id="toolbar"></div>
+    <div id="rotate-hint"><span class="phone">📱</span><span>가로로 돌려 주세요</span><small style="font-weight:400;opacity:.8">Park Builder는 가로 화면에서 플레이합니다</small></div>
     <div id="modal" hidden>
       <div class="dialog">
         <h2 id="m-title"></h2>

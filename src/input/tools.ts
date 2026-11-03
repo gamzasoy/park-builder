@@ -124,6 +124,16 @@ export class ToolController {
     }
   }
 
+  /** 진행 중인 드래그(길 깔기 등)만 취소한다. 도구 선택은 유지(터치에서 두 번째 손가락이 닿을 때). */
+  cancelDrag(): void {
+    this.dragStart = null;
+  }
+
+  /** 건설 도구가 켜져 있나(터치에서 한 손가락이 화면 이동이 아니라 건설 입력이 되는 조건) */
+  get isBuilding(): boolean {
+    return this.tool.kind !== 'none' && this.tool.kind !== 'track';
+  }
+
   /** 편집 중인 롤러코스터 */
   get trackBuilding(): Building | null {
     return this.tool.kind === 'track' ? (this.world.buildings.get(this.tool.buildingId) ?? null) : null;
