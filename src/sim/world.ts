@@ -1,4 +1,5 @@
 import { TileMap, type Tile } from './map';
+import { PathNetwork } from './pathfinding';
 
 export const START_MONEY = 30000;
 
@@ -16,6 +17,7 @@ export interface Building {
 
 export class World {
   readonly map = new TileMap();
+  readonly network = new PathNetwork(this.map);
   money = START_MONEY;
   readonly buildings = new Map<number, Building>();
   nextBuildingId = 1;

@@ -90,7 +90,7 @@ export function demolishAt(world: World, x: number, y: number): number | null {
     return refund;
   }
   if (map.isPath(x, y) && !map.isGate(x, y)) {
-    map.path[map.index(x, y)] = 0;
+    map.setPath(x, y, false);
     world.money += PATH_REFUND;
     return PATH_REFUND;
   }
@@ -124,7 +124,7 @@ export function placePaths(world: World, tiles: Tile[]): { placed: number; short
   for (const t of tiles) {
     if (!isPathPlaceable(world, t.x, t.y)) continue;
     if (world.money < PATH_COST) { short = true; break; }
-    world.map.path[world.map.index(t.x, t.y)] = 1;
+    world.map.setPath(t.x, t.y, true);
     world.money -= PATH_COST;
     placed++;
   }

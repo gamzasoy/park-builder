@@ -42,7 +42,10 @@ export function drawFrame(
   // 2) 건물 입구 표시
   for (const b of world.buildings.values()) {
     const s = tileScreen(b.entrance.x, b.entrance.y);
-    if (visible(s)) inset(ctx, s, hw, hh, undefined, 'rgba(255,220,80,0.9)');
+    if (!visible(s)) continue;
+    // 노랑 = 공원 입구와 연결됨(운영 가능), 빨강 = 끊김
+    const ok = world.network.isOperational(b);
+    inset(ctx, s, hw, hh, ok ? undefined : 'rgba(235,70,70,0.35)', ok ? 'rgba(255,220,80,0.9)' : 'rgba(235,70,70,0.95)');
   }
 
   // 3) 건물: 풋프린트의 가장 앞쪽 타일(x+y 최대) 순으로 뒤에서 앞으로
