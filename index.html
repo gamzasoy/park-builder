@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Park Builder</title>
+    <style>
+      :root { --panel: rgba(15, 25, 20, 0.9); --line: #456; --btn: #25382d; --btn-hover: #31503c; --accent: #2f8f55; --gold: #ffd75a; --muted: rgba(255,255,255,0.6); }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2a1f; font-family: system-ui, sans-serif; color: #fff; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      button { font: inherit; color: #fff; background: var(--btn); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+      button:hover { background: var(--btn-hover); }
+      button.active { background: var(--accent); border-color: #8fe0aa; }
+      [hidden] { display: none !important; }
+
+      #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 6px 16px; background: var(--panel); font-size: 14px; }
+      #money { font-weight: 700; font-size: 18px; color: var(--gold); min-width: 110px; }
+      #money.neg { color: #ff6b6b; }
+      #rating { font-weight: 600; cursor: help; }
+      #rating[data-level="low"] { color: #ff8a80; }
+      #rating[data-level="mid"] { color: var(--gold); }
+      #rating[data-level="high"] { color: #8fe0aa; }
+      .speed { display: inline-flex; gap: 4px; }
+      .speed button { min-width: 34px; padding: 3px 6px; }
+      .fee { display: inline-flex; gap: 6px; align-items: center; }
+      .stepper { display: inline-flex; align-items: center; gap: 3px; }
+      .stepper button { padding: 1px 6px; min-width: 22px; }
+      .stepper b { min-width: 52px; text-align: center; }
+      .stepper.over b { color: #ff8a80; }
+      #finance-btn, #save-btn, #new-btn, #sound-btn { padding: 3px 10px; }
+      #hint { position: fixed; top: 46px; left: 16px; padding: 4px 10px; border-radius: 6px; background: rgba(15,25,20,0.75); font-size: 13px; opacity: 0.95; pointer-events: none; }
+
+      #toolbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 20px; flex-wrap: wrap; padding: 8px 16px; background: var(--panel); }
+      #toolbar .title { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+      #toolbar .row { display: flex; gap: 6px; }
+      #toolbar button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 6px 8px; }
+      #toolbar button small { font-size: 11px; opacity: 0.7; }
+
+      .card { position: fixed; top: 84px; width: 270px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+      #panel { right: 12px; }
+      #finance { left: 12px; width: 330px; }
+      .card .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 15px; }
+      .card .head button { padding: 0 8px; }
+      .p-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
+      .p-row > span:first-child { color: var(--muted); }
+      #p-status[data-ok="0"] { color: #ff8a80; }
+      #p-demolish { width: 100%; margin-top: 8px; padding: 5px; }
+      #finance table { width: 100%; border-collapse: collapse; }
+      #finance th { text-align: left; font-weight: 400; color: var(--muted); padding: 3px 0; }
+      #finance td { text-align: right; padding: 3px 0 3px 8px; font-variant-numeric: tabular-nums; }
+      #finance thead th:not(:first-child) { text-align: right; color: #fff; }
+      #finance tr.total th, #finance tr.total td { border-top: 1px solid var(--line); font-weight: 700; color: #fff; }
+      #f-extra { margin-top: 8px; color: var(--muted); font-size: 12px; }
+      #gpanel { right: 12px; }
+      .bar { display: inline-block; width: 120px; height: 8px; background: #2a3b31; border-radius: 4px; overflow: hidden; }
+      .bar i { display: block; height: 100%; background: var(--accent); }
+      .bar.bad i { background: #e06a5a; }
+      #goal { position: fixed; top: 46px; right: 16px; padding: 4px 10px; border-radius: 6px; background: rgba(15,25,20,0.75); font-size: 13px; pointer-events: none; }
+
+      #modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); }
+      #modal .dialog { width: min(420px, calc(100vw - 32px)); padding: 20px 22px; background: #16241c; border: 1px solid var(--line); border-radius: 12px; }
+      #modal h2 { margin: 0 0 8px; font-size: 20px; }
+      #modal p { margin: 0 0 12px; color: #d6e4da; line-height: 1.5; }
+      #m-rows { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+      #m-rows th { text-align: left; font-weight: 400; color: var(--muted); padding: 4px 0; }
+      #m-rows td { text-align: right; padding: 4px 0; font-variant-numeric: tabular-nums; }
+      #m-buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+      #m-buttons button { padding: 7px 14px; }
+      #m-buttons button.primary { background: var(--accent); border-color: #8fe0aa; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      <span id="money"></span>
+      <span id="date"></span>
+      <span id="guests"></span>
+      <span id="rating"></span>
+      <span class="speed">
+        <button data-speed="0" title="일시정지 (Space)">⏸</button>
+        <button data-speed="1" title="1배속 (1)">1×</button>
+        <button data-speed="2" title="2배속 (2)">2×</button>
+        <button data-speed="4" title="4배속 (3)">4×</button>
+      </span>
+      <span class="fee">입장료 <span id="fee-ctl"></span></span>
+      <button id="finance-btn">재무</button>
+      <button id="save-btn" title="지금 저장 (자동 저장도 됩니다)">저장</button>
+      <button id="sound-btn" title="효과음 켜기/끄기"></button>
+      <button id="new-btn">새 게임</button>
+    </div>
+    <div id="hint"></div>
+    <div id="goal"></div>
+    <div id="panel" class="card" hidden>
+      <div class="head"><b id="p-name"></b><button id="p-close" title="닫기 (Esc)">×</button></div>
+      <div class="p-row"><span>상태</span><span id="p-status"></span></div>
+      <div class="p-row"><span>특징</span><span id="p-trait"></span></div>
+      <div class="p-row"><span>대기/이용</span><span id="p-queue"></span></div>
+      <div class="p-row"><span>예상 대기</span><span id="p-wait"></span></div>
+      <div class="p-row"><span>누적 이용</span><span id="p-served"></span></div>
+      <div class="p-row"><span>누적 수익</span><span id="p-income"></span></div>
+      <div class="p-row"><span>하루 유지비</span><span id="p-upkeep"></span></div>
+      <div class="p-row"><span>이용 요금</span><span id="p-price-ctl"></span></div>
+      <div class="p-row"><span>적정 요금</span><span id="p-fair"></span></div>
+      <button id="p-demolish"></button>
+    </div>
+    <div id="finance" class="card" hidden>
+      <div class="head"><b>재무</b><button id="f-close" title="닫기">×</button></div>
+      <table>
+        <thead><tr><th></th><th>이번 달</th><th id="f-prev-head">지난 달</th></tr></thead>
+        <tbody id="f-body"></tbody>
+      </table>
+      <div id="f-extra"></div>
+    </div>
+    <div id="toolbar"></div>
+    <div id="modal" hidden>
+      <div class="dialog">
+        <h2 id="m-title"></h2>
+        <p id="m-msg"></p>
+        <table id="m-rows"></table>
+        <div id="m-buttons"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

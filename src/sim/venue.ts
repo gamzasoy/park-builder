@@ -1,0 +1,52 @@
+import type { BuildingDef } from '../data/types';
+import { applyEffects, goIdle, remember, type Guest } from './guest';
+import type { Building, World } from './world';
+
+/** 대기열 맨 앞의 유효한 손님에게 요금을 받고 시설에 들인다. 들일 손님이 없으면 null. */
+export function admit(world: World, b: Building, def: BuildingDef): Guest | null {
+  while (b.queue.length > 0) {
+    const id = b.queue.shift()!;
+    const g = world.guestById.get(id);
+    if (!g || g.state !== 'queueing') continue;
+    if (g.money < b.price) { goIdle(g); continue; }
+
+    g.money -= b.price;
+    world.transact(def.kind === 'ride' ? 'rides' : 'shops', b.price);
+    b.served++;
+    b.income += b.price;
+    g.state = 'visiting';
+    g.timer = 0;
+    b.inside.push(g.id);
+    remember(g, b.id);
+    return g;
+  }
+  return null;
+}
+
+/** 이용을 마친 손님을 내보내고 효과를 적용 */
+export function release(world: World, b: Building, def: BuildingDef, id: number): void {
+  const i = b.inside.indexOf(id);
+  if (i >= 0) b.inside.splice(i, 1);
+  const g = world.guestById.get(id);
+  if (!g) return;
+  applyEffects(g, def);
+  goIdle(g);
+}
+
+/** 대기열 순번을 손님에게 반영(렌더 위치용) */
+export function renumberQueue(world: World, b: Building): void {
+  b.queue.forEach((id, i) => {
+    const g = world.guestById.get(id);
+    if (g) g.slot = i;
+  });
+}
+
+/** 철거 등으로 시설이 사라질 때 줄 서 있거나 이용 중인 손님을 모두 내보냄 */
+export function evictAll(world: World, b: Building): void {
+  for (const id of [...b.queue, ...b.inside]) {
+    const g = world.guestById.get(id);
+    if (g) goIdle(g);
+  }
+  b.queue.length = 0;
+  b.inside.length = 0;
+}
