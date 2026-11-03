@@ -8,12 +8,12 @@ export function admit(world: World, b: Building, def: BuildingDef): Guest | null
     const id = b.queue.shift()!;
     const g = world.guestById.get(id);
     if (!g || g.state !== 'queueing') continue;
-    if (g.money < def.price) { goIdle(g); continue; }
+    if (g.money < b.price) { goIdle(g); continue; }
 
-    g.money -= def.price;
-    world.money += def.price;
+    g.money -= b.price;
+    world.transact(def.kind === 'ride' ? 'rides' : 'shops', b.price);
     b.served++;
-    b.income += def.price;
+    b.income += b.price;
     g.state = 'visiting';
     g.timer = 0;
     b.inside.push(g.id);

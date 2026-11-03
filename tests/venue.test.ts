@@ -46,7 +46,7 @@ describe('ride cycle', () => {
     expect(ride.phase).toBe('running');
     expect(ride.inside).toHaveLength(6); // 정원
     expect(ride.queue).toHaveLength(2);
-    expect(w.money).toBe(before + 6 * 20);
+    expect(w.money).toBe(before + 6 * getDef('carousel').price);
     expect(guests.slice(0, 6).every((g) => g.state === 'visiting')).toBe(true);
     expect(guests.slice(6).every((g) => g.state === 'queueing')).toBe(true);
 
@@ -66,7 +66,7 @@ describe('ride cycle', () => {
     step(w, LOAD_TICKS + 2);
     expect(ride.phase).toBe('running');
     expect(ride.served).toBe(8);
-    expect(ride.income).toBe(8 * 20);
+    expect(ride.income).toBe(8 * getDef('carousel').price);
   });
 
   it('waits for passengers up to LOAD_TICKS and never departs empty', () => {
@@ -107,7 +107,7 @@ describe('shop service', () => {
     step(w, 1);
     expect(shop.inside).toEqual([a.id]);
     expect(shop.queue).toEqual([b.id, c.id]);
-    expect(w.money).toBe(before + 25);
+    expect(w.money).toBe(before + getDef('burger').price);
     expect([b.slot, c.slot]).toEqual([0, 1]);
 
     step(w, 30);

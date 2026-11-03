@@ -84,8 +84,9 @@ describe('guest behaviour', () => {
     expect(maxStep).toBeLessThanOrEqual(GUEST_SPEED + 1e-9);
     expect(maxStep).toBeGreaterThan(0);
     expect(guest.tile).toEqual(ride.entrance);
-    expect(guest.money).toBe(startMoney - 20);
-    expect(w.money).toBe(baseMoney + 20);
+    const price = getDef('carousel').price;
+    expect(guest.money).toBe(startMoney - price);
+    expect(w.money).toBe(baseMoney + price);
 
     runUntil(w, () => guest.state === 'idle');
     expect(guest.needs.happiness).toBeGreaterThan(happy0);

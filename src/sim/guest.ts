@@ -1,5 +1,6 @@
 import { getDef } from '../data';
 import type { BuildingDef } from '../data/types';
+import { fairPrice } from './economy';
 import type { Tile } from './map';
 import type { Building, World } from './world';
 
@@ -75,7 +76,7 @@ export function createGuest(world: World): Guest {
       toilet: r.int(0, 20),
       energy: r.int(80, 100),
     },
-    money: r.int(80, 250),
+    money: r.int(40, 120),
     path: [],
     pathIdx: 0,
     pathVersion: -1,
@@ -152,7 +153,7 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
   for (const b of world.buildings.values()) {
     if (!world.network.isOperational(b)) continue;
     const def = getDef(b.defId);
-    if (def.price > g.money || b.queue.length >= MAX_QUEUE) continue;
+    if (b.price > g.money || b.queue.length >= MAX_QUEUE) continue;
     const path = world.network.findPath(g.tile, b.entrance);
     if (!path) continue;
 
@@ -166,7 +167,8 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
       if (g.needs.energy < 20) continue;
       score = (def.fun ?? 0) + world.rng.next() * 20 - (g.visited.includes(b.id) ? 35 : 0);
     }
-    score -= path.length * 0.4 + b.queue.length * 3 + def.price * 0.3;
+    // 거리·줄·요금 부담, 그리고 적정가를 넘는 만큼 추가 감점
+    score -= path.length * 0.4 + b.queue.length * 3 + b.price * 0.3 + Math.max(0, b.price - fairPrice(def));
 
     if (score > bestScore) {
       bestScore = score;
@@ -260,8 +262,7 @@ function advance(g: Guest, dist: number): boolean {
 function arrive(world: World, g: Guest): void {
   const b = g.target !== null ? world.buildings.get(g.target) : undefined;
   if (!b || !world.network.isOperational(b)) return goIdle(g);
-  const def = getDef(b.defId);
-  if (def.price > g.money) return goIdle(g);
+  if (b.price > g.money) return goIdle(g);
   if (b.queue.length >= MAX_QUEUE) {
     // 줄이 너무 길어 포기
     g.needs.happiness = clamp(g.needs.happiness - 3);

@@ -25,6 +25,8 @@ const FAIL_TEXT: Record<PlaceFailure, string> = {
 export class ToolController {
   tool: Tool = { kind: 'none' };
   rot = 0;
+  /** 선택(정보 패널)된 건물 id — 도구가 없을 때 건물을 클릭하면 선택 */
+  selectedId: number | null = null;
   message = '';
   messageUntil = 0;
   private dragStart: Tile | null = null;
@@ -39,6 +41,7 @@ export class ToolController {
 
   setTool(t: Tool): void {
     this.tool = t;
+    if (t.kind !== 'none') this.selectedId = null;
     this.dragStart = null;
   }
 
@@ -46,10 +49,11 @@ export class ToolController {
     this.rot = (this.rot + 1) % 4;
   }
 
-  /** Esc: 진행 중인 드래그 취소 → 없으면 도구 해제 */
+  /** Esc: 진행 중인 드래그 취소 → 도구 해제 → 선택 해제 */
   cancel(): void {
     if (this.dragStart) this.dragStart = null;
-    else this.tool = { kind: 'none' };
+    else if (this.tool.kind !== 'none') this.tool = { kind: 'none' };
+    else this.selectedId = null;
   }
 
   notify(msg: string): void {
@@ -60,7 +64,9 @@ export class ToolController {
   onDown(t: Tile | null): void {
     if (!t) return;
     const tool = this.tool;
-    if (tool.kind === 'path') {
+    if (tool.kind === 'none') {
+      this.selectedId = buildingAt(this.world, t.x, t.y)?.id ?? null;
+    } else if (tool.kind === 'path') {
       this.dragStart = t;
     } else if (tool.kind === 'build') {
       const a = anchorFor(tool.def, this.rot, t);

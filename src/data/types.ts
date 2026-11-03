@@ -10,6 +10,8 @@ export interface BuildingDef {
   w: number;
   h: number;
   cost: number;
+  /** 하루 유지비 */
+  upkeep: number;
   /** 렌더링용 박스 높이(월드 px) */
   height: number;
   color: string;

@@ -1,5 +1,7 @@
 import { getDef } from '../data';
+import { DAY_TICKS, settleDay } from './economy';
 import { updateGuest } from './guest';
+import { RATING_EVERY, updateRating } from './rating';
 import { updateRide } from './ride';
 import { updateShop } from './shop';
 import { renumberQueue } from './venue';
@@ -26,4 +28,6 @@ export function stepGuests(world: World): void {
 export function stepWorld(world: World): void {
   updateSpawner(world);
   stepGuests(world);
+  if (world.tick % RATING_EVERY === 0) updateRating(world);
+  if (world.tick % DAY_TICKS === 0) settleDay(world);
 }

@@ -65,6 +65,7 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
     inside: [],
     phase: 'idle',
     timer: 0,
+    price: def.price,
     served: 0,
     income: 0,
   };
@@ -73,7 +74,7 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
     for (let tx = f.x; tx < f.x + f.w; tx++) map.occupant[map.index(tx, ty)] = b.id;
   }
   world.buildings.set(b.id, b);
-  world.money -= def.cost;
+  world.transact('construction', -def.cost);
   return b;
 }
 
@@ -94,12 +95,12 @@ export function demolishAt(world: World, x: number, y: number): number | null {
     }
     world.buildings.delete(b.id);
     const refund = Math.floor(getDef(b.defId).cost * REFUND_RATE);
-    world.money += refund;
+    world.transact('construction', refund);
     return refund;
   }
   if (map.isPath(x, y) && !map.isGate(x, y)) {
     map.setPath(x, y, false);
-    world.money += PATH_REFUND;
+    world.transact('construction', PATH_REFUND);
     return PATH_REFUND;
   }
   return null;
@@ -133,7 +134,7 @@ export function placePaths(world: World, tiles: Tile[]): { placed: number; short
     if (!isPathPlaceable(world, t.x, t.y)) continue;
     if (world.money < PATH_COST) { short = true; break; }
     world.map.setPath(t.x, t.y, true);
-    world.money -= PATH_COST;
+    world.transact('construction', -PATH_COST);
     placed++;
   }
   return { placed, short };

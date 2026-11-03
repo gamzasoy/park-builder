@@ -7,14 +7,16 @@ import type { Camera } from './camera';
 import { shade } from './color';
 import { TILE_H, TILE_W, tileToWorld, type Vec2 } from './iso';
 
-export function drawFrame(
-  ctx: CanvasRenderingContext2D,
-  cam: Camera,
-  world: World,
-  hover: Tile | null,
-  preview: Preview | null,
-  alpha: number,
-): void {
+export interface View {
+  hover: Tile | null;
+  preview: Preview | null;
+  /** 틱 사이 보간 비율(0~1) */
+  alpha: number;
+  selectedId: number | null;
+}
+
+export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: World, view: View): void {
+  const { hover, preview, alpha, selectedId } = view;
   const map = world.map;
   ctx.fillStyle = '#1b2a1f';
   ctx.fillRect(0, 0, cam.viewW, cam.viewH);
@@ -49,6 +51,10 @@ export function drawFrame(
     const ok = world.network.isOperational(b);
     inset(ctx, s, hw, hh, ok ? undefined : 'rgba(235,70,70,0.35)', ok ? 'rgba(255,220,80,0.9)' : 'rgba(235,70,70,0.95)');
   }
+
+  // 선택된 건물: 풋프린트보다 살짝 넓은 링(건물 뒤에 그려 테두리만 드러남)
+  const selected = selectedId !== null ? world.buildings.get(selectedId) : undefined;
+  if (selected) drawRing(ctx, cam, selected);
 
   // 3) 건물 + 손님: 깊이(타일 x+y 합) 순으로 뒤에서 앞으로.
   //    건물 키 = 풋프린트 앞쪽 모서리 합 - 0.5, 손님 키 = 보간된 위치 x+y. 동률이면 손님이 앞.
@@ -159,6 +165,24 @@ function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: num
   ctx.beginPath();
   ctx.arc(s.x, s.y - 14 * z, 3 * z, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): void {
+  const m = 0.14;
+  const P = (tx: number, ty: number): Vec2 => {
+    const w = tileToWorld(tx, ty);
+    return cam.worldToScreen(w.x, w.y);
+  };
+  const pts = [P(b.x - m, b.y - m), P(b.x + b.w + m, b.y - m), P(b.x + b.w + m, b.y + b.h + m), P(b.x - m, b.y + b.h + m)];
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
 }
 
 function poly(ctx: CanvasRenderingContext2D, pts: Vec2[], fill: string): void {
