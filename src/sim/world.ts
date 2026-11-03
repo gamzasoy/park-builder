@@ -2,7 +2,9 @@ import { Rng } from '../core/rng';
 import type { Guest } from './guest';
 import { TileMap, type Tile } from './map';
 import type { Track } from './coaster';
+import { START_FEE } from './economy';
 import { PathNetwork } from './pathfinding';
+import { newTutorial, type TutorialState } from './tutorial';
 
 export const START_MONEY = 10000;
 
@@ -86,12 +88,14 @@ export class World {
   debtDays = 0;
 
   /** 입장료(플레이어가 조정) */
-  entranceFee = 10;
+  entranceFee = START_FEE;
   /** 이번 달 수입/지출 장부 */
   ledger: Ledger = emptyLedger();
   reports: MonthReport[] = [];
   /** 이번 달 시작 시점의 누적 입장 수 */
   monthStartEntered = 0;
+  /** 초반 안내 진행 상황 */
+  tutorial: TutorialState = newTutorial();
   /** 공원 평점(0~1000, 천천히 변동) */
   rating = 400;
   ratingParts: RatingParts = { base: 0, satisfaction: 0, variety: 0, flow: 0, complaints: 0 };
@@ -133,5 +137,6 @@ export class World {
     this.endReason = src.endReason;
     this.goalHold = src.goalHold;
     this.debtDays = src.debtDays;
+    this.tutorial = src.tutorial;
   }
 }

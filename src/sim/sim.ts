@@ -5,6 +5,7 @@ import { trackDebt, updateGoals } from './goals';
 import { RATING_EVERY, updateRating } from './rating';
 import { updateRide } from './ride';
 import { updateShop } from './shop';
+import { TUTORIAL_EVERY, updateTutorial } from './tutorial';
 import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
 import type { World } from './world';
@@ -38,5 +39,6 @@ export function stepWorld(world: World): void {
     settleDay(world);
     trackDebt(world);
   }
+  if (world.tick % TUTORIAL_EVERY === 0) updateTutorial(world);
   updateGoals(world);
 }

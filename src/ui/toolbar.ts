@@ -7,6 +7,7 @@ import { won } from './hud';
 export class Toolbar {
   private buttons = new Map<string, HTMLButtonElement>();
   private activeKey = '';
+  private hintKey: string | null = null;
 
   constructor(private root: HTMLElement, private tools: ToolController) {
     this.group('기본', [
@@ -24,6 +25,14 @@ export class Toolbar {
     this.buttons.get(this.activeKey)?.classList.remove('active');
     this.buttons.get(key)?.classList.add('active');
     this.activeKey = key;
+  }
+
+  /** 초반 안내: 누를 버튼을 깜빡여 알려 준다(null이면 해제) */
+  setHint(key: string | null): void {
+    if (key === this.hintKey) return;
+    if (this.hintKey) this.buttons.get(this.hintKey)?.classList.remove('hint');
+    if (key) this.buttons.get(key)?.classList.add('hint');
+    this.hintKey = key;
   }
 
   private defButton(d: BuildingDef): HTMLButtonElement {

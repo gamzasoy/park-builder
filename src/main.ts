@@ -15,6 +15,7 @@ import { Modal } from './ui/modal';
 import { BuildingPanel, FinancePanel, GuestPanel } from './ui/panels';
 import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
+import { TutorialPanel } from './ui/tutorial';
 import type { TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -61,6 +62,7 @@ function newGame(): void {
   world.adopt(fresh);
   tools.reset();
   financePanel.sync();
+  tutorialPanel.reset();
   seenReports = world.reports.length;
   loop.speed = 1;
   modal.hide();
@@ -139,6 +141,7 @@ const loop = new GameLoop(
     buildingPanel.update();
     guestPanel.update();
     trackEditor.update();
+    tutorialPanel.update();
     financePanel.update();
     watchReports();
     watchStatus();
@@ -156,6 +159,7 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools);
 const buildingPanel = new BuildingPanel(world, tools);
 const guestPanel = new GuestPanel(world, tools);
 const trackEditor = new TrackEditor(world, tools);
+const tutorialPanel = new TutorialPanel(world, toolbar);
 
 input.onLeftDown = (t, pos) => tools.onDown(t, pos);
 input.onLeftUp = (t) => tools.onUp(t);

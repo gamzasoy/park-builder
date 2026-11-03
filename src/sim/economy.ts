@@ -7,6 +7,8 @@ export const DAY_TICKS = 600;
 export const DAYS_PER_MONTH = 10;
 export const MAX_PRICE = 100;
 export const MAX_FEE = 50;
+/** 새 게임의 입장료 */
+export const START_FEE = 10;
 const MAX_REPORTS = 24;
 
 export interface GameDate { year: number; month: number; day: number }

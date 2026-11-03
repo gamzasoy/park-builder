@@ -1,6 +1,7 @@
 import { getDef } from '../data';
 import { buildingTiles, restoreTrack, type TrackType } from '../sim/coaster';
 import type { Guest } from '../sim/guest';
+import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import type { Tile } from '../sim/map';
 import {
   type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
@@ -46,6 +47,8 @@ export interface SaveData {
   debtDays: number;
   buildings: BuildingSave[];
   guests: GuestSave[];
+  /** v2에서 추가. 없으면(이전 저장본) 안내를 이미 끝낸 것으로 본다 */
+  tutorial?: TutorialState;
 }
 
 const flatten = (path: readonly Tile[]): number[] => path.flatMap((t) => [t.x, t.y]);
@@ -79,6 +82,7 @@ export function serializeWorld(world: World): SaveData {
     endReason: world.endReason,
     goalHold: world.goalHold,
     debtDays: world.debtDays,
+    tutorial: { completed: [...world.tutorial.completed] },
     buildings: [...world.buildings.values()].map(({ track, ...b }): BuildingSave => (
       track ? { ...b, track: { pieces: [...track.pieces], spent: track.spent } } : b
     )),
@@ -159,6 +163,12 @@ export function deserializeWorld(data: SaveData): World {
   w.endReason = String(data.endReason ?? '');
   w.goalHold = data.goalHold;
   w.debtDays = data.debtDays;
+  // 안내 진행 상황이 없는 저장본은 이미 하던 공원이므로 초보 안내를 다시 보여 주지 않는다
+  w.tutorial = {
+    completed: Array.isArray(data.tutorial?.completed)
+      ? data.tutorial.completed.filter((id): id is string => STEP_IDS.includes(id))
+      : [...STEP_IDS],
+  };
   return w;
 }
 

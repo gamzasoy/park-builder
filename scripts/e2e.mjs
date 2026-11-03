@@ -12,6 +12,10 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => window.__game);
+  await page.waitForSelector('#tutorial', { state: 'visible', timeout: 3000 });
+  const doneItems = () => page.evaluate(() => document.querySelectorAll('#tu-list li.done').length);
+  check((await doneItems()) === 0, '새 게임에서 시작 가이드가 보이고 아직 완료한 단계가 없음');
+  check(await page.evaluate(() => document.querySelector('[data-tool="path"]').classList.contains('hint')), '현재 단계의 툴바 버튼(길)이 깜빡임');
   await shot('01-start');
 
   const at = (x, y) => game(([a, b]) => window.__game.tileToScreen(a, b), [x, y]);
@@ -38,6 +42,9 @@ try {
   await click(25, 40);
   check(await game(() => window.__game.world.buildings.size === 2), '매점 설치');
   await page.keyboard.press('Escape');
+  await game(() => window.__game.step(10)); // 안내 판정은 10틱마다
+  await page.waitForFunction(() => document.querySelectorAll('#tu-list li.done').length === 3, null, { timeout: 3000 });
+  check(true, '길·놀이기구·매점 단계가 체크됨 (3/5)');
   await shot('02-built');
 
   const money0 = await game(() => window.__game.world.money);
@@ -52,6 +59,13 @@ try {
   check(w.served > 0, `시설 이용 발생 (${w.served}회)`);
   check(w.money > money0 - 1, `돈 증가 (${money0} → ${w.money})`);
   await shot('03-running');
+
+  // 요금(입장료)을 한 칸 올리면 마지막 필수 단계 완료 → 축하 문구
+  await page.click('#fee-ctl button:nth-of-type(4)');
+  await page.waitForFunction(() => document.querySelectorAll('#tu-list li.done').length === 5, null, { timeout: 3000 });
+  await page.waitForFunction(() => document.getElementById('tu-text').textContent.includes('기본 과정을 마쳤어요'), null, { timeout: 3000 });
+  check(true, '필수 5단계를 마치면 축하 문구가 나옴');
+  await shot('03b-tutorial-done');
 
   // 저장 → 새로고침 → 복원 (실시간으로 돌고 있으므로 먼저 일시정지)
   await game(() => window.__game.setSpeed(0));
@@ -70,6 +84,7 @@ try {
   }));
   check(after.buildings === before.buildings, `건물 복원 (${after.buildings}개)`);
   check(after.money === before.money && after.tick === before.tick, '돈·시간 복원');
+  check(await game(() => window.__game.world.tutorial.completed.length >= 5), '안내 진행 상황 복원');
   await shot('04-restored');
 
   // ---- 롤러코스터: 새 게임에서 UI로 역 설치 → 키보드로 트랙 잇기 → 운행 ----

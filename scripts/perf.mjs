@@ -31,7 +31,15 @@ try {
       mod.placeBuilding(w, def, 25, y, 3);
     }
     for (const y of [41, 43]) mod.placeBuilding(w, data.getDef('burger'), 25, y, 3);
-    window.__ops = [...w.buildings.values()].filter((b) => w.network.isOperational(b)).length;
+    // 롤러코스터 2대(트랙 21조각, 완성된 코스). 길을 잇지 않아 운영은 안 하지만 트랙·열차 렌더 비용은 포함된다.
+    const te = await import('/src/sim/trackedit.ts');
+    const KIND = { S: 'straight', L: 'left', U: 'up', D: 'down', C: 'lift' };
+    for (const sy of [20, 38]) {
+      const b = mod.placeBuilding(w, data.getDef('coaster'), 30, sy, 0);
+      for (const ch of 'CCCLDDDLSSSSSSSLSSSLS') te.appendPiece(w, b, KIND[ch]);
+    }
+    window.__coasters = [...w.buildings.values()].filter((b) => b.track?.ok).length;
+    window.__ops = [...w.buildings.values()].filter((b) => !b.track && w.network.isOperational(b)).length;
   });
   await page.evaluate((n) => window.__game.spawn(n), N);
 
@@ -77,12 +85,13 @@ try {
     });
     const x1 = await measure(1);
     const x4 = await measure(4);
-    return { tickMs, render1, render04, x1, x4, guests: g.world.guests.length, buildings: g.world.buildings.size, ops: window.__ops };
+    return { tickMs, render1, render04, x1, x4, guests: g.world.guests.length, buildings: g.world.buildings.size, ops: window.__ops, coasters: window.__coasters };
   });
 
-  check(result.ops === result.buildings, '모든 건물이 운영 가능');
+  check(result.coasters === 2, '완성된 롤러코스터 2대');
+  check(result.ops === result.buildings - 2, '코스터를 뺀 모든 건물이 운영 가능');
   const f = (v) => v.toFixed(2);
-  console.log(`손님 ${result.guests}명, 건물 ${result.buildings}개 (운영 가능 ${result.ops}개)`);
+  console.log(`손님 ${result.guests}명, 건물 ${result.buildings}개 (롤러코스터 ${result.coasters}대 포함, 일반 시설 운영 ${result.ops}개)`);
   console.log(`시뮬레이션 1틱: ${f(result.tickMs)}ms`);
   console.log(`렌더 1회: 줌 1.0 ${f(result.render1)}ms / 줌 0.4(전체) ${f(result.render04)}ms`);
   console.log(`1배속 프레임: 평균 ${f(result.x1.avg)}ms / 중앙값 ${f(result.x1.median)}ms / p95 ${f(result.x1.p95)}ms (${result.x1.frames}프레임)`);

@@ -38,7 +38,20 @@
 
       .card { position: fixed; top: 84px; width: 270px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
       #panel { right: 12px; }
-      #finance { left: 12px; width: 330px; }
+      #finance { left: 292px; width: 330px; }
+      #tutorial { left: 12px; width: 262px; }
+      #tutorial .head div { display: flex; gap: 4px; }
+      #tu-list { margin: 0 0 8px; padding: 0; list-style: none; }
+      #tu-list li { padding: 2px 0 2px 22px; position: relative; color: var(--muted); }
+      #tu-list li::before { content: '○'; position: absolute; left: 4px; }
+      #tu-list li.done { color: #8fe0aa; }
+      #tu-list li.done::before { content: '✔'; }
+      #tu-list li.current { color: #fff; font-weight: 700; }
+      #tu-list li.current::before { content: '▶'; color: var(--gold); }
+      #tu-text { padding: 6px 8px; border-radius: 6px; background: rgba(255,215,90,0.12); line-height: 1.5; }
+      @keyframes hint-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,215,90,0.0); } 50% { box-shadow: 0 0 0 4px rgba(255,215,90,0.75); } }
+      #toolbar button.hint { border-color: var(--gold); animation: hint-pulse 1.3s ease-in-out infinite; }
+      #help-btn { padding: 3px 9px; font-weight: 700; }
       .card .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 15px; }
       .card .head button { padding: 0 8px; }
       .p-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
@@ -96,11 +109,19 @@
       <span class="fee">입장료 <span id="fee-ctl"></span></span>
       <button id="finance-btn">재무</button>
       <button id="save-btn" title="지금 저장 (자동 저장도 됩니다)">저장</button>
+      <button id="help-btn" title="시작 가이드 열기/닫기">?</button>
       <button id="sound-btn" title="효과음 켜기/끄기"></button>
       <button id="new-btn">새 게임</button>
     </div>
     <div id="hint"></div>
     <div id="goal"></div>
+    <div id="tutorial" class="card" hidden>
+      <div class="head"><b>시작 가이드 <span id="tu-count"></span></b><div><button id="tu-fold" title="접기/펼치기">▾</button><button id="tu-close" title="닫기 (? 버튼으로 다시 열 수 있어요)">×</button></div></div>
+      <div id="tu-body">
+        <ol id="tu-list"></ol>
+        <div id="tu-text"></div>
+      </div>
+    </div>
     <div id="panel" class="card" hidden>
       <div class="head"><b id="p-name"></b><button id="p-close" title="닫기 (Esc)">×</button></div>
       <div class="p-row"><span>상태</span><span id="p-status"></span></div>
