@@ -34,6 +34,8 @@ export interface Building {
   income: number;
   /** 롤러코스터의 트랙(역 건물에만 있다) */
   track?: Track;
+  /** 건물이 서 있는 땅의 높이(코스터 트랙의 시작·끝 높이). 없으면 0 */
+  baseH?: number;
   /** 신뢰도(0~100, 놀이기구만). 운행할 때마다 줄고 정비로 회복된다 */
   reliability: number;
   /** 고장 여부(놀이기구만). 고장 나면 운영 불가 */

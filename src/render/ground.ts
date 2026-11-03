@@ -218,7 +218,7 @@ function paintTerrainChunk(
       const t = map.heightAt(tx, ty);
 
       // 윗면: 왼쪽에서 오는 빛 — 오른쪽이 높은(왼쪽을 향한) 비탈은 밝게, 반대는 어둡게. 높은 땅은 살짝 밝게
-      const lit = 1 + 0.09 * (cR - cL) + 0.055 * t;
+      const lit = 1 + 0.09 * (cR - cL) + 0.1 * t;
       if (isPath) {
         face([T, R, B, L], shade(PATH_TONES[(tx + ty) & 1], lit));
         ctx.strokeStyle = 'rgba(0,0,0,0.12)';

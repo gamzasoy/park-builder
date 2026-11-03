@@ -88,6 +88,7 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
     cycles: 0,
   };
   const map = world.map;
+  b.baseH = map.heightAt(f.x, f.y);
   for (let ty = f.y; ty < f.y + f.h; ty++) {
     for (let tx = f.x; tx < f.x + f.w; tx++) {
       map.occupant[map.index(tx, ty)] = b.id;

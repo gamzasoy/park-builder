@@ -6,6 +6,7 @@ import {
   buildingDef, PHYSICS, PIECE_COST, pieceRange, routeAt, stationTiles, type TrackType,
 } from '../src/sim/coaster';
 import { applyEffects, createGuest } from '../src/sim/guest';
+import { changeTerrain } from '../src/sim/terrain';
 import { stepWorld } from '../src/sim/sim';
 import { appendPiece, canAppendPiece, clearTrack, trackOccupancy, undoPiece } from '../src/sim/trackedit';
 import { START_MONEY, World, type Building } from '../src/sim/world';
@@ -524,5 +525,21 @@ describe('saving new pieces', () => {
     const d = JSON.parse(JSON.stringify(serializeWorld(w)));
     d.buildings[0].track.pieces.push('straight');
     expect(parseSave(JSON.stringify(d))).toEqual({ ok: false, reason: 'corrupt' });
+  });
+});
+
+describe('언덕 위의 역', () => {
+  it('고지대에 지은 역도 평평한 코스를 완성할 수 있다', () => {
+    const w = new World();
+    w.money = 100_000;
+    for (let y = 6; y < 24; y++) for (let x = 6; x < 26; x++) expect(changeTerrain(w, x, y, 'raise').ok).toBe(true);
+    const b = placeBuilding(w, getDef('coaster'), 10, 10, 0)!;
+    expect(b).not.toBeNull();
+    expect(b.baseH).toBe(1);
+    expect(b.track!.cursor.h).toBe(1);
+    expect(build(w, b, FLAT)).toEqual({ ok: true });
+    expect(b.track!.closed).toBe(true);
+    expect(b.track!.ok).toBe(true);
+    expect(b.track!.stats!.maxHeight).toBe(0);
   });
 });

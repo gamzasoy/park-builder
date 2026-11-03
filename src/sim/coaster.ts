@@ -133,7 +133,7 @@ export function stationTiles(b: Building): Tile[] {
 export function startCursor(b: Building): Cursor {
   const s = stationTiles(b);
   const [dx, dy] = DIRS[b.rot % 4];
-  return { x: s[2].x + dx, y: s[2].y + dy, dir: b.rot % 4, h: 0 };
+  return { x: s[2].x + dx, y: s[2].y + dy, dir: b.rot % 4, h: b.baseH ?? 0 };
 }
 
 /** 커서 위치에 조각을 놓았을 때 조각과 다음 커서 */
@@ -195,7 +195,7 @@ export function rebuild(b: Building, t: Track): void {
   t.cursor = cur;
 
   const s0 = stationTiles(b)[0];
-  t.closed = placed.length > 0 && cur.x === s0.x && cur.y === s0.y && cur.dir === b.rot % 4 && cur.h === 0;
+  t.closed = placed.length > 0 && cur.x === s0.x && cur.y === s0.y && cur.dir === b.rot % 4 && cur.h === (b.baseH ?? 0);
 
   const sim = simulate(b, placed);
   t.error = sim.error;
@@ -297,10 +297,11 @@ function simulate(b: Building, placed: PlacedPiece[]): Sim {
     pts.push({ x, y, h, w });
   };
   const sv = Math.sqrt(P.startE);
-  add(station[0].x + 0.5 - sdx * 0.5, station[0].y + 0.5 - sdy * 0.5, 0, sv);
-  for (const s of station) add(s.x + 0.5, s.y + 0.5, 0, sv, pts[pts.length - 1]);
+  const base = b.baseH ?? 0;
+  add(station[0].x + 0.5 - sdx * 0.5, station[0].y + 0.5 - sdy * 0.5, base, sv);
+  for (const s of station) add(s.x + 0.5, s.y + 0.5, base, sv, pts[pts.length - 1]);
   const lastS = station[2];
-  add(lastS.x + 0.5 + sdx * 0.5, lastS.y + 0.5 + sdy * 0.5, 0, sv, pts[pts.length - 1]);
+  add(lastS.x + 0.5 + sdx * 0.5, lastS.y + 0.5 + sdy * 0.5, base, sv, pts[pts.length - 1]);
   const holdIdx = 2; // 두 번째 역 칸 중심(선두가 서는 곳)
   const pieceIdx: [number, number][] = [];
   placed.forEach((p, i) => {
@@ -342,7 +343,7 @@ function simulate(b: Building, placed: PlacedPiece[]): Sim {
     length: placed.length,
     maxSpeed: Math.round(maxV * P.kmh),
     maxDrop,
-    maxHeight,
+    maxHeight: Math.max(0, maxHeight - base),
     turns,
     loops,
     fun: clamp(Math.round(15 + 0.8 * placed.length + 5 * maxDrop + 1.5 * turns + 1.5 * maxHeight + 12 * Math.min(loops, 3)), 5, 100),
