@@ -157,9 +157,11 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   // 고장 난 놀이기구: 입구 위에 렌치 아이콘
   for (const b of buildings) {
     if (!b.broken) continue;
-    const s = tileScreen(b.entrance.x, b.entrance.y);
+    // 입구는 손님과 말풍선이 몰리는 곳이라, 건물 지붕 위(발판 중심)에 띄운다
+    const s = tileScreen(b.x + b.w / 2, b.y + b.h / 2);
     if (!visible(s)) continue;
-    drawWrench(ctx, s.x, s.y - 22 * cam.zoom, cam.zoom, time);
+    const roof = Math.min(getDef(b.defId).height, 60) * cam.zoom;
+    drawWrench(ctx, s.x, s.y - roof - 14 * cam.zoom, cam.zoom, time);
   }
 
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
@@ -580,6 +582,9 @@ function drawCursorArrow(ctx: CanvasRenderingContext2D, cam: Camera, c: { x: num
 const LOOKS = PALETTE;
 const PANTS = ['#3a4a6b', '#4a3a2e', '#2e2e34', '#5a6e8a'];
 
+/** 우산 색: 비 오는 날 어두운 화면에서도 눈에 띄는 밝은 색 */
+const UMBRELLA = ['#ffd23f', '#ff5d73', '#4cc9f0', '#7bd66b', '#ff9f43'];
+
 function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number, raining: boolean): void {
   const w = tileToWorld(tx, ty);
   const s = cam.worldToScreen(w.x, w.y);
@@ -617,17 +622,21 @@ function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: num
   // 비 오는 날 우산을 쓴 손님(풍선 대신)
   if (g.umbrella && raining) {
     const ux = s.x + 1 * z;
-    const uy = s.y - 20 * z;
-    ctx.strokeStyle = 'rgba(40,40,40,0.7)';
-    ctx.lineWidth = Math.max(1, z);
+    const uy = s.y - 21 * z;
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = Math.max(1.2, 1.2 * z);
     ctx.beginPath();
     ctx.moveTo(ux, uy);
     ctx.lineTo(ux, s.y - 9 * z);
     ctx.stroke();
-    ctx.fillStyle = LOOKS[(g.look + 5) % LOOKS.length];
+    ctx.fillStyle = UMBRELLA[g.look % UMBRELLA.length];
     ctx.beginPath();
-    ctx.arc(ux, uy, 6 * z, Math.PI, 0);
+    ctx.arc(ux, uy, 8 * z, Math.PI, 0);
+    ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = Math.max(1, 1.1 * z);
+    ctx.stroke();
   } else if (g.look % 5 === 2) { // 풍선을 든 손님
     const bx = s.x + 5 * z;
     const by = s.y - 26 * z;
