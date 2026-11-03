@@ -114,6 +114,7 @@ export class World {
   adopt(src: World): void {
     this.map.path.set(src.map.path);
     this.map.occupant.set(src.map.occupant);
+    this.map.scenery.set(src.map.scenery);
     this.map.version++; // 길찾기 캐시 무효화
     this.money = src.money;
     this.buildings.clear();

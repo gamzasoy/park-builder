@@ -48,6 +48,7 @@ export function appendPiece(world: World, b: Building, type: TrackType): TrackCh
   const wasOk = t.ok;
   const next = applyPiece(t.cursor, type).placed;
   world.map.occupant[world.map.index(next.x, next.y)] = b.id;
+  world.map.scenery[world.map.index(next.x, next.y)] = 0;
   t.pieces.push(type);
   t.spent += PIECE_COST[type];
   world.transact('construction', -PIECE_COST[type]);

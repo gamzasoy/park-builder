@@ -1,4 +1,5 @@
 import { getDef } from '../data';
+import { sceneryDef } from '../data/scenery';
 import { buildingTiles, restoreTrack, type TrackType } from '../sim/coaster';
 import type { Guest } from '../sim/guest';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
@@ -8,7 +9,7 @@ import {
 } from '../sim/world';
 
 /** 저장 형식 버전. 형식을 바꾸면 올리고 migrate에서 이전 버전을 변환한다. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'park-builder-save';
 export const BACKUP_KEY = 'park-builder-save.bak';
 
@@ -29,6 +30,8 @@ export interface SaveData {
   height: number;
   /** 길 레이어: '0'/'1' 문자열 */
   path: string;
+  /** v3에서 추가. 장식 레이어: 타일마다 kind 한 글자('0' = 없음). 없으면(이전 저장본) 새 맵의 기본 숲을 쓴다 */
+  scenery?: string;
   tick: number;
   money: number;
   rngState: number;
@@ -66,6 +69,7 @@ export function serializeWorld(world: World): SaveData {
     width: m.width,
     height: m.height,
     path: Array.from(m.path, (v) => (v ? '1' : '0')).join(''),
+    scenery: Array.from(m.scenery, (v) => String(v)).join(''),
     tick: world.tick,
     money: world.money,
     rngState: world.rng.state,
@@ -110,6 +114,13 @@ export function deserializeWorld(data: SaveData): World {
 
   for (let i = 0; i < data.path.length; i++) m.path[i] = data.path[i] === '1' ? 1 : 0;
   m.path[m.index(m.gate.x, m.gate.y)] = 1;
+  if (data.scenery !== undefined) {
+    if (typeof data.scenery !== 'string' || data.scenery.length !== m.width * m.height) throw new Error('bad scenery layer');
+    for (let i = 0; i < data.scenery.length; i++) {
+      const k = data.scenery.charCodeAt(i) - 48;
+      m.scenery[i] = sceneryDef(k) ? k : 0;
+    }
+  }
 
   for (const b of data.buildings) {
     getDef(b.defId); // 알 수 없는 건물이면 throw
@@ -133,6 +144,8 @@ export function deserializeWorld(data: SaveData): World {
     }
     w.buildings.set(b.id, building);
   }
+  // 길·건물·트랙 아래에는 장식이 있을 수 없다(이전 저장본에 기본 숲을 깔았을 때 겹친 것 정리)
+  for (let i = 0; i < m.scenery.length; i++) if (m.path[i] === 1 || m.occupant[i] !== 0) m.scenery[i] = 0;
 
   w.guests = data.guests.map((g) => ({
     ...g,
@@ -172,9 +185,12 @@ export function deserializeWorld(data: SaveData): World {
   return w;
 }
 
-/** 이전 버전 저장을 현재 형식으로 변환. 지원하지 않는 버전이면 null. (v1 → v2: 트랙 필드가 추가됐을 뿐이라 그대로 읽는다) */
+/**
+ * 이전 버전 저장을 현재 형식으로 변환. 지원하지 않는 버전이면 null.
+ * v1 → v2: 트랙 필드 추가 / v2 → v3: 장식 레이어 추가. 둘 다 선택 필드라 그대로 읽는다.
+ */
 function migrate(data: { version?: unknown }): SaveData | null {
-  return data.version === SAVE_VERSION || data.version === 1 ? (data as SaveData) : null;
+  return data.version === SAVE_VERSION || data.version === 1 || data.version === 2 ? (data as SaveData) : null;
 }
 
 export type LoadResult =

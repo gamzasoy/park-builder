@@ -1,9 +1,11 @@
+import type { SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { guestDisplayPos } from '../render/guestpos';
 import type { Vec2 } from '../render/iso';
 import {
   anchorFor, buildingAt, canPlaceBuilding, demolishAt, entranceOf, footprintAt,
-  isPathPlaceable, lineTiles, PATH_COST, placeBuilding, placePaths, type PlaceFailure,
+  isPathPlaceable, isSceneryPlaceable, lineTiles, PATH_COST, placeBuilding, placePaths, placeScenery,
+  type PlaceFailure,
 } from '../sim/building';
 import { buildingTiles, TRACK_TYPES, type Cursor, type TrackType } from '../sim/coaster';
 import type { Tile } from '../sim/map';
@@ -15,6 +17,8 @@ export type Tool =
   | { kind: 'path' }
   | { kind: 'build'; def: BuildingDef }
   | { kind: 'demolish' }
+  /** 나무·꽃: 길처럼 드래그로 한 줄을 칠한다 */
+  | { kind: 'scenery'; def: SceneryDef }
   /** 롤러코스터 트랙 편집: 조각 팔레트/단축키로 다음 조각을 잇는다 */
   | { kind: 'track'; buildingId: number };
 
@@ -56,7 +60,9 @@ export class ToolController {
   /** 툴바 하이라이트 동기화용 키 */
   get toolKey(): string {
     const t = this.tool;
-    return t.kind === 'build' ? `build:${t.def.id}` : t.kind;
+    if (t.kind === 'build') return `build:${t.def.id}`;
+    if (t.kind === 'scenery') return `scenery:${t.def.id}`;
+    return t.kind;
   }
 
   /** 새 게임/불러오기 후 선택·도구 상태 초기화 */
@@ -177,7 +183,7 @@ export class ToolController {
       const gid = pos ? this.guestNear(pos) : null;
       this.selectedGuestId = gid;
       this.selectedId = gid === null ? (buildingAt(this.world, t.x, t.y)?.id ?? null) : null;
-    } else if (tool.kind === 'path') {
+    } else if (tool.kind === 'path' || tool.kind === 'scenery') {
       this.dragStart = t;
     } else if (tool.kind === 'build') {
       const a = anchorFor(tool.def, this.rot, t);
@@ -206,11 +212,13 @@ export class ToolController {
   onUp(t: Tile | null): void {
     const start = this.dragStart;
     this.dragStart = null;
-    if (this.tool.kind !== 'path' || !start || !t) return;
-    const { placed, short } = placePaths(this.world, lineTiles(start, t));
+    const tool = this.tool;
+    if ((tool.kind !== 'path' && tool.kind !== 'scenery') || !start || !t) return;
+    const line = lineTiles(start, t);
+    const { placed, short } = tool.kind === 'path' ? placePaths(this.world, line) : placeScenery(this.world, line, tool.def);
     if (short) this.notify('돈이 부족합니다');
-    else if (placed === 0) this.notify('길을 깔 수 없는 위치입니다');
-    this.onEvent?.(short || placed === 0 ? 'error' : 'path');
+    else if (placed === 0) this.notify(tool.kind === 'path' ? '길을 깔 수 없는 위치입니다' : '빈 잔디에만 심을 수 있습니다');
+    this.onEvent?.(short || placed === 0 ? 'error' : tool.kind === 'path' ? 'path' : 'build');
   }
 
   preview(hover: Tile | null): Preview | null {
@@ -229,13 +237,15 @@ export class ToolController {
 
     if (!hover) return null;
 
-    if (tool.kind === 'path') {
+    if (tool.kind === 'path' || tool.kind === 'scenery') {
       const line = this.dragStart ? lineTiles(this.dragStart, hover) : [hover];
-      let afford = Math.floor(this.world.money / PATH_COST);
+      const isPath = tool.kind === 'path';
+      let afford = Math.floor(this.world.money / (isPath ? PATH_COST : tool.def.cost));
       const tiles = line
         .filter((t) => map.inBounds(t.x, t.y))
         .map((t) => {
-          const ok = isPathPlaceable(this.world, t.x, t.y) && afford > 0;
+          const placeable = isPath ? isPathPlaceable(this.world, t.x, t.y) : isSceneryPlaceable(this.world, t.x, t.y);
+          const ok = placeable && afford > 0;
           if (ok) afford--;
           return { ...t, ok };
         });
@@ -258,7 +268,7 @@ export class ToolController {
       if (b) {
         return { tiles: buildingTiles(b).map((t) => ({ ...t, ok: false })) };
       }
-      if (map.isPath(hover.x, hover.y) && !map.isGate(hover.x, hover.y)) {
+      if ((map.isPath(hover.x, hover.y) && !map.isGate(hover.x, hover.y)) || map.sceneryAt(hover.x, hover.y) !== 0) {
         return { tiles: [{ ...hover, ok: false }] };
       }
     }
