@@ -1,6 +1,6 @@
 import { hash32 } from '../core/hash';
 import type { BuildingDef } from '../data/types';
-import { applyEffects, goIdle, remember, TRASH_MAX, TRASH_MIN, type Guest } from './guest';
+import { applyEffects, goIdle, remember, think, TRASH_MAX, TRASH_MIN, type Guest, type Thought } from './guest';
 import type { Building, World } from './world';
 
 /** 대기열 맨 앞의 유효한 손님에게 요금을 받고 시설에 들인다. 들일 손님이 없으면 null. */
@@ -47,10 +47,12 @@ export function renumberQueue(world: World, b: Building): void {
 }
 
 /** 철거 등으로 시설이 사라질 때 줄 서 있거나 이용 중인 손님을 모두 내보냄 */
-export function evictAll(world: World, b: Building): void {
+export function evictAll(world: World, b: Building, thought?: Thought): void {
   for (const id of [...b.queue, ...b.inside]) {
     const g = world.guestById.get(id);
-    if (g) goIdle(g);
+    if (!g) continue;
+    goIdle(g);
+    if (thought) think(g, thought);
   }
   b.queue.length = 0;
   b.inside.length = 0;

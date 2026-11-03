@@ -21,7 +21,7 @@ export class Toolbar {
     this.group('놀이기구', RIDES.map((d) => this.defButton(d)));
     this.group('매점', SHOPS.map((d) => this.defButton(d)));
     this.group('장식', SCENERY.map((d) => this.sceneryButton(d)));
-    this.group('직원', [this.hireButton('janitor', '청소부 고용', onHire)]);
+    this.group('직원', [this.hireButton('janitor', '청소부 고용', onHire), this.hireButton('mechanic', '정비공 고용', onHire)]);
   }
 
   /** 매 프레임 호출: 선택된 도구(Esc 해제 포함)에 맞춰 하이라이트 갱신 */

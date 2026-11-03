@@ -1,9 +1,11 @@
 import { hash32 } from '../core/hash';
 import type { Tile } from './map';
 import { advance, setPath, type Walker } from './guest';
-import type { World } from './world';
+import { buildingDef } from './coaster';
+import { INSPECT_BELOW, MAX_RELIABILITY } from './ride';
+import type { Building, World } from './world';
 
-/** 직원 종류. mechanic(정비공)은 이후 단계에서 쓴다(지금은 고용·행동이 없다). */
+/** 직원 종류. janitor는 쓰레기를, mechanic은 놀이기구 고장·점검을 맡는다. */
 export type StaffKind = 'janitor' | 'mechanic';
 /** idle 대기 / walking 이동 / working 작업 중(제자리) */
 export type StaffState = 'idle' | 'walking' | 'working';
@@ -30,6 +32,8 @@ export interface Staff extends Walker {
   target: Tile | null;
   /** 작업 남은 틱 */
   timer: number;
+  /** 정비공이 맡은 일(수리/점검). 일이 없으면 undefined */
+  job?: 'repair' | 'inspect';
 }
 
 export const STAFF_NAME: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공' };
@@ -66,13 +70,15 @@ export function fireStaff(world: World, id: number): boolean {
 
 const NEIGHBORS: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
+/** 정비공 작업 시간(틱)과 회복량 */
+export const REPAIR_TICKS = 60;
+export const REPAIR_GAIN = 30;
+export const INSPECT_TICKS = 30;
+export const INSPECT_GAIN = 10;
+
 export function updateStaff(world: World, s: Staff): void {
   s.px = s.x;
   s.py = s.y;
-  if (s.kind === 'janitor') updateJanitor(world, s);
-}
-
-function updateJanitor(world: World, s: Staff): void {
   const m = world.map;
   // 서 있던 길이 철거되면 입구로 돌아온다
   if (!m.isPath(s.tile.x, s.tile.y)) {
@@ -87,9 +93,8 @@ function updateJanitor(world: World, s: Staff): void {
   }
 
   if (s.state === 'working') {
-    const t = s.target!;
     if (--s.timer <= 0) {
-      m.litter[m.index(t.x, t.y)] = 0;
+      finishJob(world, s);
       s.state = 'idle';
       s.target = null;
     }
@@ -97,8 +102,8 @@ function updateJanitor(world: World, s: Staff): void {
   }
 
   if (s.state === 'walking') {
-    if (s.target && m.litterAt(s.target.x, s.target.y) === 0 && s.pathIdx < s.path.length) {
-      // 다른 청소부가 이미 치웠다
+    if (s.target && !jobValid(world, s) && s.pathIdx < s.path.length) {
+      // 다른 직원이 이미 처리했거나 필요가 사라졌다
       s.state = 'idle';
       s.target = null;
       return;
@@ -113,9 +118,9 @@ function updateJanitor(world: World, s: Staff): void {
       setPath(world, s, path);
     }
     if (!advance(s, STAFF_SPEED)) return;
-    if (s.target && m.litterAt(s.target.x, s.target.y) > 0) {
+    if (s.target && jobValid(world, s)) {
       s.state = 'working';
-      s.timer = SWEEP_TICKS;
+      s.timer = jobTicks(s);
     } else {
       s.state = 'idle';
       s.target = null;
@@ -123,16 +128,14 @@ function updateJanitor(world: World, s: Staff): void {
     return;
   }
 
-  // idle: 가까운 더러운 길을 찾아 간다. 없으면 근처를 배회.
+  // idle: 일거리를 찾아 간다. 없으면 근처를 배회.
   if ((world.tick + s.id) % THINK_EVERY !== 0) return;
-  const claimed = new Set<number>();
-  for (const o of world.staff) if (o !== s && o.target) claimed.add(m.index(o.target.x, o.target.y));
-  const found = nearestDirty(world, s.tile, claimed);
+  const found = s.kind === 'janitor' ? findLitterJob(world, s) : findRideJob(world, s);
   if (found) {
     if (found.length <= 1) {
       s.target = found[0];
       s.state = 'working';
-      s.timer = SWEEP_TICKS;
+      s.timer = jobTicks(s);
       return;
     }
     s.target = found[found.length - 1];
@@ -141,6 +144,89 @@ function updateJanitor(world: World, s: Staff): void {
     return;
   }
   wander(world, s);
+}
+
+/** 목표 타일이 가리키는 놀이기구(입구가 그 타일인 것). 고장 난 것을 우선한다. */
+function rideAtEntrance(world: World, t: Tile): Building | null {
+  let found: Building | null = null;
+  for (const b of world.buildings.values()) {
+    if (b.entrance.x !== t.x || b.entrance.y !== t.y || buildingDef(b).kind !== 'ride') continue;
+    if (b.broken) return b;
+    found ??= b;
+  }
+  return found;
+}
+
+/** 지금 목표에 할 일이 남아 있는가 */
+function jobValid(world: World, s: Staff): boolean {
+  const t = s.target;
+  if (!t) return false;
+  if (s.kind === 'janitor') return world.map.litterAt(t.x, t.y) > 0;
+  const b = rideAtEntrance(world, t);
+  if (!b) return false;
+  return s.job === 'repair' ? b.broken : !b.broken && b.reliability < INSPECT_BELOW;
+}
+
+function jobTicks(s: Staff): number {
+  if (s.kind === 'janitor') return SWEEP_TICKS;
+  return s.job === 'repair' ? REPAIR_TICKS : INSPECT_TICKS;
+}
+
+function finishJob(world: World, s: Staff): void {
+  const t = s.target!;
+  const m = world.map;
+  if (s.kind === 'janitor') {
+    m.litter[m.index(t.x, t.y)] = 0;
+    return;
+  }
+  const b = rideAtEntrance(world, t);
+  if (!b) return;
+  if (b.broken) {
+    b.broken = false;
+    b.brokenTicks = 0;
+    b.reliability = Math.min(MAX_RELIABILITY, b.reliability + REPAIR_GAIN);
+  } else {
+    b.reliability = Math.min(MAX_RELIABILITY, b.reliability + INSPECT_GAIN);
+  }
+  s.job = undefined;
+}
+
+function findLitterJob(world: World, s: Staff): Tile[] | null {
+  const m = world.map;
+  const claimed = new Set<number>();
+  for (const o of world.staff) if (o !== s && o.kind === 'janitor' && o.target) claimed.add(m.index(o.target.x, o.target.y));
+  return nearestDirty(world, s.tile, claimed);
+}
+
+/** 고장 난 놀이기구(가까운 순) → 없으면 신뢰도가 가장 낮은 놀이기구를 점검 */
+function findRideJob(world: World, s: Staff): Tile[] | null {
+  const claimed = new Set<number>();
+  const m = world.map;
+  for (const o of world.staff) if (o !== s && o.kind === 'mechanic' && o.target) claimed.add(m.index(o.target.x, o.target.y));
+  const free = (b: Building): boolean => !claimed.has(m.index(b.entrance.x, b.entrance.y));
+
+  let best: readonly Tile[] | null = null;
+  for (const b of world.buildings.values()) {
+    if (!b.broken || !free(b)) continue;
+    const path = world.network.findPath(s.tile, b.entrance);
+    if (path && (!best || path.length < best.length)) best = path;
+  }
+  if (best) {
+    s.job = 'repair';
+    return [...best];
+  }
+
+  let weakest: Building | null = null;
+  for (const b of world.buildings.values()) {
+    if (buildingDef(b).kind !== 'ride' || b.reliability >= INSPECT_BELOW || !free(b)) continue;
+    if (weakest && b.reliability >= weakest.reliability) continue; // 동률이면 id가 작은 쪽
+    if (world.network.findPath(s.tile, b.entrance)) weakest = b;
+  }
+  if (weakest) {
+    s.job = 'inspect';
+    return [...world.network.findPath(s.tile, weakest.entrance)!];
+  }
+  return null;
 }
 
 /** 길을 따라 BFS로 가장 가까운(다른 직원이 맡지 않은) 쓰레기 있는 길 타일까지의 경로 */

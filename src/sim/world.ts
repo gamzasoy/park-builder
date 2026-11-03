@@ -33,6 +33,14 @@ export interface Building {
   income: number;
   /** 롤러코스터의 트랙(역 건물에만 있다) */
   track?: Track;
+  /** 신뢰도(0~100, 놀이기구만). 운행할 때마다 줄고 정비로 회복된다 */
+  reliability: number;
+  /** 고장 여부(놀이기구만). 고장 나면 운영 불가 */
+  broken: boolean;
+  /** 고장 난 뒤 흐른 틱 */
+  brokenTicks: number;
+  /** 지금까지 마친 운행 횟수(고장 판정의 결정적 입력) */
+  cycles: number;
 }
 
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */

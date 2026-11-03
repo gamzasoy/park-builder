@@ -24,8 +24,9 @@ export class PathNetwork {
     return this.map.inBounds(x, y) && this.reach[this.map.index(x, y)] === 1;
   }
 
-  /** 건물이 운영 가능한가: 입구 타일이 공원 입구와 이어진 길이어야 하고, 롤러코스터는 트랙도 완성돼야 함 */
+  /** 건물이 운영 가능한가: 고장 나지 않았고, 입구 타일이 공원 입구와 이어진 길이어야 하고, 롤러코스터는 트랙도 완성돼야 함 */
   isOperational(b: Building): boolean {
+    if (b.broken) return false;
     if (b.track && !b.track.ok) return false;
     return this.isReachable(b.entrance.x, b.entrance.y);
   }

@@ -31,6 +31,8 @@ export class BuildingPanel {
   private price: Stepper;
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
   private editBtn = $<HTMLButtonElement>('p-edit');
+  private relRow = $('p-rel-row');
+  private rel = $('p-rel');
   private thrillRow = $('p-thrill-row');
   private thrill = $('p-thrill');
 
@@ -71,10 +73,14 @@ export class BuildingPanel {
     setText(this.name, def.name);
     setText(
       this.status,
-      !operational
+      b.broken
+        ? '고장 (정비 대기)'
+        : !operational
         ? (trackPending ? `운영 불가 (${b.track!.error ?? '트랙이 아직 완성되지 않음'})` : '운영 불가 (입구가 길과 끊김)')
         : def.kind === 'ride' ? PHASE_TEXT[b.phase] : '영업 중',
     );
+    this.relRow.hidden = def.kind !== 'ride';
+    if (def.kind === 'ride') setText(this.rel, `${Math.round(b.reliability)} / 100${b.broken ? ' · 고장' : ''}`);
     this.thrillRow.hidden = !b.track;
     this.editBtn.hidden = !b.track;
     if (b.track) {

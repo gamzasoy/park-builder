@@ -146,6 +146,14 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   }
   ctx.textAlign = 'start';
 
+  // 고장 난 놀이기구: 입구 위에 렌치 아이콘
+  for (const b of buildings) {
+    if (!b.broken) continue;
+    const s = tileScreen(b.entrance.x, b.entrance.y);
+    if (!visible(s)) continue;
+    drawWrench(ctx, s.x, s.y - 22 * cam.zoom, cam.zoom, time);
+  }
+
   // 4) 미리보기 / 호버
   if (preview) {
     for (const t of preview.tiles) {
@@ -506,6 +514,32 @@ function drawLitter(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, vi
   }
 }
 
+/** 고장 표시: 붉은 원 안의 렌치(살짝 흔들린다) */
+function drawWrench(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number): void {
+  const r = Math.max(9, 10 * z);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(Math.sin(time * 0.3) * 0.18);
+  ctx.fillStyle = 'rgba(210,60,50,0.95)';
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(2, r * 0.26);
+  ctx.beginPath(); // 자루
+  ctx.moveTo(-r * 0.5, r * 0.5);
+  ctx.lineTo(r * 0.15, -r * 0.15);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1.6, r * 0.2);
+  ctx.beginPath(); // 입이 벌어진 머리
+  ctx.moveTo(r * 0.05, -r * 0.55);
+  ctx.lineTo(r * 0.5, -r * 0.5);
+  ctx.lineTo(r * 0.55, -r * 0.05);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** 직원: 눈에 띄는 작업복(청소부 = 주황 조끼 + 모자). 작업 중이면 빗자루를 쓴다. */
 function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: number, ty: number, time: number): void {
   const w = tileToWorld(tx, ty);
@@ -527,7 +561,16 @@ function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: nu
   ctx.moveTo(s.x + 1.2 * z, s.y - 5 * z); ctx.lineTo(s.x + 1.2 * z - swing, s.y - 0.5 * z);
   ctx.stroke();
 
-  if (st.state === 'working') {
+  if (st.state === 'working' && st.kind === 'mechanic') {
+    // 렌치로 두드리기
+    const hit = Math.sin(time * 1.8) * 2 * z;
+    ctx.strokeStyle = '#9aa3b0';
+    ctx.lineWidth = Math.max(1.5, 2 * z);
+    ctx.beginPath();
+    ctx.moveTo(s.x + 3 * z, s.y - 8 * z);
+    ctx.lineTo(s.x + 7 * z + hit, s.y - 4 * z);
+    ctx.stroke();
+  } else if (st.state === 'working') {
     // 빗자루 쓸기
     const sweep = Math.sin(time * 1.4) * 3 * z;
     ctx.strokeStyle = '#7a5230';

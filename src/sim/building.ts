@@ -3,6 +3,7 @@ import type { BuildingDef } from '../data/types';
 import { buildingDef, buildingTiles, newTrack } from './coaster';
 import type { Tile } from './map';
 import { evictAll } from './venue';
+import { MAX_RELIABILITY } from './ride';
 import { type Building, World } from './world';
 
 export const PATH_COST = 10;
@@ -69,6 +70,10 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
     price: def.price,
     served: 0,
     income: 0,
+    reliability: MAX_RELIABILITY,
+    broken: false,
+    brokenTicks: 0,
+    cycles: 0,
   };
   const map = world.map;
   for (let ty = f.y; ty < f.y + f.h; ty++) {

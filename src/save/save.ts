@@ -27,7 +27,12 @@ interface StaffSave extends Omit<Staff, 'path'> {
 }
 
 /** 코스터 트랙은 조각 목록과 지출만 저장하고 나머지는 불러올 때 다시 계산한다 */
-interface BuildingSave extends Omit<Building, 'track'> {
+interface BuildingSave extends Omit<Building, 'track' | 'reliability' | 'broken' | 'brokenTicks' | 'cycles'> {
+  /** 정비 기능 이전 저장본에는 없다 */
+  reliability?: number;
+  broken?: boolean;
+  brokenTicks?: number;
+  cycles?: number;
   track?: { pieces: TrackType[]; spent: number };
 }
 
@@ -160,7 +165,16 @@ export function deserializeWorld(data: SaveData): World {
       }
     }
     const { track: savedTrack, ...rest } = b;
-    const building: Building = { ...rest, queue: [...b.queue], inside: [...b.inside] };
+    const building: Building = {
+      ...rest,
+      queue: [...b.queue],
+      inside: [...b.inside],
+      // 신뢰도·고장 필드가 생기기 전(v1~v4 초기)의 저장본은 새 기구처럼 읽는다
+      reliability: isNum(b.reliability) ? Math.max(0, Math.min(100, b.reliability)) : 100,
+      broken: b.broken === true,
+      brokenTicks: isNum(b.brokenTicks) ? b.brokenTicks : 0,
+      cycles: isNum(b.cycles) ? b.cycles : 0,
+    };
     if (savedTrack) {
       // 트랙 상태를 다시 계산하고, 트랙이 차지한 타일도 점유로 표시
       building.track = restoreTrack(building, savedTrack.pieces, savedTrack.spent);
@@ -209,6 +223,7 @@ export function deserializeWorld(data: SaveData): World {
       state: reset ? 'idle' : s.state,
       target: reset || !s.target ? null : { ...s.target },
       timer: s.timer ?? 0,
+      job: s.job === 'repair' || s.job === 'inspect' ? s.job : undefined,
     } satisfies Staff;
   });
   w.nextStaffId = isNum(data.nextStaffId) ? data.nextStaffId : w.staff.reduce((a, s) => Math.max(a, s.id + 1), 1);
