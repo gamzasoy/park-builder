@@ -15,6 +15,16 @@ export interface Building {
   h: number;
   rot: number;
   entrance: Tile;
+  /** 입구 앞 대기열(손님 id, 앞이 먼저) */
+  queue: number[];
+  /** 이용 중인 손님 id */
+  inside: number[];
+  /** 놀이기구 사이클 단계 (매점은 항상 'idle') */
+  phase: 'idle' | 'loading' | 'running';
+  timer: number;
+  /** 누적 이용 손님 수 / 누적 수익 */
+  served: number;
+  income: number;
 }
 
 export class World {
@@ -25,6 +35,8 @@ export class World {
   nextBuildingId = 1;
 
   guests: Guest[] = [];
+  /** 틱마다 재구성되는 id 조회용(저장 대상 아님) */
+  guestById = new Map<number, Guest>();
   nextGuestId = 1;
   /** 시뮬레이션 틱 카운터 */
   tick = 0;

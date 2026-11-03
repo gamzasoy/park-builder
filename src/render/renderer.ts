@@ -1,7 +1,7 @@
 import { getDef } from '../data';
 import type { Preview } from '../input/tools';
 import type { Tile } from '../sim/map';
-import type { Guest } from '../sim/guest';
+import { MAX_QUEUE, type Guest } from '../sim/guest';
 import type { Building, World } from '../sim/world';
 import type { Camera } from './camera';
 import { shade } from './color';
@@ -57,8 +57,16 @@ export function drawFrame(
   const walkers: { g: Guest; x: number; y: number }[] = [];
   for (const g of world.guests) {
     if (g.state === 'visiting' || g.state === 'gone') continue; // 시설 안에 있는 손님은 그리지 않음
-    const x = g.px + (g.x - g.px) * alpha + laneOffset(g.id, 7919);
-    const y = g.py + (g.y - g.py) * alpha + laneOffset(g.id, 104729);
+    let x: number;
+    let y: number;
+    if (g.state === 'queueing') {
+      // 입구 타일 안에서 순번별로 3x3 격자로 흩어 줄 선 모습을 표현
+      x = g.x + ((g.slot % 3) - 1) * 0.22;
+      y = g.y + ((((g.slot / 3) | 0) % 3) - 1) * 0.22;
+    } else {
+      x = g.px + (g.x - g.px) * alpha + laneOffset(g.id, 7919);
+      y = g.py + (g.y - g.py) * alpha + laneOffset(g.id, 104729);
+    }
     walkers.push({ g, x, y });
   }
   walkers.sort((a, b) => a.x + a.y - (b.x + b.y));
@@ -69,6 +77,26 @@ export function drawFrame(
     drawGuest(ctx, cam, w.g, w.x, w.y);
   }
   while (bi < buildings.length) drawBuilding(ctx, cam, buildings[bi++]);
+
+  // 대기 인원 표시
+  ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  for (const b of buildings) {
+    if (b.queue.length === 0) continue;
+    const s = tileScreen(b.entrance.x, b.entrance.y);
+    if (!visible(s)) continue;
+    const label = String(b.queue.length);
+    const bx = s.x;
+    const by = s.y - 22 * cam.zoom;
+    const r = 9 * cam.zoom;
+    ctx.fillStyle = b.queue.length >= MAX_QUEUE ? 'rgba(220,60,60,0.95)' : 'rgba(20,30,25,0.85)';
+    ctx.beginPath();
+    ctx.arc(bx, by, Math.max(r, 8), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, bx, by + 4 * cam.zoom);
+  }
+  ctx.textAlign = 'start';
 
   // 4) 미리보기 / 호버
   if (preview) {
@@ -103,7 +131,8 @@ function drawBuilding(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): 
   const up = (p: Vec2): Vec2 => ({ x: p.x, y: p.y - h });
   poly(ctx, [left, bottom, up(bottom), up(left)], shade(def.color, 0.78));
   poly(ctx, [bottom, right, up(right), up(bottom)], shade(def.color, 0.55));
-  poly(ctx, [up(top), up(right), up(bottom), up(left)], def.color);
+  // 운행 중인 놀이기구는 윗면을 밝게
+  poly(ctx, [up(top), up(right), up(bottom), up(left)], b.phase === 'running' ? shade(def.color, 1.25) : def.color);
 }
 
 const LOOKS = ['#e8564a', '#4a8fe8', '#e8c24a', '#7bc86c', '#b06ce0', '#ef8fb4', '#4ac9c0', '#f08a3c'];

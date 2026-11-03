@@ -1,4 +1,5 @@
 import { getDef } from '../data';
+import type { BuildingDef } from '../data/types';
 import type { Tile } from './map';
 import type { Building, World } from './world';
 
@@ -9,7 +10,13 @@ const IDLE_GIVE_UP = 150; // 갈 곳이 없을 때 퇴장까지 대기 틱
 const MAX_AGE = 9000; // 최대 체류 틱
 const MIN_SCORE = 20;
 
-export type GuestState = 'idle' | 'walking' | 'visiting' | 'leaving' | 'gone';
+/** 대기열 최대 길이: 이보다 길면 손님이 포기 */
+export const MAX_QUEUE = 15;
+/** 대기열에서 참는 최대 틱 */
+export const PATIENCE = 400;
+
+/** idle 대기 / walking·leaving 이동 / queueing 입구 앞 줄서기 / visiting 시설 안(숨김) */
+export type GuestState = 'idle' | 'walking' | 'queueing' | 'visiting' | 'leaving' | 'gone';
 
 /** hunger/thirst/toilet: 0(괜찮음)~100(한계), energy: 100(충분)~0, happiness: 0~100 */
 export interface Needs {
@@ -39,8 +46,10 @@ export interface Guest {
   pathVersion: number;
   /** 목표 건물 id */
   target: number | null;
-  /** idle 대기 / visiting 남은 틱 */
+  /** idle·queueing 대기 틱 / visiting 남은 틱 */
   timer: number;
+  /** 대기열 내 순번(렌더 위치용) */
+  slot: number;
   age: number;
   /** 최근 방문한 건물 id (같은 시설 반복 방지) */
   visited: number[];
@@ -72,6 +81,7 @@ export function createGuest(world: World): Guest {
     pathVersion: -1,
     target: null,
     timer: 0,
+    slot: 0,
     age: 0,
     visited: [],
     look: r.int(0, 7),
@@ -88,8 +98,10 @@ export function updateGuest(world: World, g: Guest): void {
     case 'idle': return idle(world, g);
     case 'walking':
     case 'leaving': return walk(world, g);
+    case 'queueing': return queueing(world, g);
     case 'visiting':
-      if (--g.timer <= 0) finishVisit(world, g);
+      // 시설 쪽(venue)이 타이머와 해제를 관리. 시설이 사라졌다면 풀어 준다.
+      if (g.target === null || !world.buildings.has(g.target)) goIdle(g);
       return;
     case 'gone': return;
   }
@@ -140,7 +152,7 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
   for (const b of world.buildings.values()) {
     if (!world.network.isOperational(b)) continue;
     const def = getDef(b.defId);
-    if (def.price > g.money) continue;
+    if (def.price > g.money || b.queue.length >= MAX_QUEUE) continue;
     const path = world.network.findPath(g.tile, b.entrance);
     if (!path) continue;
 
@@ -154,7 +166,7 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
       if (g.needs.energy < 20) continue;
       score = (def.fun ?? 0) + world.rng.next() * 20 - (g.visited.includes(b.id) ? 35 : 0);
     }
-    score -= path.length * 0.4;
+    score -= path.length * 0.4 + b.queue.length * 3 + def.price * 0.3;
 
     if (score > bestScore) {
       bestScore = score;
@@ -179,11 +191,12 @@ function startLeaving(world: World, g: Guest): void {
 }
 
 function despawn(world: World, g: Guest): void {
+  leaveQueue(world, g);
   g.state = 'gone';
   world.stats.left++;
 }
 
-function goIdle(g: Guest): void {
+export function goIdle(g: Guest): void {
   g.state = 'idle';
   g.target = null;
   g.timer = 0;
@@ -243,35 +256,61 @@ function advance(g: Guest, dist: number): boolean {
   return g.pathIdx >= g.path.length;
 }
 
-/** 입구에 도착: 요금을 내고 이용 시작. (6단계에서 대기열/탑승 사이클로 확장) */
+/** 입구에 도착: 줄을 선다. 요금은 탑승/구매 시점에 시설(venue)이 받는다. */
 function arrive(world: World, g: Guest): void {
   const b = g.target !== null ? world.buildings.get(g.target) : undefined;
   if (!b || !world.network.isOperational(b)) return goIdle(g);
   const def = getDef(b.defId);
   if (def.price > g.money) return goIdle(g);
+  if (b.queue.length >= MAX_QUEUE) {
+    // 줄이 너무 길어 포기
+    g.needs.happiness = clamp(g.needs.happiness - 3);
+    remember(g, b.id);
+    return goIdle(g);
+  }
+  b.queue.push(g.id);
+  g.slot = b.queue.length - 1;
+  g.state = 'queueing';
+  g.timer = 0;
+}
 
-  g.money -= def.price;
-  world.money += def.price;
-  g.state = 'visiting';
-  g.timer = def.duration;
-  g.visited.push(b.id);
+function queueing(world: World, g: Guest): void {
+  // 서 있는 길이 철거되면 사라짐
+  if (g.pathVersion !== world.map.version) {
+    g.pathVersion = world.map.version;
+    if (!world.map.isPath(g.tile.x, g.tile.y)) return despawn(world, g);
+  }
+  if (++g.timer > PATIENCE) {
+    leaveQueue(world, g);
+    g.needs.happiness = clamp(g.needs.happiness - 8);
+    if (g.target !== null) remember(g, g.target);
+    goIdle(g);
+  }
+}
+
+function leaveQueue(world: World, g: Guest): void {
+  if (g.state !== 'queueing' || g.target === null) return;
+  const b = world.buildings.get(g.target);
+  const i = b ? b.queue.indexOf(g.id) : -1;
+  if (b && i >= 0) b.queue.splice(i, 1);
+}
+
+/** 최근 방문 목록에 기록(최대 5개) */
+export function remember(g: Guest, buildingId: number): void {
+  g.visited.push(buildingId);
   if (g.visited.length > 5) g.visited.shift();
 }
 
-function finishVisit(world: World, g: Guest): void {
-  const b = g.target !== null ? world.buildings.get(g.target) : undefined;
-  if (b) {
-    const def = getDef(b.defId);
-    const n = g.needs;
-    if (def.kind === 'ride') {
-      n.happiness = clamp(n.happiness + (def.fun ?? 0) * 0.25);
-      n.energy = clamp(n.energy - 6);
-      n.hunger = clamp(n.hunger + 4);
-      n.thirst = clamp(n.thirst + 4);
-    } else if (def.serves) {
-      n[def.serves] = clamp(n[def.serves] - 70);
-      n.happiness = clamp(n.happiness + 6);
-    }
+/** 이용을 마친 손님에게 시설 효과를 적용 */
+export function applyEffects(g: Guest, def: BuildingDef): void {
+  const n = g.needs;
+  if (def.kind === 'ride') {
+    n.happiness = clamp(n.happiness + (def.fun ?? 0) * 0.25);
+    n.energy = clamp(n.energy - 6);
+    n.hunger = clamp(n.hunger + 4);
+    n.thirst = clamp(n.thirst + 4);
+  } else if (def.serves) {
+    n[def.serves] = clamp(n[def.serves] - 70);
+    n.happiness = clamp(n.happiness + 6);
   }
-  goIdle(g);
 }

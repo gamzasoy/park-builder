@@ -1,6 +1,7 @@
 import { getDef } from '../data';
 import type { BuildingDef } from '../data/types';
 import type { Tile } from './map';
+import { evictAll } from './venue';
 import { type Building, World } from './world';
 
 export const PATH_COST = 10;
@@ -60,6 +61,12 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
     ...f,
     rot,
     entrance: entranceOf(f, rot),
+    queue: [],
+    inside: [],
+    phase: 'idle',
+    timer: 0,
+    served: 0,
+    income: 0,
   };
   const map = world.map;
   for (let ty = f.y; ty < f.y + f.h; ty++) {
@@ -81,6 +88,7 @@ export function demolishAt(world: World, x: number, y: number): number | null {
   const map = world.map;
   const b = buildingAt(world, x, y);
   if (b) {
+    evictAll(world, b);
     for (let ty = b.y; ty < b.y + b.h; ty++) {
       for (let tx = b.x; tx < b.x + b.w; tx++) map.occupant[map.index(tx, ty)] = 0;
     }
