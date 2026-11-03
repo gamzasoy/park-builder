@@ -60,6 +60,7 @@ if (loaded.ok) {
 function newGame(): void {
   const fresh = new World();
   fresh.rng = new Rng((Math.random() * 2 ** 32) >>> 0);
+  fresh.weatherSeed = fresh.rng.state; // rng를 소비하지 않고 시드만 따온다
   world.adopt(fresh);
   tools.reset();
   financePanel.sync();

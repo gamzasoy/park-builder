@@ -452,6 +452,28 @@ function kiosk(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, roof: stri
   ctx.stroke();
 }
 
+/** 우산 가게: 키오스크 위에 파란 우산을 펼쳐 둔다 */
+function umbrellaShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  kiosk(ctx, q, o, '#2f5fb8');
+  const z = o.z;
+  const c = up(center(q), 31 * z);
+  const r = 10 * z;
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, z);
+  const cols = ['#e8453c', '#fff', '#e8453c', '#fff'];
+  for (let i = 0; i < 4; i++) {
+    const a0 = Math.PI + (i * Math.PI) / 4;
+    const a1 = a0 + Math.PI / 4;
+    ctx.fillStyle = cols[i];
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.arc(c.x, c.y, r, a0, a1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
 function toilet(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, alongX: boolean): void {
   const z = o.z;
   shadow(ctx, q, z);
@@ -477,6 +499,7 @@ export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Qua
     case 'coaster': stationRoof(ctx, q, o, w >= h); return true;
     case 'burger': kiosk(ctx, q, o, '#c0392b'); return true;
     case 'drinks': kiosk(ctx, q, o, '#2a8f86'); return true;
+    case 'umbrella': umbrellaShop(ctx, q, o); return true;
     case 'toilet': toilet(ctx, q, o, w >= h); return true;
     default: return false;
   }

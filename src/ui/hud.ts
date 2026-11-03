@@ -23,6 +23,12 @@ const HINTS: Record<string, string> = {
   scenery: '나무·꽃·쓰레기통: 빈 잔디를 클릭하거나 드래그해 놓기 · 길가의 나무는 손님 기분을 좋게 하고, 쓰레기통은 근처 3칸의 쓰레기를 받아 줍니다 (Esc 취소)',
 };
 
+const WEATHER_VIEW = {
+  sunny: { icon: '☀️', label: '맑음', tip: '맑음: 손님이 평소처럼 찾아옵니다' },
+  cloudy: { icon: '☁️', label: '흐림', tip: '흐림: 영향 없음' },
+  rain: { icon: '🌧', label: '비', tip: '비: 손님 입장 −30% · 우산 없는 손님은 실외 놀이기구를 꺼리고 기분이 나빠집니다 · 우산 가게가 도움이 됩니다' },
+} as const;
+
 const SPEEDS: Speed[] = [0, 1, 2, 4];
 
 function setText(el: HTMLElement, text: string): void {
@@ -34,6 +40,7 @@ export class Hud {
   private date = document.getElementById('date')!;
   private guests = document.getElementById('guests')!;
   private rating = document.getElementById('rating')!;
+  private weather = document.getElementById('weather')!;
   private hint = document.getElementById('hint')!;
   private goal = document.getElementById('goal')!;
   private speedButtons = new Map<Speed, HTMLButtonElement>();
@@ -81,6 +88,10 @@ export class Hud {
       `기본 ${Math.round(p.base)} · 만족도 ${Math.round(p.satisfaction)} · 다양성 ${Math.round(p.variety)}` +
       ` · 흐름 ${Math.round(p.flow)} · 불만 −${Math.round(p.complaints)}` +
       ` · 청결 ${Math.round(p.cleanliness)}`;
+
+    const wv = WEATHER_VIEW[w.weather.kind];
+    setText(this.weather, `${wv.icon} ${wv.label}`);
+    if (this.weather.title !== wv.tip) this.weather.title = wv.tip;
 
     if (this.clock.speed !== this.shownSpeed) {
       this.shownSpeed = this.clock.speed;

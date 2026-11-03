@@ -5,6 +5,7 @@ import type { Guest } from '../sim/guest';
 import type { Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import type { Tile } from '../sim/map';
+import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
 import {
   emptyLedger, type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
 } from '../sim/world';
@@ -15,10 +16,12 @@ export const SAVE_KEY = 'park-builder-save';
 export const BACKUP_KEY = 'park-builder-save.bak';
 
 /** 걷는 손님의 경로는 [x0, y0, x1, y1, ...]로 납작하게 저장 */
-interface GuestSave extends Omit<Guest, 'path' | 'trash'> {
+interface GuestSave extends Omit<Guest, 'path' | 'trash' | 'umbrella'> {
   path: number[];
   /** v4에서 추가. 없으면 0 */
   trash?: number;
+  /** v4에서 추가. 없으면 false */
+  umbrella?: boolean;
 }
 
 /** 직원도 걷는 중일 때만 경로를 저장한다 */
@@ -70,6 +73,9 @@ export interface SaveData {
   /** v4에서 추가. 없으면 직원 없음 */
   staff?: StaffSave[];
   nextStaffId?: number;
+  /** v4에서 추가. 없으면 기본 시드, 날씨는 틱에서 다시 계산 */
+  weatherSeed?: number;
+  weather?: Weather;
 }
 
 const flatten = (path: readonly Tile[]): number[] => path.flatMap((t) => [t.x, t.y]);
@@ -92,6 +98,8 @@ export function serializeWorld(world: World): SaveData {
     tick: world.tick,
     money: world.money,
     rngState: world.rng.state,
+    weatherSeed: world.weatherSeed,
+    weather: { ...world.weather },
     nextBuildingId: world.nextBuildingId,
     nextGuestId: world.nextGuestId,
     nextStaffId: world.nextStaffId,
@@ -202,6 +210,7 @@ export function deserializeWorld(data: SaveData): World {
     thought: g.thought ?? null,
     thoughtTimer: g.thoughtTimer ?? 0,
     trash: g.trash ?? 0,
+    umbrella: g.umbrella === true,
   }));
 
   w.staff = (data.staff ?? []).map((s) => {
@@ -229,6 +238,12 @@ export function deserializeWorld(data: SaveData): World {
   w.nextStaffId = isNum(data.nextStaffId) ? data.nextStaffId : w.staff.reduce((a, s) => Math.max(a, s.id + 1), 1);
 
   w.tick = data.tick;
+  w.weatherSeed = isNum(data.weatherSeed) ? data.weatherSeed >>> 0 : DEFAULT_WEATHER_SEED;
+  const wk = data.weather;
+  w.weather =
+    wk && (wk.kind === 'sunny' || wk.kind === 'cloudy' || wk.kind === 'rain') && isNum(wk.untilTick)
+      ? { kind: wk.kind, untilTick: wk.untilTick }
+      : weatherAtTick(w.weatherSeed, w.tick);
   w.money = data.money;
   w.rng.state = data.rngState >>> 0;
   w.nextBuildingId = data.nextBuildingId;

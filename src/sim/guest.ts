@@ -3,6 +3,7 @@ import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
 import { fairPrice } from './economy';
 import type { Tile } from './map';
+import { isRaining, RAIN_DRAIN, RAIN_DRAIN_EVERY, RAIN_RIDE_PENALTY } from './weather';
 import type { Building, World } from './world';
 
 /** 틱당 이동 거리(타일). 10틱/초 → 초당 2타일 */
@@ -11,6 +12,8 @@ const DECIDE_EVERY = 5; // 목표 재선택 주기(틱)
 const IDLE_GIVE_UP = 150; // 갈 곳이 없을 때 퇴장까지 대기 틱
 const MAX_AGE = 9000; // 최대 체류 틱
 const MIN_SCORE = 20;
+/** 비 오는 날 우산이 없는 손님이 우산 가게에 매기는 점수 */
+export const UMBRELLA_SCORE = 70;
 
 /** 대기열 최대 길이: 이보다 길면 손님이 포기 */
 export const MAX_QUEUE = 15;
@@ -20,7 +23,7 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
@@ -84,6 +87,8 @@ export interface Guest {
   thoughtTimer: number;
   /** 쓰레기를 버리기까지 남은 틱(0 = 들고 있지 않음) */
   trash: number;
+  /** 우산을 샀는가 */
+  umbrella: boolean;
 }
 
 export function createGuest(world: World): Guest {
@@ -117,6 +122,7 @@ export function createGuest(world: World): Guest {
     thought: null,
     thoughtTimer: 0,
     trash: 0,
+    umbrella: false,
   };
 }
 
@@ -184,6 +190,14 @@ function tickLitter(world: World, g: Guest): void {
   if (g.thought === null) think(g, 'litter');
 }
 
+/** 비를 맞으면(우산 없이 시설 밖) 기분이 조금씩 나빠진다(RNG를 쓰지 않는다) */
+function tickRain(world: World, g: Guest): void {
+  if (g.umbrella || g.state === 'visiting' || g.state === 'gone' || !isRaining(world)) return;
+  if ((world.tick + g.id) % RAIN_DRAIN_EVERY !== 13) return;
+  g.needs.happiness = clamp(g.needs.happiness - RAIN_DRAIN);
+  if (g.thought === null) think(g, 'rain');
+}
+
 function tickThought(world: World, g: Guest): void {
   if (g.thoughtTimer > 0 && --g.thoughtTimer === 0) g.thought = null;
   if (g.thought === null && (world.tick + g.id) % NEED_CHECK_EVERY === 0) {
@@ -201,6 +215,7 @@ export function updateGuest(world: World, g: Guest): void {
   tickScenery(world, g);
   tickTrash(world, g);
   tickLitter(world, g);
+  tickRain(world, g);
 
   switch (g.state) {
     case 'idle': return idle(world, g);
@@ -271,7 +286,7 @@ function idle(world: World, g: Guest): void {
 }
 
 /** 욕구·재미·거리·요금을 점수화해 가장 좋은 운영 중인 시설을 고른다. */
-function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[] } | null {
+export function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[] } | null {
   let best: { b: Building; path: readonly Tile[] } | null = null;
   let bestScore = MIN_SCORE;
 
@@ -284,13 +299,20 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
 
     let score: number;
     if (def.kind === 'shop') {
-      if (!def.serves) continue;
-      const need = g.needs[def.serves];
-      if (need < 40) continue;
-      score = need * (def.serves === 'toilet' ? 1.4 : 1.1);
+      if (def.umbrella) {
+        // 비 올 때 우산이 없는 손님만 원한다
+        if (!isRaining(world) || g.umbrella) continue;
+        score = UMBRELLA_SCORE;
+      } else {
+        if (!def.serves) continue;
+        const need = g.needs[def.serves];
+        if (need < 40) continue;
+        score = need * (def.serves === 'toilet' ? 1.4 : 1.1);
+      }
     } else {
       if (g.needs.energy < 20) continue;
       score = (def.fun ?? 0) + world.rng.next() * 20 - (g.visited.includes(b.id) ? 35 : 0);
+      if (def.outdoor && isRaining(world) && !g.umbrella) score -= RAIN_RIDE_PENALTY;
     }
     // 거리·줄·요금 부담, 그리고 적정가를 넘는 만큼 추가 감점
     score -= path.length * 0.4 + b.queue.length * 3 + b.price * 0.3 + Math.max(0, b.price - fairPrice(def));
@@ -451,6 +473,9 @@ export function applyEffects(g: Guest, def: BuildingDef): void {
     n.hunger = clamp(n.hunger + 4);
     n.thirst = clamp(n.thirst + 4);
     think(g, intensity > 85 ? 'tooIntense' : 'fun');
+  } else if (def.umbrella) {
+    g.umbrella = true;
+    n.happiness = clamp(n.happiness + 4);
   } else if (def.serves) {
     n[def.serves] = clamp(n[def.serves] - 70);
     n.happiness = clamp(n.happiness + 6);

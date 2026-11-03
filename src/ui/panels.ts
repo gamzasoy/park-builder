@@ -94,6 +94,8 @@ export class BuildingPanel {
         ? `조각 ${b.track.pieces.length}개 · 미완성`
         : def.kind === 'ride'
         ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초`
+        : def.umbrella
+        ? `우산 판매(비 올 때) · 동시 ${def.capacity}명`
         : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소 · 동시 ${def.capacity}명`,
     );
     // 대기 시간 추정: 놀이기구는 한 사이클에 정원만큼, 매점은 정원만큼 동시에 처리

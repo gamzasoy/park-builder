@@ -3,6 +3,7 @@ import type { Preview } from '../input/tools';
 import { buildingDef, DIRS, LEVEL_PX, routeAt, type PlacedPiece } from '../sim/coaster';
 import { tileHash, type Tile, type TileMap } from '../sim/map';
 import { MAX_QUEUE, type Guest } from '../sim/guest';
+import type { WeatherKind } from '../sim/weather';
 import type { Staff } from '../sim/staff';
 import type { Building, World } from '../sim/world';
 import type { Camera } from './camera';
@@ -41,6 +42,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   const visible = (s: Vec2): boolean =>
     !(s.x < -hw || s.x > cam.viewW + hw || s.y < -2 * hh || s.y > cam.viewH + hh);
   const time = world.tick + alpha;
+  const raining = world.weather.kind === 'rain';
 
   // 1) 지면: 공원 밖 숲 바닥 → 잔디(질감) → 돌길(연석). 정적이라 조각별로 캐시해 둔다
   groundCache.draw(ctx, cam, map);
@@ -103,7 +105,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     }
     const g = w.g!;
     if (g.id === selectedGuestId) drawGuestRing(ctx, cam, w.x, w.y);
-    drawGuest(ctx, cam, g, w.x, w.y);
+    drawGuest(ctx, cam, g, w.x, w.y, raining);
   }
   while (si < scenery.length) scenery[si++].draw();
 
@@ -154,6 +156,9 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     drawWrench(ctx, s.x, s.y - 22 * cam.zoom, cam.zoom, time);
   }
 
+  // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
+  drawWeather(ctx, cam, world.weather.kind, time);
+
   // 4) 미리보기 / 호버
   if (preview) {
     for (const t of preview.tiles) {
@@ -169,6 +174,32 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     const s = tileScreen(hover.x, hover.y);
     diamond(ctx, s.x, s.y, hw, hh, 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.9)');
   }
+}
+
+const RAIN_STREAKS = 110;
+const RAIN_SLOPE = 0.25; // 빗줄기 기울기(x/y)
+
+/** 흐림 = 약한 틴트, 비 = 어두운 틴트 + 고정 개수의 빗줄기(시간으로만 움직인다) */
+function drawWeather(ctx: CanvasRenderingContext2D, cam: Camera, kind: WeatherKind, time: number): void {
+  if (kind === 'sunny') return;
+  const W = cam.viewW;
+  const H = cam.viewH;
+  ctx.fillStyle = kind === 'rain' ? 'rgba(20,32,56,0.22)' : 'rgba(40,50,70,0.08)';
+  ctx.fillRect(0, 0, W, H);
+  if (kind !== 'rain') return;
+
+  const len = 16;
+  ctx.strokeStyle = 'rgba(200,220,255,0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < RAIN_STREAKS; i++) {
+    const speed = 11 + (i % 5) * 2; // 틱당 낙하 px
+    const y = (tileHash(i, 1, 3) * (H + len) + time * speed) % (H + len) - len;
+    const x = (((tileHash(i, 2, 5) * (W + 60) - y * RAIN_SLOPE) % (W + 60)) + W + 60) % (W + 60) - 30;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - len * RAIN_SLOPE, y + len);
+  }
+  ctx.stroke();
 }
 
 function footprintQuad(cam: Camera, b: Building): Quad {
@@ -438,7 +469,7 @@ function drawCursorArrow(ctx: CanvasRenderingContext2D, cam: Camera, c: { x: num
 const LOOKS = PALETTE;
 const PANTS = ['#3a4a6b', '#4a3a2e', '#2e2e34', '#5a6e8a'];
 
-function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number): void {
+function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number, raining: boolean): void {
   const w = tileToWorld(tx, ty);
   const s = cam.worldToScreen(w.x, w.y);
   const z = cam.zoom;
@@ -472,8 +503,21 @@ function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: num
   ctx.arc(s.x, s.y - 14.3 * z, 2.6 * z, Math.PI, 0);
   ctx.fill();
 
-  // 풍선을 든 손님
-  if (g.look % 5 === 2) {
+  // 비 오는 날 우산을 쓴 손님(풍선 대신)
+  if (g.umbrella && raining) {
+    const ux = s.x + 1 * z;
+    const uy = s.y - 20 * z;
+    ctx.strokeStyle = 'rgba(40,40,40,0.7)';
+    ctx.lineWidth = Math.max(1, z);
+    ctx.beginPath();
+    ctx.moveTo(ux, uy);
+    ctx.lineTo(ux, s.y - 9 * z);
+    ctx.stroke();
+    ctx.fillStyle = LOOKS[(g.look + 5) % LOOKS.length];
+    ctx.beginPath();
+    ctx.arc(ux, uy, 6 * z, Math.PI, 0);
+    ctx.fill();
+  } else if (g.look % 5 === 2) { // 풍선을 든 손님
     const bx = s.x + 5 * z;
     const by = s.y - 26 * z;
     ctx.strokeStyle = 'rgba(40,40,40,0.6)';

@@ -9,6 +9,7 @@ import { updateStaff } from './staff';
 import { TUTORIAL_EVERY, updateTutorial } from './tutorial';
 import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
+import { updateWeather } from './weather';
 import type { World } from './world';
 
 /** 손님만 한 틱 진행(스포너 제외). 테스트에서 시나리오를 통제할 때 사용. */
@@ -33,6 +34,7 @@ export function stepWorld(world: World): void {
   // 목표 달성/실패로 끝난 게임은 정지(결과 화면). 'sandbox'는 목표 없이 계속 진행.
   if (world.status === 'won' || world.status === 'lost') return;
 
+  updateWeather(world);
   updateSpawner(world);
   stepGuests(world);
   if (world.guests.length > world.stats.peakGuests) world.stats.peakGuests = world.guests.length;

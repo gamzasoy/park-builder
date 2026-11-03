@@ -3,8 +3,9 @@ import type { Guest } from './guest';
 import type { Staff } from './staff';
 import { TileMap, type Tile } from './map';
 import type { Track } from './coaster';
-import { START_FEE } from './economy';
+import { DAY_TICKS, START_FEE } from './economy';
 import { PathNetwork } from './pathfinding';
+import { DEFAULT_WEATHER_SEED, type Weather } from './weather';
 import { newTutorial, type TutorialState } from './tutorial';
 
 export const START_MONEY = 10000;
@@ -91,6 +92,9 @@ export class World {
   /** 시뮬레이션 틱 카운터 */
   tick = 0;
   rng = new Rng(12345);
+  /** 날씨 시드(새 게임 시 정해지며 world.rng와 무관) / 오늘의 날씨 */
+  weatherSeed = DEFAULT_WEATHER_SEED;
+  weather: Weather = { kind: 'sunny', untilTick: DAY_TICKS };
   stats = { entered: 0, left: 0, peakGuests: 0 };
 
   status: GameStatus = 'playing';
@@ -145,6 +149,8 @@ export class World {
     this.nextStaffId = src.nextStaffId;
     this.tick = src.tick;
     this.rng.state = src.rng.state;
+    this.weatherSeed = src.weatherSeed ?? DEFAULT_WEATHER_SEED;
+    this.weather = src.weather ?? { kind: 'sunny', untilTick: DAY_TICKS };
     this.stats = src.stats;
     this.entranceFee = src.entranceFee;
     this.ledger = src.ledger;

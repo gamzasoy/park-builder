@@ -20,6 +20,7 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   scenery: '경치가 좋네',
   litter: '너무 더러워!',
   broken: '고장났네…',
+  rain: '비가 와…',
 };
 
 /** 긍정적인 생각은 초록 말풍선 */
