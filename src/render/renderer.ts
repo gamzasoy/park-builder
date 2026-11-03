@@ -1,13 +1,15 @@
 import { getDef } from '../data';
 import type { Preview } from '../input/tools';
 import { buildingDef, DIRS, LEVEL_PX, routeAt, type PlacedPiece } from '../sim/coaster';
-import type { Tile } from '../sim/map';
+import { tileHash, type Tile, type TileMap } from '../sim/map';
 import { MAX_QUEUE, type Guest } from '../sim/guest';
 import type { Building, World } from '../sim/world';
 import type { Camera } from './camera';
 import { shade } from './color';
 import { guestDisplayPos } from './guestpos';
 import { POSITIVE, THOUGHT_TEXT } from './thoughts';
+import { GroundCache } from './ground';
+import { drawRideSprite, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, tileToWorld, type Vec2 } from './iso';
 
 export interface View {
@@ -19,10 +21,12 @@ export interface View {
   selectedGuestId: number | null;
 }
 
+const groundCache = new GroundCache();
+
 export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: World, view: View): void {
   const { hover, preview, alpha, selectedId, selectedGuestId } = view;
   const map = world.map;
-  ctx.fillStyle = '#1b2a1f';
+  ctx.fillStyle = '#1f3a1c';
   ctx.fillRect(0, 0, cam.viewW, cam.viewH);
 
   const hw = (TILE_W / 2) * cam.zoom;
@@ -33,19 +37,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   };
   const visible = (s: Vec2): boolean =>
     !(s.x < -hw || s.x > cam.viewW + hw || s.y < -2 * hh || s.y > cam.viewH + hh);
+  const time = world.tick + alpha;
 
-  // 1) 지면: 잔디 / 길 / 입구
-  for (let ty = 0; ty < map.height; ty++) {
-    for (let tx = 0; tx < map.width; tx++) {
-      const s = tileScreen(tx, ty);
-      if (!visible(s)) continue;
-      let fill: string;
-      if (map.isGate(tx, ty)) fill = '#e0b84a';
-      else if (map.isPath(tx, ty)) fill = '#cdb98e';
-      else fill = (tx + ty) % 2 === 0 ? '#3a7a48' : '#357043';
-      diamond(ctx, s.x, s.y, hw, hh, fill);
-    }
-  }
+  // 1) 지면: 공원 밖 숲 바닥 → 잔디(질감) → 돌길(연석). 정적이라 조각별로 캐시해 둔다
+  groundCache.draw(ctx, cam, map);
 
   // 2) 건물 입구 표시
   for (const b of world.buildings.values()) {
@@ -76,8 +71,16 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   walkers.sort((a, b) => a.x + a.y - (b.x + b.y));
 
   // 건물, 롤러코스터 트랙 조각, 열차는 같은 깊이 키로 한꺼번에 정렬해 손님과 섞어 그린다
-  const scenery: Scenery[] = buildings.map((b) => ({ key: bKey(b), draw: () => drawBuilding(ctx, cam, b) }));
-  for (const b of buildings) if (b.track) addTrackScenery(scenery, ctx, cam, b, alpha);
+  const scenery: Scenery[] = buildings.map((b) => ({ key: bKey(b), draw: () => drawBuilding(ctx, cam, b, time) }));
+  for (const b of buildings) {
+    if (!b.track) continue;
+    // 역 바닥은 열차보다 먼저(뒤 모서리 기준), 지붕은 건물 키로 그린다
+    scenery.push({ key: b.x + b.y, draw: () => drawStationFloor(ctx, footprintQuad(cam, b), spriteOpts(cam, b, time), b.w >= b.h) });
+    addTrackScenery(scenery, ctx, cam, b, alpha);
+  }
+  addSceneryTiles(scenery, ctx, cam, map, tileScreen, visible, hh);
+  const gs = tileScreen(map.gate.x, map.gate.y);
+  if (visible(gs)) scenery.push({ key: map.gate.x + map.gate.y + 1.6, draw: () => drawGate(ctx, cam, map.gate) });
   scenery.sort((a, b) => a.key - b.key);
 
   let si = 0;
@@ -144,25 +147,89 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   }
 }
 
-function drawBuilding(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): void {
-  const def = getDef(b.defId);
+function footprintQuad(cam: Camera, b: Building): Quad {
   const P = (tx: number, ty: number): Vec2 => {
     const w = tileToWorld(tx, ty);
     return cam.worldToScreen(w.x, w.y);
   };
-  const top = P(b.x, b.y);
-  const right = P(b.x + b.w, b.y);
-  const bottom = P(b.x + b.w, b.y + b.h);
-  const left = P(b.x, b.y + b.h);
-  const h = def.height * cam.zoom;
+  return { top: P(b.x, b.y), right: P(b.x + b.w, b.y), bottom: P(b.x + b.w, b.y + b.h), left: P(b.x, b.y + b.h) };
+}
 
-  if (right.x < -50 || left.x > cam.viewW + 50 || bottom.y < -50 || top.y - h > cam.viewH + 50) return;
+function spriteOpts(cam: Camera, b: Building, time: number) {
+  const def = getDef(b.defId);
+  return { z: cam.zoom, time, running: b.phase === 'running', color: def.color, rot: b.rot };
+}
 
-  const up = (p: Vec2): Vec2 => ({ x: p.x, y: p.y - h });
-  poly(ctx, [left, bottom, up(bottom), up(left)], shade(def.color, 0.78));
-  poly(ctx, [bottom, right, up(right), up(bottom)], shade(def.color, 0.55));
-  // 운행 중인 놀이기구는 윗면을 밝게
-  poly(ctx, [up(top), up(right), up(bottom), up(left)], b.phase === 'running' ? shade(def.color, 1.25) : def.color);
+function drawBuilding(ctx: CanvasRenderingContext2D, cam: Camera, b: Building, time: number): void {
+  const def = getDef(b.defId);
+  const q = footprintQuad(cam, b);
+  // 관람차·드롭타워처럼 높은 기구도 잘리지 않게 여유를 넉넉히
+  const h = Math.max(def.height, 160) * cam.zoom;
+  if (q.right.x < -50 || q.left.x > cam.viewW + 50 || q.top.y - h > cam.viewH + 50 || q.bottom.y < -50) return;
+  if (drawRideSprite(ctx, def.id, q, spriteOpts(cam, b, time), b.w, b.h)) return;
+  // 전용 모양이 없는 건물: 색 상자(운행 중이면 윗면을 밝게)
+  tintBox(ctx, q, 0, def.height * cam.zoom, b.phase === 'running' ? shade(def.color, 1.25) : def.color);
+}
+
+/** 나무·꽃(공원 안 장식 레이어 + 공원 밖 뒤쪽 숲)을 깊이 정렬 대상으로 추가 */
+function addSceneryTiles(
+  list: Scenery[], ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap,
+  tileScreen: (x: number, y: number) => Vec2, visible: (s: Vec2) => boolean, hh: number,
+): void {
+  const z = cam.zoom;
+  const add = (tx: number, ty: number, kind: number): void => {
+    const s = tileScreen(tx, ty);
+    // 나무는 타일 위로 솟으므로 화면 아래쪽 여유를 더 둔다
+    if (!visible(s) && !visible({ x: s.x, y: s.y - 50 * z })) return;
+    const seed = tileHash(tx, ty, 7);
+    list.push({ key: tx + ty + 1.5, draw: () => drawScenery(ctx, kind, s.x, s.y + hh, z, seed) });
+  };
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = 0; tx < map.width; tx++) {
+      const k = map.scenery[map.index(tx, ty)];
+      if (k !== 0) add(tx, ty, k);
+    }
+  }
+}
+
+/** 공원 입구: 길 양옆 기둥 두 개와 아치 간판 */
+function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile): void {
+  const z = cam.zoom;
+  const P = (x: number, y: number): Vec2 => {
+    const w = tileToWorld(x, y);
+    return cam.worldToScreen(w.x, w.y);
+  };
+  const a = P(g.x - 0.15, g.y + 0.5);
+  const b = P(g.x + 1.15, g.y + 0.5);
+  const H = 38 * z;
+  for (const p of [a, b]) {
+    ctx.fillStyle = '#d9cdb0';
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1;
+    ctx.fillRect(p.x - 4 * z, p.y - H, 8 * z, H);
+    ctx.strokeRect(p.x - 4 * z, p.y - H, 8 * z, H);
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.moveTo(p.x - 6 * z, p.y - H);
+    ctx.lineTo(p.x, p.y - H - 9 * z);
+    ctx.lineTo(p.x + 6 * z, p.y - H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // 간판(두 기둥을 잇는 띠)
+  const sh = 11 * z;
+  const y0 = -H + 6 * z;
+  poly(ctx, [{ x: a.x, y: a.y + y0 }, { x: b.x, y: b.y + y0 }, { x: b.x, y: b.y + y0 + sh }, { x: a.x, y: a.y + y0 + sh }], '#f2c230', 'rgba(0,0,0,0.5)');
+  const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + y0 + sh * 0.78 };
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.transform(1, (b.y - a.y) / (b.x - a.x), 0, 1, 0, 0); // 간판 기울기에 맞춰 글자를 기울인다
+  ctx.fillStyle = '#a3241a';
+  ctx.font = `bold ${Math.max(6, 8 * z)}px "Trebuchet MS", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('PARK', 0, 0);
+  ctx.restore();
 }
 
 interface Scenery { key: number; draw: () => void }
@@ -189,13 +256,24 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
   const z = cam.zoom;
 
   if (hMid > 0.01) {
+    // 나무 격자 지지대: 기둥 두 개 + X자 가새
     const g = railPoint(cam, cx, cy, 0);
-    ctx.strokeStyle = '#59616b';
-    ctx.lineWidth = Math.max(1.5, 2.5 * z);
+    const w = 3.5 * z;
+    ctx.strokeStyle = '#7a5230';
+    ctx.lineWidth = Math.max(1, 1.6 * z);
     ctx.beginPath();
-    ctx.moveTo(m.x, m.y);
-    ctx.lineTo(g.x, g.y);
+    ctx.moveTo(m.x - w, m.y + 2 * z); ctx.lineTo(g.x - w, g.y);
+    ctx.moveTo(m.x + w, m.y + 2 * z); ctx.lineTo(g.x + w, g.y);
+    const step = 10 * z;
+    for (let y = g.y; y - step > m.y; y -= step) {
+      ctx.moveTo(g.x - w, y); ctx.lineTo(g.x + w, y - step);
+      ctx.moveTo(g.x + w, y); ctx.lineTo(g.x - w, y - step);
+    }
     ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(g.x, g.y, 5 * z, 2.5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   const turn = p.dirIn !== p.dirOut;
@@ -212,14 +290,22 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
   };
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  // 노란 강철 레일 두 줄: 짙은 테두리 → 노란 띠 → 가운데 틈
+  ctx.save();
+  if (!finished) ctx.globalAlpha = 0.75; // 미완성 트랙은 반투명 주황
   trace();
-  ctx.strokeStyle = '#6e4f3c'; // 침목
-  ctx.lineWidth = Math.max(3, 7 * z);
+  ctx.strokeStyle = finished ? '#6b4a12' : '#7a4a1a';
+  ctx.lineWidth = Math.max(3, 8 * z);
   ctx.stroke();
   trace();
-  ctx.strokeStyle = finished ? '#f1e8d6' : '#e8b45a'; // 레일: 미완성은 주황
-  ctx.lineWidth = Math.max(1.5, 3 * z);
+  ctx.strokeStyle = finished ? '#f2c230' : '#f0943a';
+  ctx.lineWidth = Math.max(2, 6 * z);
   ctx.stroke();
+  trace();
+  ctx.strokeStyle = finished ? '#8a6418' : '#9a5a20';
+  ctx.lineWidth = Math.max(0.8, 1.5 * z);
+  ctx.stroke();
+  ctx.restore();
   if (p.type === 'lift') {
     trace();
     ctx.setLineDash([2 * z, 5 * z]);
@@ -232,21 +318,26 @@ function drawTrackPiece(ctx: CanvasRenderingContext2D, cam: Camera, p: PlacedPie
   ctx.lineJoin = 'miter';
 }
 
-/** 열차 한 칸 */
+/** 열차 한 칸: 차체 + 앞쪽 덮개 + 탑승객 머리 둘 */
 function drawCar(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, h: number, color: string): void {
   const s = railPoint(cam, x, y, h);
   const z = cam.zoom;
-  ctx.fillStyle = color;
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
   ctx.lineWidth = 1;
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.roundRect(s.x - 7 * z, s.y - 11 * z, 14 * z, 10 * z, 2.5 * z);
+  ctx.roundRect(s.x - 8 * z, s.y - 10 * z, 16 * z, 8 * z, 3 * z);
   ctx.fill();
   ctx.stroke();
+  ctx.fillStyle = shade(color, 0.65);
+  ctx.fillRect(s.x - 8 * z, s.y - 4.5 * z, 16 * z, 2.5 * z);
   ctx.fillStyle = '#f1d3b0';
-  ctx.beginPath();
-  ctx.arc(s.x, s.y - 13 * z, 2.6 * z, 0, Math.PI * 2);
-  ctx.fill();
+  for (const dx of [-3.5, 3.5]) {
+    ctx.beginPath();
+    ctx.arc(s.x + dx * z, s.y - 12 * z, 2.4 * z, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 const CARS = 3;
@@ -269,7 +360,7 @@ function addTrackScenery(list: Scenery[], ctx: CanvasRenderingContext2D, cam: Ca
     const pos = routeAt(t.route, Math.max(0, head - i * gap));
     list.push({
       key: pos.x + pos.y + 0.6,
-      draw: () => drawCar(ctx, cam, pos.x, pos.y, pos.h, i === 0 ? '#ffd75a' : def.color),
+      draw: () => drawCar(ctx, cam, pos.x, pos.y, pos.h, i === 0 ? '#2f6fd0' : '#d9443a'),
     });
   }
 }
@@ -320,25 +411,62 @@ function drawCursorArrow(ctx: CanvasRenderingContext2D, cam: Camera, c: { x: num
   }
 }
 
-const LOOKS = ['#e8564a', '#4a8fe8', '#e8c24a', '#7bc86c', '#b06ce0', '#ef8fb4', '#4ac9c0', '#f08a3c'];
+const LOOKS = PALETTE;
+const PANTS = ['#3a4a6b', '#4a3a2e', '#2e2e34', '#5a6e8a'];
 
 function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number): void {
   const w = tileToWorld(tx, ty);
   const s = cam.worldToScreen(w.x, w.y);
   const z = cam.zoom;
-  if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -30 || s.y > cam.viewH + 30) return;
+  if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -40 || s.y > cam.viewH + 30) return;
 
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(s.x, s.y, 6 * z, 3 * z, 0, 0, Math.PI * 2);
+  ctx.ellipse(s.x, s.y, 5 * z, 2.5 * z, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // 다리: 걷는 중이면 이동 거리에 맞춰 엇갈린다
+  const moving = g.state === 'walking' || g.state === 'leaving';
+  const swing = moving ? Math.sin((tx + ty) * 14) * 1.6 * z : 0;
+  ctx.strokeStyle = PANTS[g.look % PANTS.length];
+  ctx.lineWidth = Math.max(1, 1.8 * z);
+  ctx.beginPath();
+  ctx.moveTo(s.x - 1.2 * z, s.y - 5 * z); ctx.lineTo(s.x - 1.2 * z + swing, s.y - 0.5 * z);
+  ctx.moveTo(s.x + 1.2 * z, s.y - 5 * z); ctx.lineTo(s.x + 1.2 * z - swing, s.y - 0.5 * z);
+  ctx.stroke();
+
   ctx.fillStyle = LOOKS[g.look % LOOKS.length];
-  ctx.fillRect(s.x - 3 * z, s.y - 11 * z, 6 * z, 9 * z);
+  ctx.beginPath();
+  ctx.roundRect(s.x - 3 * z, s.y - 11 * z, 6 * z, 6.5 * z, 1.5 * z);
+  ctx.fill();
   ctx.fillStyle = '#f1d3b0';
   ctx.beginPath();
-  ctx.arc(s.x, s.y - 14 * z, 3 * z, 0, Math.PI * 2);
+  ctx.arc(s.x, s.y - 13.5 * z, 2.6 * z, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = g.look % 3 === 0 ? '#5a3a22' : g.look % 3 === 1 ? '#2a2420' : '#c9a050';
+  ctx.beginPath();
+  ctx.arc(s.x, s.y - 14.3 * z, 2.6 * z, Math.PI, 0);
+  ctx.fill();
+
+  // 풍선을 든 손님
+  if (g.look % 5 === 2) {
+    const bx = s.x + 5 * z;
+    const by = s.y - 26 * z;
+    ctx.strokeStyle = 'rgba(40,40,40,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(s.x + 3 * z, s.y - 8 * z);
+    ctx.lineTo(bx, by + 4 * z);
+    ctx.stroke();
+    ctx.fillStyle = LOOKS[(g.look + 3) % LOOKS.length];
+    ctx.beginPath();
+    ctx.ellipse(bx, by, 3.5 * z, 4.3 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.arc(bx - 1.2 * z, by - 1.5 * z, 1 * z, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): void {
@@ -408,18 +536,6 @@ function drawBubble(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: nu
   ctx.textAlign = 'start';
   ctx.restore();
   return true;
-}
-
-function poly(ctx: CanvasRenderingContext2D, pts: Vec2[], fill: string): void {
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
 }
 
 /** (x, y)는 마름모의 위쪽 꼭짓점. */

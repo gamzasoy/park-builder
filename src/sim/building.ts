@@ -1,3 +1,4 @@
+import { sceneryDef, type SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef, buildingTiles, newTrack } from './coaster';
 import type { Tile } from './map';
@@ -71,7 +72,10 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
   };
   const map = world.map;
   for (let ty = f.y; ty < f.y + f.h; ty++) {
-    for (let tx = f.x; tx < f.x + f.w; tx++) map.occupant[map.index(tx, ty)] = b.id;
+    for (let tx = f.x; tx < f.x + f.w; tx++) {
+      map.occupant[map.index(tx, ty)] = b.id;
+      map.scenery[map.index(tx, ty)] = 0; // 건물 자리의 나무·꽃은 치운다
+    }
   }
   if (def.coaster) b.track = newTrack(b, def.cost);
   world.buildings.set(b.id, b);
@@ -85,7 +89,7 @@ export function buildingAt(world: World, x: number, y: number): Building | null 
   return id ? (world.buildings.get(id) ?? null) : null;
 }
 
-/** 해당 타일의 건물 또는 길을 철거하고 환급액을 반환. 철거할 것이 없으면 null. */
+/** 해당 타일의 건물, 길 또는 장식을 철거하고 환급액을 반환. 철거할 것이 없으면 null. 장식은 환급 없이 치운다. */
 export function demolishAt(world: World, x: number, y: number): number | null {
   const map = world.map;
   const b = buildingAt(world, x, y);
@@ -104,7 +108,32 @@ export function demolishAt(world: World, x: number, y: number): number | null {
     world.transact('construction', PATH_REFUND);
     return PATH_REFUND;
   }
+  if (map.sceneryAt(x, y) !== 0) {
+    map.scenery[map.index(x, y)] = 0;
+    return 0;
+  }
   return null;
+}
+
+/** 장식은 길·건물이 없는 빈 타일에만, 이미 있는 장식 위에는 놓지 않는다 */
+export function isSceneryPlaceable(world: World, x: number, y: number): boolean {
+  const map = world.map;
+  return isPathPlaceable(world, x, y) && map.scenery[map.index(x, y)] === 0;
+}
+
+/** 순서대로 장식을 놓되 돈이 허락하는 만큼만. placePaths와 같은 규칙. */
+export function placeScenery(world: World, tiles: Tile[], def: SceneryDef): { placed: number; short: boolean } {
+  if (!sceneryDef(def.kind)) return { placed: 0, short: false };
+  let placed = 0;
+  let short = false;
+  for (const t of tiles) {
+    if (!isSceneryPlaceable(world, t.x, t.y)) continue;
+    if (world.money < def.cost) { short = true; break; }
+    world.map.scenery[world.map.index(t.x, t.y)] = def.kind;
+    world.transact('construction', -def.cost);
+    placed++;
+  }
+  return { placed, short };
 }
 
 export function isPathPlaceable(world: World, x: number, y: number): boolean {

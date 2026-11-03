@@ -19,10 +19,13 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
+/** 걷는 길 옆(8칸)에 나무·꽃이 있으면 이 주기마다 행복도가 오른다 */
+export const SCENERY_EVERY = 30;
+export const SCENERY_GAIN = 1;
 
 /** idle 대기 / walking·leaving 이동 / queueing 입구 앞 줄서기 / visiting 시설 안(숨김) */
 export type GuestState = 'idle' | 'walking' | 'queueing' | 'visiting' | 'leaving' | 'gone';
@@ -118,6 +121,24 @@ function needThought(g: Guest): Thought | null {
   return null;
 }
 
+/** 현재 타일 주변 8칸에 장식이 있는지 */
+export function nearScenery(world: World, t: Tile): boolean {
+  const m = world.map;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && m.sceneryAt(t.x + dx, t.y + dy) !== 0) return true;
+  }
+  return false;
+}
+
+/** 경치 보너스: 걷는 동안 주기적으로 주변을 보고 기분이 조금 좋아진다(RNG를 쓰지 않는다) */
+function tickScenery(world: World, g: Guest): void {
+  if (g.state !== 'walking' && g.state !== 'leaving') return;
+  const phase = (world.tick + g.id) % SCENERY_EVERY;
+  if (phase !== SCENERY_EVERY >> 1 || !nearScenery(world, g.tile)) return;
+  g.needs.happiness = clamp(g.needs.happiness + SCENERY_GAIN);
+  if (g.thought === null && (world.tick + g.id) % (SCENERY_EVERY * 8) === SCENERY_EVERY >> 1) think(g, 'scenery');
+}
+
 function tickThought(world: World, g: Guest): void {
   if (g.thoughtTimer > 0 && --g.thoughtTimer === 0) g.thought = null;
   if (g.thought === null && (world.tick + g.id) % NEED_CHECK_EVERY === 0) {
@@ -132,6 +153,7 @@ export function updateGuest(world: World, g: Guest): void {
   g.age++;
   tickNeeds(g);
   tickThought(world, g);
+  tickScenery(world, g);
 
   switch (g.state) {
     case 'idle': return idle(world, g);

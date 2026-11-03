@@ -14,7 +14,8 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   tooOld: '이제 집에 갈래',
   bored: '할 게 없네',
   expensive: '너무 비싸',
+  scenery: '경치가 좋네',
 };
 
 /** 긍정적인 생각은 초록 말풍선 */
-export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun']);
+export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery']);
