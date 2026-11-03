@@ -1,20 +1,33 @@
 import { GameLoop } from './core/loop';
+import { Input } from './input/input';
+import { ToolController } from './input/tools';
 import { Camera } from './render/camera';
 import { tileToWorld } from './render/iso';
 import { drawFrame } from './render/renderer';
-import { Input } from './input/input';
-import { TileMap } from './sim/map';
+import { World } from './sim/world';
+import { Hud } from './ui/hud';
+import { Toolbar } from './ui/toolbar';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const cam = new Camera();
-const map = new TileMap();
+const world = new World();
+const tools = new ToolController(world);
 const input = new Input(canvas, cam);
+const hud = new Hud(world, tools);
+const toolbar = new Toolbar(document.getElementById('toolbar')!, tools);
 
-// 시작 시 맵 중앙을 화면 중앙에
-const center = tileToWorld(map.width / 2, map.height / 2);
-cam.x = center.x;
-cam.y = center.y;
+input.onLeftDown = (t) => tools.onDown(t);
+input.onLeftUp = (t) => tools.onUp(t);
+input.onKeyDown = (k) => {
+  if (k === 'r') tools.rotate();
+  else if (k === 'escape') tools.cancel();
+};
+
+// 시작 시 공원 입구가 보이도록 입구와 맵 중앙 사이를 화면 중앙에
+const focus = tileToWorld(world.map.width / 2, world.map.height * 0.8);
+cam.x = focus.x;
+cam.y = focus.y;
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -34,7 +47,9 @@ const loop = new GameLoop(
     const now = performance.now();
     input.update(Math.min((now - lastFrame) / 1000, 0.1));
     lastFrame = now;
-    drawFrame(ctx, cam, map, input.hoverTile);
+    drawFrame(ctx, cam, world, input.hoverTile, tools.preview(input.hoverTile));
+    hud.update();
+    toolbar.sync();
   },
 );
 loop.start();

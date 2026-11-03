@@ -1,10 +1,15 @@
 import type { Camera } from '../render/camera';
 import { worldToTile } from '../render/iso';
+import type { Tile } from '../sim/map';
 
 const PAN_SPEED = 600; // 화면 px/초 (zoom 1 기준)
 
 export class Input {
-  hoverTile: { x: number; y: number } | null = null;
+  hoverTile: Tile | null = null;
+  onLeftDown?: (t: Tile | null) => void;
+  onLeftUp?: (t: Tile | null) => void;
+  onKeyDown?: (key: string) => void;
+
   private keys = new Set<string>();
   private dragging = false;
   private lastX = 0;
@@ -17,7 +22,11 @@ export class Input {
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('mouseleave', () => { this.hoverTile = null; });
-    window.addEventListener('keydown', (e) => this.keys.add(e.key.toLowerCase()));
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      this.keys.add(k);
+      if (!e.repeat) this.onKeyDown?.(k);
+    });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => this.keys.clear());
   }
@@ -35,29 +44,44 @@ export class Input {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
+  private tileAt(sx: number, sy: number): Tile {
+    const w = this.cam.screenToWorld(sx, sy);
+    const t = worldToTile(w.x, w.y);
+    return { x: Math.floor(t.x), y: Math.floor(t.y) };
+  }
+
   private onDown = (e: MouseEvent): void => {
-    // 가운데/오른쪽 버튼 드래그 = 카메라 팬 (왼쪽은 이후 건설 도구용으로 비워 둠)
-    if (e.button === 1 || e.button === 2) {
+    const p = this.pos(e);
+    if (e.button === 0) {
+      this.hoverTile = this.tileAt(p.x, p.y);
+      this.onLeftDown?.(this.hoverTile);
+    } else if (e.button === 1 || e.button === 2) {
+      // 가운데/오른쪽 버튼 드래그 = 카메라 팬
       this.dragging = true;
-      const p = this.pos(e);
       this.lastX = p.x;
       this.lastY = p.y;
       e.preventDefault();
     }
   };
 
-  private onUp = (): void => { this.dragging = false; };
+  private onUp = (e: MouseEvent): void => {
+    if (e.button === 0) this.onLeftUp?.(this.hoverTile);
+    else this.dragging = false;
+  };
 
   private onMove = (e: MouseEvent): void => {
+    // 툴바 등 캔버스 밖 UI 위에서는 호버 없음(팬 드래그 중에는 계속 처리)
+    if (e.target !== this.canvas && !this.dragging) {
+      this.hoverTile = null;
+      return;
+    }
     const p = this.pos(e);
     if (this.dragging) {
       this.cam.panByScreen(p.x - this.lastX, p.y - this.lastY);
       this.lastX = p.x;
       this.lastY = p.y;
     }
-    const w = this.cam.screenToWorld(p.x, p.y);
-    const t = worldToTile(w.x, w.y);
-    this.hoverTile = { x: Math.floor(t.x), y: Math.floor(t.y) };
+    this.hoverTile = this.tileAt(p.x, p.y);
   };
 
   private onWheel = (e: WheelEvent): void => {

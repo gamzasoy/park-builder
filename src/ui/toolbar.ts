@@ -1,0 +1,57 @@
+import { RIDES, SHOPS } from '../data';
+import type { BuildingDef } from '../data/types';
+import type { Tool, ToolController } from '../input/tools';
+import { PATH_COST } from '../sim/building';
+import { won } from './hud';
+
+export class Toolbar {
+  private buttons = new Map<string, HTMLButtonElement>();
+  private activeKey = '';
+
+  constructor(private root: HTMLElement, private tools: ToolController) {
+    this.group('기본', [
+      this.button('path', '길', PATH_COST, { kind: 'path' }),
+      this.button('demolish', '철거', undefined, { kind: 'demolish' }),
+    ]);
+    this.group('놀이기구', RIDES.map((d) => this.defButton(d)));
+    this.group('매점', SHOPS.map((d) => this.defButton(d)));
+  }
+
+  /** 매 프레임 호출: 선택된 도구(Esc 해제 포함)에 맞춰 하이라이트 갱신 */
+  sync(): void {
+    const key = this.tools.toolKey;
+    if (key === this.activeKey) return;
+    this.buttons.get(this.activeKey)?.classList.remove('active');
+    this.buttons.get(key)?.classList.add('active');
+    this.activeKey = key;
+  }
+
+  private defButton(d: BuildingDef): HTMLButtonElement {
+    return this.button(`build:${d.id}`, d.name, d.cost, { kind: 'build', def: d });
+  }
+
+  private button(key: string, label: string, cost: number | undefined, tool: Tool): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.dataset.tool = key;
+    b.innerHTML = `<span>${label}</span>${cost !== undefined ? `<small>${won(cost)}</small>` : ''}`;
+    b.addEventListener('click', () => {
+      // 같은 도구를 다시 누르면 해제
+      this.tools.setTool(this.tools.toolKey === key ? { kind: 'none' } : tool);
+    });
+    this.buttons.set(key, b);
+    return b;
+  }
+
+  private group(title: string, items: HTMLButtonElement[]): void {
+    const g = document.createElement('div');
+    g.className = 'group';
+    const h = document.createElement('div');
+    h.className = 'title';
+    h.textContent = title;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.append(...items);
+    g.append(h, row);
+    this.root.append(g);
+  }
+}
