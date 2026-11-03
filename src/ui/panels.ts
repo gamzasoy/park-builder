@@ -1,10 +1,12 @@
 import { getDef } from '../data';
 import { buildingDef } from '../sim/coaster';
 import type { ToolController } from '../input/tools';
+import type { TestRun } from '../render/testrun';
 import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
+import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
 import { demolishAt, REFUND_RATE } from '../sim/building';
-import { dailyUpkeep, fairPrice, setPrice } from '../sim/economy';
+import { dailyUpkeep, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
 import { Stepper } from './stepper';
@@ -30,10 +32,13 @@ export class BuildingPanel {
   private price: Stepper;
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
   private editBtn = $<HTMLButtonElement>('p-edit');
+  private testBtn = $<HTMLButtonElement>('p-test');
+  private relRow = $('p-rel-row');
+  private rel = $('p-rel');
   private thrillRow = $('p-thrill-row');
   private thrill = $('p-thrill');
 
-  constructor(private world: World, private tools: ToolController) {
+  constructor(private world: World, private tools: ToolController, private testRun: TestRun) {
     this.price = new Stepper(1, 5, (d) => {
       const b = this.current();
       if (b) setPrice(b, b.price + d);
@@ -43,6 +48,11 @@ export class BuildingPanel {
     this.editBtn.addEventListener('click', () => {
       const b = this.current();
       if (b) this.tools.beginTrackEdit(b.id);
+    });
+    this.testBtn.addEventListener('click', () => {
+      const b = this.current();
+      if (b && this.testRun.start(b)) this.tools.notify(this.testRun.result);
+      else this.tools.notify('시운전할 트랙이 없습니다');
     });
     this.demolishBtn.addEventListener('click', () => {
       const b = this.current();
@@ -70,12 +80,17 @@ export class BuildingPanel {
     setText(this.name, def.name);
     setText(
       this.status,
-      !operational
+      b.broken
+        ? '고장 (정비 대기)'
+        : !operational
         ? (trackPending ? `운영 불가 (${b.track!.error ?? '트랙이 아직 완성되지 않음'})` : '운영 불가 (입구가 길과 끊김)')
         : def.kind === 'ride' ? PHASE_TEXT[b.phase] : '영업 중',
     );
+    this.relRow.hidden = def.kind !== 'ride';
+    if (def.kind === 'ride') setText(this.rel, `${Math.round(b.reliability)} / 100${b.broken ? ' · 고장' : ''}`);
     this.thrillRow.hidden = !b.track;
     this.editBtn.hidden = !b.track;
+    this.testBtn.hidden = !b.track;
     if (b.track) {
       setText(this.thrill, def.intensity !== undefined ? `${def.intensity} / ${def.nausea ?? 0}` : '–');
     }
@@ -87,6 +102,8 @@ export class BuildingPanel {
         ? `조각 ${b.track.pieces.length}개 · 미완성`
         : def.kind === 'ride'
         ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초`
+        : def.umbrella
+        ? `우산 판매(비 올 때) · 동시 ${def.capacity}명`
         : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소 · 동시 ${def.capacity}명`,
     );
     // 대기 시간 추정: 놀이기구는 한 사이클에 정원만큼, 매점은 정원만큼 동시에 처리
@@ -109,6 +126,7 @@ const ROWS: [LedgerKey, string][] = [
   ['shops', '매점 수익'],
   ['construction', '건설/철거'],
   ['upkeep', '유지비'],
+  ['wages', '직원 급여'],
 ];
 
 /** 이번 달 진행 상황과 지난 달 보고서 */
@@ -167,7 +185,7 @@ export class FinancePanel {
 
     setText(
       this.extra,
-      `하루 유지비 ${won(dailyUpkeep(w))}` +
+      `하루 유지비 ${won(dailyUpkeep(w))} · 급여 ${won(WAGE * w.staff.length)}` +
         (last ? ` · 지난 달 입장 ${last.entered}명 · 월말 평점 ${last.rating}` : ''),
     );
   }
@@ -262,5 +280,70 @@ export class GuestPanel {
       fill.style.width = `${v.toFixed(0)}%`;
       bar.classList.toggle('bad', bad ? v > 70 : v < 30);
     }
+  }
+}
+
+const STAFF_STATE_TEXT: Record<Staff['state'], string> = {
+  idle: '순찰 중',
+  walking: '이동 중',
+  working: '작업 중',
+};
+
+/** 선택한 직원의 상태와 해고 */
+export class StaffPanel {
+  private root = document.createElement('div');
+  private title = document.createElement('b');
+  private state = document.createElement('span');
+  private wage = document.createElement('span');
+  private fireBtn = document.createElement('button');
+
+  constructor(private world: World, private tools: ToolController) {
+    this.root.id = 'spanel';
+    this.root.className = 'card';
+    this.root.hidden = true;
+
+    const head = document.createElement('div');
+    head.className = 'head';
+    const close = document.createElement('button');
+    close.textContent = '×';
+    close.title = '닫기 (Esc)';
+    close.addEventListener('click', () => { this.tools.selectedStaffId = null; });
+    head.append(this.title, close);
+    this.root.append(head);
+
+    const row = (label: string, value: HTMLElement): void => {
+      const r = document.createElement('div');
+      r.className = 'p-row';
+      const l = document.createElement('span');
+      l.textContent = label;
+      r.append(l, value);
+      this.root.append(r);
+    };
+    row('상태', this.state);
+    row('급여', this.wage);
+
+    this.fireBtn.id = 's-fire';
+    this.fireBtn.textContent = '해고';
+    this.fireBtn.addEventListener('click', () => {
+      const id = this.tools.selectedStaffId;
+      if (id !== null) fireStaff(this.world, id);
+      this.tools.selectedStaffId = null;
+    });
+    this.root.append(this.fireBtn);
+    document.body.append(this.root);
+  }
+
+  update(): void {
+    const id = this.tools.selectedStaffId;
+    const s = id !== null ? this.world.staff.find((x) => x.id === id) : undefined;
+    if (!s) {
+      if (id !== null) this.tools.selectedStaffId = null; // 해고되었거나 불러오기로 사라진 직원
+      if (!this.root.hidden) this.root.hidden = true;
+      return;
+    }
+    if (this.root.hidden) this.root.hidden = false;
+    setText(this.title, `${STAFF_NAME[s.kind]} #${s.id}`);
+    setText(this.state, STAFF_STATE_TEXT[s.state]);
+    setText(this.wage, `${won(WAGE)} / 일`);
   }
 }

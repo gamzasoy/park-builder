@@ -1,5 +1,6 @@
 import { feeFactor } from './economy';
 import { createGuest } from './guest';
+import { isRaining, RAIN_SPAWN_FACTOR } from './weather';
 import type { World } from './world';
 
 export const MAX_GUESTS = 300;
@@ -17,7 +18,8 @@ export function updateSpawner(world: World): void {
 
   const base = Math.min(0.12, 0.02 + 0.015 * operational);
   const ratingFactor = 0.4 + (world.rating / 1000) * 1.2;
-  if (!world.rng.chance(base * ratingFactor * feeFactor(world.entranceFee))) return;
+  const weatherFactor = isRaining(world) ? RAIN_SPAWN_FACTOR : 1;
+  if (!world.rng.chance(base * ratingFactor * feeFactor(world.entranceFee) * weatherFactor)) return;
 
   const guest = createGuest(world);
   if (guest.money < world.entranceFee) return; // 입장료를 낼 수 없으면 돌아감

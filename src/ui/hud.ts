@@ -16,12 +16,19 @@ export const won = (n: number): string => `₩${n.toLocaleString('ko-KR')}`;
 export const signedWon = (n: number): string => (n < 0 ? `−${won(-n)}` : `+${won(n)}`);
 
 const HINTS: Record<string, string> = {
-  none: '건물이나 손님을 클릭하면 정보를 볼 수 있습니다 · 아래 툴바에서 도구를 고르세요',
+  none: '건물·손님·직원을 클릭하면 정보를 볼 수 있습니다 · 아래 툴바에서 도구를 고르세요',
   path: '길: 드래그로 직선 설치 (Esc 취소)',
   build: '클릭해 설치 · R 회전 · 입구(노란 칸)를 길에 이어야 운영됩니다 (Esc 취소)',
   demolish: '철거: 건물·길(환급 50%)이나 나무·꽃(무료)을 클릭',
-  scenery: '나무·꽃: 빈 잔디를 클릭하거나 드래그해 심기 · 길가의 나무는 손님 기분을 좋게 합니다 (Esc 취소)',
+  terrain: '지형: 클릭하거나 드래그해 한 칸씩 올리거나 내리기 (높이 0~4, 이웃 칸과 1단계 차이까지, 길·건물·입구 칸은 불가 · Esc 취소)',
+  scenery: '나무·꽃·쓰레기통: 빈 잔디를 클릭하거나 드래그해 놓기 · 길가의 나무는 손님 기분을 좋게 하고, 쓰레기통은 근처 3칸의 쓰레기를 받아 줍니다 (Esc 취소)',
 };
+
+const WEATHER_VIEW = {
+  sunny: { icon: '☀️', label: '맑음', tip: '맑음: 손님이 평소처럼 찾아옵니다' },
+  cloudy: { icon: '☁️', label: '흐림', tip: '흐림: 영향 없음' },
+  rain: { icon: '🌧', label: '비', tip: '비: 손님 입장 −30% · 우산 없는 손님은 실외 놀이기구를 꺼리고 기분이 나빠집니다 · 우산 가게가 도움이 됩니다' },
+} as const;
 
 const SPEEDS: Speed[] = [0, 1, 2, 4];
 
@@ -34,6 +41,7 @@ export class Hud {
   private date = document.getElementById('date')!;
   private guests = document.getElementById('guests')!;
   private rating = document.getElementById('rating')!;
+  private weather = document.getElementById('weather')!;
   private hint = document.getElementById('hint')!;
   private goal = document.getElementById('goal')!;
   private speedButtons = new Map<Speed, HTMLButtonElement>();
@@ -79,7 +87,12 @@ export class Hud {
     const p = w.ratingParts;
     this.rating.title =
       `기본 ${Math.round(p.base)} · 만족도 ${Math.round(p.satisfaction)} · 다양성 ${Math.round(p.variety)}` +
-      ` · 흐름 ${Math.round(p.flow)} · 불만 −${Math.round(p.complaints)}`;
+      ` · 흐름 ${Math.round(p.flow)} · 불만 −${Math.round(p.complaints)}` +
+      ` · 청결 ${Math.round(p.cleanliness)}`;
+
+    const wv = WEATHER_VIEW[w.weather.kind];
+    setText(this.weather, `${wv.icon} ${wv.label}`);
+    if (this.weather.title !== wv.tip) this.weather.title = wv.tip;
 
     if (this.clock.speed !== this.shownSpeed) {
       this.shownSpeed = this.clock.speed;

@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { getDef } from '../src/data';
 import { deserializeWorld, parseSave, serializeWorld } from '../src/save/save';
-import { buildingAt, demolishAt, lineTiles, placeBuilding, placePaths } from '../src/sim/building';
+import { buildingAt, canPlaceBuilding, demolishAt, lineTiles, placeBuilding, placePaths } from '../src/sim/building';
 import {
-  buildingDef, PIECE_COST, routeAt, stationTiles, type TrackType,
+  buildingDef, PHYSICS, PIECE_COST, pieceRange, routeAt, stationTiles, type TrackType,
 } from '../src/sim/coaster';
 import { applyEffects, createGuest } from '../src/sim/guest';
+import { changeTerrain } from '../src/sim/terrain';
 import { stepWorld } from '../src/sim/sim';
-import { appendPiece, canAppendPiece, clearTrack, undoPiece } from '../src/sim/trackedit';
+import { appendPiece, canAppendPiece, clearTrack, trackOccupancy, undoPiece } from '../src/sim/trackedit';
 import { START_MONEY, World, type Building } from '../src/sim/world';
 
 const CODE: Record<string, TrackType> = {
-  S: 'straight', L: 'left', R: 'right', U: 'up', D: 'down', C: 'lift',
+  S: 'straight', L: 'left', R: 'right', U: 'up', D: 'down', C: 'lift', B: 'brake', O: 'loop',
 };
 
 /** 역을 (10,10) rot 0에 놓는다: 칸 (10..12,10), 열차는 +x로 출발, 입구 (11,11). */
@@ -354,5 +355,191 @@ describe('saving', () => {
     expect(parseSave(JSON.stringify(d))).toEqual({ ok: false, reason: 'corrupt' });
     d.buildings[0].track.pieces = 'nope';
     expect(parseSave(JSON.stringify(d))).toEqual({ ok: false, reason: 'corrupt' });
+  });
+});
+
+/** HILL_OUT의 긴 직선 한 칸을 바꾼 코스 (칸 수·모양이 같아 그대로 닫힌다) */
+const swapAt = (code: string, i: number, ch: string): string => code.slice(0, i) + ch + code.slice(i + 1);
+const BRAKE_AT = 10;
+
+describe('brake', () => {
+  it('caps the speed after it and lowers intensity', () => {
+    const a = setup();
+    build(a.w, a.b, HILL_OUT);
+    const c = setup();
+    expect(build(c.w, c.b, swapAt(HILL_OUT, BRAKE_AT, 'B')).ok).toBe(true);
+    const plain = a.b.track!;
+    const braked = c.b.track!;
+    expect(braked.ok).toBe(true);
+    expect(plain.speeds[BRAKE_AT]).toBeGreaterThan(1.3);
+    expect(braked.speeds[BRAKE_AT]).toBeLessThanOrEqual(Math.sqrt(PHYSICS.brakeE) + 1e-9);
+    expect(braked.speeds[BRAKE_AT + 1]).toBeLessThan(plain.speeds[BRAKE_AT + 1]);
+    expect(braked.stats!.intensity).toBeLessThan(plain.stats!.intensity);
+    expect(c.b.track!.spent - a.b.track!.spent).toBe(PIECE_COST.brake - PIECE_COST.straight);
+  });
+});
+
+describe('loop', () => {
+  it('fails at the loop when the entry speed is too low', () => {
+    const { w, b } = setup();
+    expect(build(w, b, 'SSO').ok).toBe(true);
+    const t = b.track!;
+    expect(t.error).toContain('속도가 부족해 루프를 못 넘음');
+    expect(t.stallIndex).toBe(2);
+    expect(t.ok).toBe(false);
+  });
+
+  it('completes with enough speed and boosts fun, intensity and nausea', () => {
+    const a = setup();
+    build(a.w, a.b, HILL_OUT);
+    const c = setup();
+    expect(build(c.w, c.b, swapAt(HILL_OUT, 9, 'O')).ok).toBe(true);
+    const t = c.b.track!;
+    expect(t.error).toBeNull();
+    expect(t.ok).toBe(true);
+    expect(t.stats!.loops).toBe(1);
+    expect(t.stats!.fun).toBeGreaterThan(a.b.track!.stats!.fun);
+    expect(t.stats!.intensity).toBeGreaterThan(a.b.track!.stats!.intensity);
+    expect(t.stats!.nausea).toBeGreaterThan(a.b.track!.stats!.nausea);
+    expect(t.speeds[9]).toBeLessThan(a.b.track!.speeds[9]); // 루프가 에너지를 더 깎는다
+  });
+
+  it('keeps one tile forward at the same height but occupies h..h+2', () => {
+    const { w, b } = setup();
+    build(w, b, 'CCCRDDDO');
+    const p = b.track!.placed[b.track!.placed.length - 1];
+    expect(p.hIn).toBe(0);
+    expect(p.hOut).toBe(0);
+    expect(pieceRange(p)).toEqual({ hMin: 0, hMax: 2 });
+  });
+
+  it('needs headroom under the height limit', () => {
+    const { w, b } = setup();
+    build(w, b, 'C'.repeat(7));
+    expect(canAppendPiece(w, b, 'loop')).toEqual({ ok: false, reason: 'height' });
+  });
+});
+
+describe('crossing at different heights', () => {
+  // 낮은 구간이 (14,10)을 지나고, 되돌아오는 구간이 (14,10)을 위로 가로지른다
+  const over = 'CCCRRSSR';
+  const under = 'CCRRSR';
+
+  it('allows crossing when the heights are 2+ apart', () => {
+    const { w, b } = setup();
+    expect(build(w, b, over).ok).toBe(true);
+    expect(b.track!.cursor).toMatchObject({ x: 13, y: 10, dir: 3, h: 3 });
+    expect(canAppendPiece(w, b, 'straight')).toEqual({ ok: true });
+  });
+
+  it('rejects crossing when the heights are less than 2 apart', () => {
+    const { w, b } = setup();
+    expect(build(w, b, under).ok).toBe(true);
+    expect(b.track!.cursor).toMatchObject({ x: 13, y: 10, h: 2 });
+    expect(canAppendPiece(w, b, 'straight')).toEqual({ ok: false, reason: 'occupied' });
+  });
+
+  it('lets another coaster cross and keeps the lower one\'s occupancy', () => {
+    const { w, b } = setup();
+    build(w, b, 'SS'); // (13,10) (14,10) 낮게
+    const b2 = placeBuilding(w, getDef('coaster'), 14, 5, 1)!; // +y로 출발, 칸 (14,5..7)
+    expect(build(w, b2, 'CCC').ok).toBe(true); // (14,8) (14,9) (14,10)을 높이 0→3으로
+    const idx = w.map.index(14, 10);
+    expect(w.map.occupant[idx]).toBe(b.id);
+    demolishAt(w, 14, 5);
+    expect(w.buildings.has(b2.id)).toBe(false);
+    expect(w.map.occupant[idx]).toBe(b.id);
+    expect(w.map.occupant[w.map.index(14, 9)]).toBe(0);
+    demolishAt(w, 10, 10);
+    expect(w.map.occupant.every((v) => v === 0)).toBe(true);
+  });
+
+  it('keeps the occupancy of the lower piece when the upper one is undone', () => {
+    const { w, b } = setup();
+    build(w, b, over);
+    build(w, b, 'S'); // (13,10)을 위로 지난다
+    expect(w.map.occupant[w.map.index(13, 10)]).toBe(b.id);
+    undoPiece(w, b);
+    expect(w.map.occupant[w.map.index(13, 10)]).toBe(b.id);
+    expect(trackOccupancy(w).get(w.map.index(13, 10))).toHaveLength(1);
+  });
+
+  it('does not allow building under elevated track', () => {
+    const { w, b } = setup();
+    build(w, b, over);
+    // (16,11)에는 높이 3의 조각이 있다
+    expect(canPlaceBuilding(w, getDef('carousel'), 16, 11, 0)).toMatchObject({ ok: false });
+  });
+});
+
+describe('elevated track over paths', () => {
+  it('goes over a path at height 2+, leaves the path walkable and refuses low pieces on it', () => {
+    const { w, b } = setup();
+    placePaths(w, [{ x: 14, y: 11 }]);
+    expect(build(w, b, 'CCCRRSSR').ok).toBe(true); // (14,11)를 높이 3으로 지난다
+    const i = w.map.index(14, 11);
+    expect(w.map.isPath(14, 11)).toBe(true);
+    expect(w.map.occupant[i]).toBe(0);
+    expect(trackOccupancy(w).has(i)).toBe(true);
+    // 길 위의 철거는 길만 걷어낸다
+    const c = setup();
+    placePaths(c.w, [{ x: 13, y: 10 }]);
+    expect(canAppendPiece(c.w, c.b, 'straight')).toEqual({ ok: false, reason: 'occupied' });
+  });
+});
+
+describe('test run support data', () => {
+  it('exposes per-piece speed profile and the stall piece', () => {
+    const { w, b } = setup();
+    build(w, b, 'SSS');
+    expect(b.track!.speeds).toHaveLength(3);
+    expect(b.track!.pieceT).toHaveLength(3);
+    expect(b.track!.stallIndex).toBeNull();
+    build(w, b, 'S'.repeat(30));
+    expect(b.track!.stallIndex).not.toBeNull();
+    const [a, e] = b.track!.pieceT[b.track!.stallIndex!];
+    expect(e).toBeGreaterThan(a);
+  });
+});
+
+describe('saving new pieces', () => {
+  it('round-trips brake, loop and crossings', () => {
+    const { w, b } = setup();
+    build(w, b, swapAt(swapAt(HILL_OUT, BRAKE_AT, 'B'), 9, 'O'));
+    expect(b.track!.ok).toBe(true);
+    const back = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(w))));
+    const b2 = [...back.buildings.values()][0];
+    expect(b2.track!.pieces).toEqual(b.track!.pieces);
+    expect(b2.track!.stats).toEqual(b.track!.stats);
+    expect(back.map.occupant).toEqual(w.map.occupant);
+
+    const c = setup();
+    build(c.w, c.b, 'CCCRRSS');
+    const back2 = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(c.w))));
+    expect(back2.map.occupant).toEqual(c.w.map.occupant);
+  });
+
+  it('rejects a saved track that crosses at the same height', () => {
+    const { w, b } = setup();
+    build(w, b, 'CCRRSR');
+    const d = JSON.parse(JSON.stringify(serializeWorld(w)));
+    d.buildings[0].track.pieces.push('straight');
+    expect(parseSave(JSON.stringify(d))).toEqual({ ok: false, reason: 'corrupt' });
+  });
+});
+
+describe('언덕 위의 역', () => {
+  it('고지대에 지은 역도 평평한 코스를 완성할 수 있다', () => {
+    const w = new World();
+    w.money = 100_000;
+    for (let y = 6; y < 24; y++) for (let x = 6; x < 26; x++) expect(changeTerrain(w, x, y, 'raise').ok).toBe(true);
+    const b = placeBuilding(w, getDef('coaster'), 10, 10, 0)!;
+    expect(b).not.toBeNull();
+    expect(b.baseH).toBe(1);
+    expect(b.track!.cursor.h).toBe(1);
+    expect(build(w, b, FLAT)).toEqual({ ok: true });
+    expect(b.track!.closed).toBe(true);
+    expect(b.track!.ok).toBe(true);
+    expect(b.track!.stats!.maxHeight).toBe(0);
   });
 });

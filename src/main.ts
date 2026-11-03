@@ -3,18 +3,20 @@ import { Rng } from './core/rng';
 import { Input } from './input/input';
 import { ToolController } from './input/tools';
 import { Camera } from './render/camera';
-import { tileToWorld } from './render/iso';
+import { tileToWorld, tileToWorldZ } from './render/iso';
 import { drawFrame } from './render/renderer';
 import { loadFromStorage, saveToStorage } from './save/save';
-import { DAY_TICKS, DAYS_PER_MONTH } from './sim/economy';
+import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
 import { createGuest } from './sim/guest';
 import { stepWorld } from './sim/sim';
+import { hireStaff, STAFF_NAME } from './sim/staff';
 import { World } from './sim/world';
 import { Hud, won } from './ui/hud';
 import { Modal } from './ui/modal';
-import { BuildingPanel, FinancePanel, GuestPanel } from './ui/panels';
+import { BuildingPanel, FinancePanel, GuestPanel, StaffPanel } from './ui/panels';
 import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
+import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
 import type { TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
@@ -27,6 +29,7 @@ const cam = new Camera();
 const world = new World();
 const tools = new ToolController(world);
 const input = new Input(canvas, cam);
+input.getMap = () => world.map;
 const modal = new Modal();
 const sound = new Sound();
 tools.onEvent = (e) => sound.play(e);
@@ -59,6 +62,7 @@ if (loaded.ok) {
 function newGame(): void {
   const fresh = new World();
   fresh.rng = new Rng((Math.random() * 2 ** 32) >>> 0);
+  fresh.weatherSeed = fresh.rng.state; // rng를 소비하지 않고 시드만 따온다
   world.adopt(fresh);
   tools.reset();
   financePanel.sync();
@@ -121,13 +125,16 @@ function watchStatus(): void {
 }
 
 // ---- 루프 ----
+const testRun = new TestRun();
 let lastFrame = performance.now();
 const loop = new GameLoop(
   () => stepWorld(world),
   (alpha) => {
     const now = performance.now();
     input.arrowsPan = tools.tool.kind !== 'track';
-    input.update(Math.min((now - lastFrame) / 1000, 0.1));
+    const frameDt = Math.min((now - lastFrame) / 1000, 0.1);
+    input.update(frameDt);
+    testRun.update(world, frameDt);
     lastFrame = now;
     drawFrame(ctx, cam, world, {
       hover: input.hoverTile,
@@ -135,11 +142,14 @@ const loop = new GameLoop(
       alpha,
       selectedId: tools.selectedId,
       selectedGuestId: tools.selectedGuestId,
+      selectedStaffId: tools.selectedStaffId,
+      testRun,
     });
     hud.update();
     toolbar.sync();
     buildingPanel.update();
     guestPanel.update();
+    staffPanel.update();
     trackEditor.update();
     tutorialPanel.update();
     financePanel.update();
@@ -155,16 +165,26 @@ const hud = new Hud(world, tools, loop, {
   onSave: () => tools.notify(saveNow() ? '저장했습니다' : '저장할 수 없습니다 (브라우저 저장소 사용 불가)'),
   onNewGame: confirmNewGame,
 });
-const toolbar = new Toolbar(document.getElementById('toolbar')!, tools);
-const buildingPanel = new BuildingPanel(world, tools);
+const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
+  const s = hireStaff(world, kind);
+  if (s) {
+    tools.notify(`${STAFF_NAME[kind]}를 고용했습니다 (하루 급여 ${won(WAGE)})`);
+    sound.play('build');
+  } else {
+    tools.notify('더 이상 고용할 수 없습니다');
+    sound.play('error');
+  }
+});
+const buildingPanel = new BuildingPanel(world, tools, testRun);
 const guestPanel = new GuestPanel(world, tools);
-const trackEditor = new TrackEditor(world, tools);
+const staffPanel = new StaffPanel(world, tools);
+const trackEditor = new TrackEditor(world, tools, testRun);
 const tutorialPanel = new TutorialPanel(world, toolbar);
 
 input.onLeftDown = (t, pos) => tools.onDown(t, pos);
 input.onLeftUp = (t) => tools.onUp(t);
 const TRACK_KEYS: Record<string, TrackType> = {
-  arrowup: 'straight', arrowleft: 'left', arrowright: 'right', pageup: 'up', pagedown: 'down', c: 'lift',
+  arrowup: 'straight', arrowleft: 'left', arrowright: 'right', pageup: 'up', pagedown: 'down', c: 'lift', b: 'brake', l: 'loop',
 };
 input.onKeyDown = (k) => {
   // 트랙 편집 중에는 방향키·PgUp/PgDn·C로 다음 조각을 잇는다
@@ -213,7 +233,7 @@ if (import.meta.env.DEV) {
     step: (n: number) => { for (let i = 0; i < n; i++) stepWorld(world); },
     /** 타일 중앙의 화면 좌표(E2E에서 실제 마우스 입력용) */
     tileToScreen: (tx: number, ty: number) => {
-      const w = tileToWorld(tx + 0.5, ty + 0.5);
+      const w = tileToWorldZ(tx + 0.5, ty + 0.5, world.map.heightAt(tx, ty));
       const s = cam.worldToScreen(w.x, w.y);
       const r = canvas.getBoundingClientRect();
       return { x: s.x + r.left, y: s.y + r.top };
@@ -233,5 +253,13 @@ if (import.meta.env.DEV) {
     }),
     setSpeed: (s: 0 | 1 | 2 | 4) => { loop.speed = s; },
     setZoom: (z: number) => { cam.zoom = z; },
+    /** 마우스 아래로 판정된 칸(높이 보정 피킹 확인용) */
+    hover: () => input.hoverTile,
+    /** 카메라를 타일 (tx, ty)의 윗면 중앙으로 */
+    focus: (tx: number, ty: number) => {
+      const w = tileToWorldZ(tx + 0.5, ty + 0.5, world.map.heightAt(tx, ty));
+      cam.x = w.x;
+      cam.y = w.y;
+    },
   };
 }

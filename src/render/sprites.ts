@@ -3,7 +3,7 @@
  * 모든 함수는 화면 좌표(이미 카메라 변환된 값)와 확대율 z를 받으므로
  * 게임 화면(renderer.ts)과 툴바 아이콘(ui/icons.ts)에서 함께 쓴다.
  */
-import { FLOWERS, OAK, PINE } from '../data/scenery';
+import { BIN, FLOWERS, OAK, PINE } from '../data/scenery';
 import { shade } from './color';
 import type { Vec2 } from './iso';
 
@@ -452,6 +452,28 @@ function kiosk(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, roof: stri
   ctx.stroke();
 }
 
+/** 우산 가게: 키오스크 위에 파란 우산을 펼쳐 둔다 */
+function umbrellaShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  kiosk(ctx, q, o, '#2f5fb8');
+  const z = o.z;
+  const c = up(center(q), 31 * z);
+  const r = 10 * z;
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, z);
+  const cols = ['#e8453c', '#fff', '#e8453c', '#fff'];
+  for (let i = 0; i < 4; i++) {
+    const a0 = Math.PI + (i * Math.PI) / 4;
+    const a1 = a0 + Math.PI / 4;
+    ctx.fillStyle = cols[i];
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.arc(c.x, c.y, r, a0, a1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
 function toilet(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, alongX: boolean): void {
   const z = o.z;
   shadow(ctx, q, z);
@@ -477,6 +499,7 @@ export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Qua
     case 'coaster': stationRoof(ctx, q, o, w >= h); return true;
     case 'burger': kiosk(ctx, q, o, '#c0392b'); return true;
     case 'drinks': kiosk(ctx, q, o, '#2a8f86'); return true;
+    case 'umbrella': umbrellaShop(ctx, q, o); return true;
     case 'toilet': toilet(ctx, q, o, w >= h); return true;
     default: return false;
   }
@@ -501,6 +524,33 @@ export function drawScenery(ctx: CanvasRenderingContext2D, kind: number, x: numb
       ctx.arc(x + Math.cos(a) * r * 13 * z, y + Math.sin(a) * r * 6.5 * z - 1.5 * z, 1.8 * z, 0, TAU);
       ctx.fill();
     }
+    return;
+  }
+  if (kind === BIN) {
+    // 초록 쓰레기통: 몸통 + 뚜껑 + 투입구
+    const bs = z * 1.1;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x + 1.5 * bs, y + 0.5 * bs, 6 * bs, 3 * bs, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#2f7d4a';
+    ctx.beginPath();
+    ctx.moveTo(x - 4.5 * bs, y - 11 * bs);
+    ctx.lineTo(x + 4.5 * bs, y - 11 * bs);
+    ctx.lineTo(x + 3.6 * bs, y);
+    ctx.lineTo(x - 3.6 * bs, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#245f39';
+    ctx.fillRect(x + 0.5 * bs, y - 11 * bs, 4 * bs, 11 * bs);
+    ctx.fillStyle = '#3f9a5e';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 11 * bs, 5.4 * bs, 2.4 * bs, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#10261a';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 11.2 * bs, 3 * bs, 1.1 * bs, 0, 0, TAU);
+    ctx.fill();
     return;
   }
   ctx.fillStyle = 'rgba(0,0,0,0.22)';

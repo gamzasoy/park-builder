@@ -83,6 +83,51 @@ export function sceneryIcon(def: SceneryDef): string {
   });
 }
 
+export function staffIcon(kind: 'janitor' | 'mechanic'): string {
+  return render(`staff:${kind}`, (ctx) => {
+    const vest = kind === 'janitor' ? '#f08a24' : '#2f78d0';
+    const cx = W / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#2a3342';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, H - 16); ctx.lineTo(cx - 3, H - 6);
+    ctx.moveTo(cx + 3, H - 16); ctx.lineTo(cx + 3, H - 6);
+    ctx.stroke();
+    ctx.fillStyle = vest;
+    ctx.beginPath();
+    ctx.roundRect(cx - 8, H - 30, 16, 15, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff3b0';
+    ctx.fillRect(cx - 8, H - 23, 16, 3);
+    ctx.fillStyle = '#f1d3b0';
+    ctx.beginPath();
+    ctx.arc(cx, H - 34, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = vest;
+    ctx.beginPath();
+    ctx.arc(cx, H - 35.5, 6.4, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(cx - 8, H - 36, 16, 2.5);
+    if (kind === 'janitor') {
+      // 빗자루
+      ctx.strokeStyle = '#7a5230';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + 11, H - 30); ctx.lineTo(cx + 15, H - 7);
+      ctx.stroke();
+      ctx.strokeStyle = '#d9b85a';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(cx + 12, H - 6); ctx.lineTo(cx + 19, H - 6);
+      ctx.stroke();
+    }
+  });
+}
+
 export function pathIcon(): string {
   return render('path', (ctx) => {
     const { q } = fit(2, 2, 0);
@@ -116,6 +161,39 @@ export function demolishIcon(): string {
     ctx.beginPath();
     ctx.moveTo(28, 4); ctx.lineTo(40, 14);
     ctx.moveTo(40, 4); ctx.lineTo(28, 14);
+    ctx.stroke();
+  });
+}
+
+/** 지형 도구: 흙 블록 위에 올림(▲)/내림(▼) 화살표 */
+export function terrainIcon(mode: 'raise' | 'lower'): string {
+  return render(`terrain:${mode}`, (ctx) => {
+    const { q } = fit(2, 2, 0);
+    const d = 7; // 블록 옆면 두께
+    const lift = mode === 'raise' ? -d : 0;
+    const sh = (p: Vec2): Vec2 => ({ x: p.x, y: p.y + lift });
+    const t = sh(q.top), r = sh(q.right), b = sh(q.bottom), l = sh(q.left);
+    poly(ctx, [l, b, { x: b.x, y: b.y + d }, { x: l.x, y: l.y + d }], '#7a5a3a', 'rgba(0,0,0,0.3)');
+    poly(ctx, [b, r, { x: r.x, y: r.y + d }, { x: b.x, y: b.y + d }], '#5f4529', 'rgba(0,0,0,0.3)');
+    poly(ctx, [t, r, b, l], '#4f9a45', 'rgba(0,0,0,0.25)');
+    // 화살표
+    const cx = (t.x + b.x) / 2;
+    const cy = (t.y + b.y) / 2;
+    const up = mode === 'raise';
+    ctx.fillStyle = up ? '#fff3b0' : '#d8e6ff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const s = up ? -1 : 1;
+    ctx.moveTo(cx, cy + s * 9);
+    ctx.lineTo(cx - 7, cy + s * 1);
+    ctx.lineTo(cx - 3, cy + s * 1);
+    ctx.lineTo(cx - 3, cy - s * 7);
+    ctx.lineTo(cx + 3, cy - s * 7);
+    ctx.lineTo(cx + 3, cy + s * 1);
+    ctx.lineTo(cx + 7, cy + s * 1);
+    ctx.closePath();
+    ctx.fill();
     ctx.stroke();
   });
 }

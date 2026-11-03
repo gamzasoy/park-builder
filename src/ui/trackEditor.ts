@@ -1,4 +1,5 @@
 import type { ToolController } from '../input/tools';
+import type { TestRun } from '../render/testrun';
 import {
   MAX_HEIGHT, MAX_PIECES, PIECE_COST, stationTiles, TRACK_LABEL, TRACK_TYPES, type TrackType,
 } from '../sim/coaster';
@@ -11,7 +12,7 @@ const setText = (el: HTMLElement, t: string): void => { if (el.textContent !== t
 
 /** 팔레트 버튼에 표시하는 단축키(키 바인딩은 main.ts) */
 export const TRACK_KEY_HINT: Record<TrackType, string> = {
-  straight: '↑', left: '←', right: '→', up: 'PgUp', down: 'PgDn', lift: 'C',
+  straight: '↑', left: '←', right: '→', up: 'PgUp', down: 'PgDn', lift: 'C', brake: 'B', loop: 'L',
 };
 
 /** 롤러코스터 트랙 편집 바: 조각 팔레트, 되돌리기, 실시간 스탯과 오류 */
@@ -23,7 +24,7 @@ export class TrackEditor {
   private pieceBtns = new Map<TrackType, HTMLButtonElement>();
   private undoBtn: HTMLButtonElement;
 
-  constructor(private world: World, private tools: ToolController) {
+  constructor(private world: World, private tools: ToolController, private testRun: TestRun) {
     const row = $('t-buttons');
     for (const type of TRACK_TYPES) {
       const b = document.createElement('button');
@@ -34,6 +35,11 @@ export class TrackEditor {
     }
     this.undoBtn = this.action(row, '되돌리기', 'Backspace', () => this.tools.undoTrackPiece());
     this.action(row, '전부 지우기', '', () => this.tools.clearTrackPieces());
+    this.action(row, '시운전', '', () => {
+      const b = this.tools.trackBuilding;
+      if (b && this.testRun.start(b)) this.tools.notify(this.testRun.result);
+      else this.tools.notify('시운전할 트랙이 없습니다');
+    });
     const done = this.action(row, '편집 종료', 'Enter/Esc', () => this.tools.endTrackEdit());
     done.classList.add('primary');
   }
@@ -62,7 +68,7 @@ export class TrackEditor {
     const s = t.stats;
     setText(
       this.stats,
-      s ? `재미 ${s.fun} · 강도 ${s.intensity} · 멀미 ${s.nausea} · 최고 ${s.maxSpeed}km/h · 낙차 ${s.maxDrop} · 한 바퀴 ${(s.duration / 10).toFixed(0)}초` : '조각을 이어 붙이면 재미·강도·멀미가 계산됩니다',
+      s ? `재미 ${s.fun} · 강도 ${s.intensity} · 멀미 ${s.nausea} · 최고 ${s.maxSpeed}km/h · 낙차 ${s.maxDrop} · 한 바퀴 ${(s.duration / 10).toFixed(0)}초${s.loops ? ` · 루프 ${s.loops}` : ''}` : '조각을 이어 붙이면 재미·강도·멀미가 계산됩니다',
     );
 
     let text: string;

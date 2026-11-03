@@ -1,7 +1,9 @@
+import { BIN } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
 import { fairPrice } from './economy';
 import type { Tile } from './map';
+import { isRaining, RAIN_DRAIN, RAIN_DRAIN_EVERY, RAIN_RIDE_PENALTY } from './weather';
 import type { Building, World } from './world';
 
 /** 틱당 이동 거리(타일). 10틱/초 → 초당 2타일 */
@@ -10,6 +12,8 @@ const DECIDE_EVERY = 5; // 목표 재선택 주기(틱)
 const IDLE_GIVE_UP = 150; // 갈 곳이 없을 때 퇴장까지 대기 틱
 const MAX_AGE = 9000; // 최대 체류 틱
 const MIN_SCORE = 20;
+/** 비 오는 날 우산이 없는 손님이 우산 가게에 매기는 점수 */
+export const UMBRELLA_SCORE = 70;
 
 /** 대기열 최대 길이: 이보다 길면 손님이 포기 */
 export const MAX_QUEUE = 15;
@@ -19,13 +23,24 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
 /** 걷는 길 옆(8칸)에 나무·꽃이 있으면 이 주기마다 행복도가 오른다 */
 export const SCENERY_EVERY = 30;
 export const SCENERY_GAIN = 1;
+
+/** 먹거리를 산 손님이 쓰레기를 버리기까지 걸리는 틱(최소~최대, 손님 id·틱으로 결정) */
+export const TRASH_MIN = 30;
+export const TRASH_MAX = 80;
+/** 쓰레기통을 찾는 반경(타일) */
+export const BIN_RADIUS = 3;
+/** 주변 쓰레기를 살피는 주기(틱) / 반경(타일) / 불쾌해지는 쓰레기 합 */
+export const LITTER_EVERY = 30;
+export const LITTER_RADIUS = 2;
+export const LITTER_LIMIT = 4;
+export const LITTER_PENALTY = 1;
 
 /** idle 대기 / walking·leaving 이동 / queueing 입구 앞 줄서기 / visiting 시설 안(숨김) */
 export type GuestState = 'idle' | 'walking' | 'queueing' | 'visiting' | 'leaving' | 'gone';
@@ -70,6 +85,10 @@ export interface Guest {
   /** 현재 떠올린 생각(말풍선) */
   thought: Thought | null;
   thoughtTimer: number;
+  /** 쓰레기를 버리기까지 남은 틱(0 = 들고 있지 않음) */
+  trash: number;
+  /** 우산을 샀는가 */
+  umbrella: boolean;
 }
 
 export function createGuest(world: World): Guest {
@@ -102,6 +121,8 @@ export function createGuest(world: World): Guest {
     look: r.int(0, 7),
     thought: null,
     thoughtTimer: 0,
+    trash: 0,
+    umbrella: false,
   };
 }
 
@@ -125,7 +146,10 @@ function needThought(g: Guest): Thought | null {
 export function nearScenery(world: World, t: Tile): boolean {
   const m = world.map;
   for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && m.sceneryAt(t.x + dx, t.y + dy) !== 0) return true;
+    for (let dx = -1; dx <= 1; dx++) if (dx || dy) {
+        const k = m.sceneryAt(t.x + dx, t.y + dy);
+        if (k !== 0 && k !== BIN) return true;
+      }
   }
   return false;
 }
@@ -137,6 +161,41 @@ function tickScenery(world: World, g: Guest): void {
   if (phase !== SCENERY_EVERY >> 1 || !nearScenery(world, g.tile)) return;
   g.needs.happiness = clamp(g.needs.happiness + SCENERY_GAIN);
   if (g.thought === null && (world.tick + g.id) % (SCENERY_EVERY * 8) === SCENERY_EVERY >> 1) think(g, 'scenery');
+}
+
+/** 쓰레기를 버릴 시간이 되면 근처 쓰레기통에, 없으면 지금 서 있는 길에 버린다 */
+function tickTrash(world: World, g: Guest): void {
+  if (g.trash <= 0 || g.state === 'visiting' || g.state === 'gone') return;
+  if (--g.trash > 0) return;
+  const m = world.map;
+  for (let dy = -BIN_RADIUS; dy <= BIN_RADIUS; dy++) {
+    for (let dx = -BIN_RADIUS; dx <= BIN_RADIUS; dx++) if (m.sceneryAt(g.tile.x + dx, g.tile.y + dy) === BIN) return;
+  }
+  if (!m.isPath(g.tile.x, g.tile.y)) return;
+  const i = m.index(g.tile.x, g.tile.y);
+  m.litter[i] = Math.min(3, m.litter[i] + 1);
+}
+
+/** 주변 길에 쓰레기가 많으면 기분이 나빠진다(RNG를 쓰지 않는다) */
+function tickLitter(world: World, g: Guest): void {
+  if (g.state === 'visiting' || g.state === 'gone') return;
+  if ((world.tick + g.id) % LITTER_EVERY !== 7) return;
+  const m = world.map;
+  let sum = 0;
+  for (let dy = -LITTER_RADIUS; dy <= LITTER_RADIUS; dy++) {
+    for (let dx = -LITTER_RADIUS; dx <= LITTER_RADIUS; dx++) sum += m.litterAt(g.tile.x + dx, g.tile.y + dy);
+  }
+  if (sum < LITTER_LIMIT) return;
+  g.needs.happiness = clamp(g.needs.happiness - LITTER_PENALTY);
+  if (g.thought === null) think(g, 'litter');
+}
+
+/** 비를 맞으면(우산 없이 시설 밖) 기분이 조금씩 나빠진다(RNG를 쓰지 않는다) */
+function tickRain(world: World, g: Guest): void {
+  if (g.umbrella || g.state === 'visiting' || g.state === 'gone' || !isRaining(world)) return;
+  if ((world.tick + g.id) % RAIN_DRAIN_EVERY !== 13) return;
+  g.needs.happiness = clamp(g.needs.happiness - RAIN_DRAIN);
+  if (g.thought === null) think(g, 'rain');
 }
 
 function tickThought(world: World, g: Guest): void {
@@ -154,6 +213,9 @@ export function updateGuest(world: World, g: Guest): void {
   tickNeeds(g);
   tickThought(world, g);
   tickScenery(world, g);
+  tickTrash(world, g);
+  tickLitter(world, g);
+  tickRain(world, g);
 
   switch (g.state) {
     case 'idle': return idle(world, g);
@@ -224,7 +286,7 @@ function idle(world: World, g: Guest): void {
 }
 
 /** 욕구·재미·거리·요금을 점수화해 가장 좋은 운영 중인 시설을 고른다. */
-function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[] } | null {
+export function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[] } | null {
   let best: { b: Building; path: readonly Tile[] } | null = null;
   let bestScore = MIN_SCORE;
 
@@ -237,13 +299,20 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
 
     let score: number;
     if (def.kind === 'shop') {
-      if (!def.serves) continue;
-      const need = g.needs[def.serves];
-      if (need < 40) continue;
-      score = need * (def.serves === 'toilet' ? 1.4 : 1.1);
+      if (def.umbrella) {
+        // 비 올 때 우산이 없는 손님만 원한다
+        if (!isRaining(world) || g.umbrella) continue;
+        score = UMBRELLA_SCORE;
+      } else {
+        if (!def.serves) continue;
+        const need = g.needs[def.serves];
+        if (need < 40) continue;
+        score = need * (def.serves === 'toilet' ? 1.4 : 1.1);
+      }
     } else {
       if (g.needs.energy < 20) continue;
       score = (def.fun ?? 0) + world.rng.next() * 20 - (g.visited.includes(b.id) ? 35 : 0);
+      if (def.outdoor && isRaining(world) && !g.umbrella) score -= RAIN_RIDE_PENALTY;
     }
     // 거리·줄·요금 부담, 그리고 적정가를 넘는 만큼 추가 감점
     score -= path.length * 0.4 + b.queue.length * 3 + b.price * 0.3 + Math.max(0, b.price - fairPrice(def));
@@ -256,7 +325,17 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
   return best;
 }
 
-function setPath(world: World, g: Guest, path: readonly Tile[]): void {
+/** 길 위를 걷는 개체(손님·직원)가 공유하는 이동 상태 */
+export interface Walker {
+  x: number;
+  y: number;
+  tile: Tile;
+  path: readonly Tile[];
+  pathIdx: number;
+  pathVersion: number;
+}
+
+export function setPath(world: World, g: Walker, path: readonly Tile[]): void {
   g.path = path;
   g.pathIdx = 1;
   g.pathVersion = world.map.version;
@@ -313,7 +392,7 @@ function replan(world: World, g: Guest): boolean {
 }
 
 /** 경로를 따라 dist만큼 이동. 경로 끝에 도달했으면 true. */
-function advance(g: Guest, dist: number): boolean {
+export function advance(g: Walker, dist: number): boolean {
   while (dist > 0 && g.pathIdx < g.path.length) {
     const t = g.path[g.pathIdx];
     const tx = t.x + 0.5;
@@ -394,6 +473,9 @@ export function applyEffects(g: Guest, def: BuildingDef): void {
     n.hunger = clamp(n.hunger + 4);
     n.thirst = clamp(n.thirst + 4);
     think(g, intensity > 85 ? 'tooIntense' : 'fun');
+  } else if (def.umbrella) {
+    g.umbrella = true;
+    n.happiness = clamp(n.happiness + 4);
   } else if (def.serves) {
     n[def.serves] = clamp(n[def.serves] - 70);
     n.happiness = clamp(n.happiness + 6);

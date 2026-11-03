@@ -123,14 +123,15 @@
       .p-row:nth-child(odd) { background: rgba(0,0,0,0.1); }
       .p-row > span:first-child { color: var(--muted); }
       #p-status[data-ok="0"] { color: #ffb0a8; }
-      #p-demolish, #p-edit { width: 100%; margin-top: 8px; padding: 4px; }
+      #p-demolish, #p-edit, #p-test { width: 100%; margin-top: 8px; padding: 4px; }
       #finance table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.12); }
       #finance th { text-align: left; font-weight: 400; color: var(--muted); padding: 3px 4px; }
       #finance td { text-align: right; padding: 3px 4px 3px 8px; font-variant-numeric: tabular-nums; }
       #finance thead th:not(:first-child) { text-align: right; color: #fff; }
       #finance tr.total th, #finance tr.total td { border-top: 1px solid var(--line); font-weight: 700; color: #fff; }
       #f-extra { margin-top: 8px; color: var(--muted); font-size: 12px; }
-      #gpanel { right: 12px; }
+      #gpanel, #spanel { right: 12px; }
+      #s-fire { width: 100%; margin-top: 8px; padding: 4px; }
       .bar { display: inline-block; width: 120px; height: 8px; background: #2a3320; border: 1px solid; border-color: #1a200f #8e9c68 #8e9c68 #1a200f; overflow: hidden; }
       .bar i { display: block; height: 100%; background: #5fd06e; }
       .bar.bad i { background: #e06a5a; }
@@ -166,6 +167,7 @@
       <span id="date"></span>
       <span id="guests"></span>
       <span id="rating"></span>
+      <span id="weather" style="cursor: help"></span>
       <span class="speed">
         <button data-speed="0" title="일시정지 (Space)">⏸</button>
         <button data-speed="1" title="1배속 (1)">1×</button>
@@ -191,6 +193,7 @@
     <div id="panel" class="card" hidden>
       <div class="head"><b id="p-name"></b><button id="p-close" title="닫기 (Esc)">×</button></div>
       <div class="p-row"><span>상태</span><span id="p-status"></span></div>
+      <div class="p-row" id="p-rel-row"><span>신뢰도</span><span id="p-rel"></span></div>
       <div class="p-row"><span>특징</span><span id="p-trait"></span></div>
       <div class="p-row" id="p-thrill-row"><span>강도 / 멀미</span><span id="p-thrill"></span></div>
       <div class="p-row"><span>대기/이용</span><span id="p-queue"></span></div>
@@ -201,6 +204,7 @@
       <div class="p-row"><span>이용 요금</span><span id="p-price-ctl"></span></div>
       <div class="p-row"><span>적정 요금</span><span id="p-fair"></span></div>
       <button id="p-edit" hidden>트랙 편집</button>
+      <button id="p-test" hidden>시운전</button>
       <button id="p-demolish"></button>
     </div>
     <div id="finance" class="card" hidden>

@@ -10,6 +10,8 @@ export const MAX_FEE = 50;
 /** 새 게임의 입장료 */
 export const START_FEE = 10;
 const MAX_REPORTS = 24;
+/** 직원 1명당 하루 급여 */
+export const WAGE = 60;
 
 export interface GameDate { year: number; month: number; day: number }
 
@@ -52,6 +54,7 @@ export function feeFactor(fee: number): number {
 export function settleDay(world: World): void {
   const upkeep = dailyUpkeep(world);
   if (upkeep > 0) world.transact('upkeep', -upkeep);
+  if (world.staff.length > 0) world.transact('wages', -WAGE * world.staff.length);
 
   const dayIndex = Math.floor(world.tick / DAY_TICKS); // 끝난 날 수
   if (dayIndex > 0 && dayIndex % DAYS_PER_MONTH === 0) finishMonth(world, dayIndex);

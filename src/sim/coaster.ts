@@ -12,11 +12,11 @@ import type { Building } from './world';
  *   체인 리프트는 에너지와 상관없이 일정한 속도로 올려 준다. 에너지가 바닥나면 열차가 멈추는 코스다.
  */
 
-export type TrackType = 'straight' | 'left' | 'right' | 'up' | 'down' | 'lift';
-export const TRACK_TYPES: readonly TrackType[] = ['straight', 'left', 'right', 'up', 'down', 'lift'];
+export type TrackType = 'straight' | 'left' | 'right' | 'up' | 'down' | 'lift' | 'brake' | 'loop';
+export const TRACK_TYPES: readonly TrackType[] = ['straight', 'left', 'right', 'up', 'down', 'lift', 'brake', 'loop'];
 
 export const TRACK_LABEL: Record<TrackType, string> = {
-  straight: '직선', left: '좌회전', right: '우회전', up: '오르막', down: '내리막', lift: '리프트',
+  straight: '직선', left: '좌회전', right: '우회전', up: '오르막', down: '내리막', lift: '리프트', brake: '브레이크', loop: '루프',
 };
 
 export const MAX_HEIGHT = 8;
@@ -25,7 +25,7 @@ export const MAX_PIECES = 60;
 export const LEVEL_PX = 26;
 
 export const PIECE_COST: Record<TrackType, number> = {
-  straight: 60, left: 60, right: 60, up: 60, down: 60, lift: 100,
+  straight: 60, left: 60, right: 60, up: 60, down: 60, lift: 100, brake: 80, loop: 200,
 };
 /** 트랙 조각 하나당 하루 유지비 */
 export const PIECE_UPKEEP = 10;
@@ -48,7 +48,16 @@ export const PHYSICS = {
   tileTicks: 8,
   /** v → 표시용 km/h */
   kmh: 40,
+  /** 브레이크가 제한하는 에너지(속도 √1.44 = 1.2) */
+  brakeE: 1.44,
+  /** 루프를 넘으려면 필요한 진입 에너지(속도 1.3) */
+  loopMinE: 1.69,
+  /** 루프를 지나며 추가로 잃는 에너지 */
+  loopE: 0.25,
 };
+
+/** 루프가 차지하는 높이 단계 수(h ~ h+LOOP_RISE) */
+export const LOOP_RISE = 2;
 
 export interface Cursor { x: number; y: number; dir: number; h: number }
 
@@ -72,6 +81,7 @@ export interface CoasterStats {
   maxDrop: number;
   maxHeight: number;
   turns: number;
+  loops: number;
   fun: number;
   intensity: number;
   nausea: number;
@@ -99,6 +109,14 @@ export interface Track {
   route: RoutePoint[];
   /** 열차가 역에서 대기할 때 선두의 경로 위치(t) */
   holdT: number;
+  /** 조각마다 지나는 속도(√에너지). 시운전 애니메이션이 쓴다 */
+  speeds: number[];
+  /** 조각마다 경로 위 구간 [시작 t, 끝 t] */
+  pieceT: [number, number][];
+  /** 열차가 멈추거나 루프를 못 넘는 첫 조각의 인덱스. 없으면 null */
+  stallIndex: number | null;
+  /** 한 바퀴(또는 시운전)에 걸리는 틱 */
+  lapTicks: number;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
@@ -115,7 +133,7 @@ export function stationTiles(b: Building): Tile[] {
 export function startCursor(b: Building): Cursor {
   const s = stationTiles(b);
   const [dx, dy] = DIRS[b.rot % 4];
-  return { x: s[2].x + dx, y: s[2].y + dy, dir: b.rot % 4, h: 0 };
+  return { x: s[2].x + dx, y: s[2].y + dy, dir: b.rot % 4, h: b.baseH ?? 0 };
 }
 
 /** 커서 위치에 조각을 놓았을 때 조각과 다음 커서 */
@@ -132,13 +150,22 @@ export function applyPiece(c: Cursor, type: TrackType): { placed: PlacedPiece; n
 /** 조각이 높이 제한을 지키는가 */
 export function heightOk(c: Cursor, type: TrackType): boolean {
   const h = applyPiece(c, type).next.h;
+  if (type === 'loop' && c.h + LOOP_RISE > MAX_HEIGHT) return false;
   return h >= 0 && h <= MAX_HEIGHT;
+}
+
+/** 조각이 차지하는 높이 구간. 루프는 h ~ h+2를 차지한다. */
+export function pieceRange(p: PlacedPiece): { hMin: number; hMax: number } {
+  const lo = Math.min(p.hIn, p.hOut);
+  const hi = Math.max(p.hIn, p.hOut);
+  return { hMin: lo, hMax: p.type === 'loop' ? hi + LOOP_RISE : hi };
 }
 
 export function newTrack(b: Building, spent: number): Track {
   const t = {
     pieces: [], spent, placed: [], cursor: startCursor(b), closed: false, error: null,
     stats: null, ok: false, route: [], holdT: 0,
+    speeds: [], pieceT: [], stallIndex: null, lapTicks: 0,
   } as Track;
   rebuild(b, t);
   return t;
@@ -168,13 +195,17 @@ export function rebuild(b: Building, t: Track): void {
   t.cursor = cur;
 
   const s0 = stationTiles(b)[0];
-  t.closed = placed.length > 0 && cur.x === s0.x && cur.y === s0.y && cur.dir === b.rot % 4 && cur.h === 0;
+  t.closed = placed.length > 0 && cur.x === s0.x && cur.y === s0.y && cur.dir === b.rot % 4 && cur.h === (b.baseH ?? 0);
 
   const sim = simulate(b, placed);
   t.error = sim.error;
   t.stats = sim.stats;
   t.route = sim.route;
   t.holdT = sim.holdT;
+  t.speeds = sim.speeds;
+  t.pieceT = sim.pieceT;
+  t.stallIndex = sim.stallIndex;
+  t.lapTicks = sim.lapTicks;
   t.ok = t.closed && sim.error === null && sim.stats !== null;
 }
 
@@ -189,7 +220,10 @@ export function buildingTiles(b: Building): Tile[] {
   return out.concat(trackTiles(b));
 }
 
-interface Sim { error: string | null; stats: CoasterStats | null; route: RoutePoint[]; holdT: number }
+interface Sim {
+  error: string | null; stats: CoasterStats | null; route: RoutePoint[]; holdT: number;
+  speeds: number[]; pieceT: [number, number][]; stallIndex: number | null; lapTicks: number;
+}
 
 function simulate(b: Building, placed: PlacedPiece[]): Sim {
   const P = PHYSICS;
@@ -199,6 +233,9 @@ function simulate(b: Building, placed: PlacedPiece[]): Sim {
 
   let e = P.startE;
   let error: string | null = null;
+  let stallIndex: number | null = null;
+  let brakes = 0;
+  let loops = 0;
   const speeds: number[] = [];
   let maxV = Math.sqrt(e);
   let maxHeight = 0;
@@ -216,10 +253,22 @@ function simulate(b: Building, placed: PlacedPiece[]): Sim {
       case 'up': e -= P.slopeE; break;
       case 'down': e += P.slopeE; break;
       case 'lift': e = P.liftE; break;
+      case 'brake': e = Math.min(e, P.brakeE); brakes++; break;
+      case 'loop':
+        if (e < P.loopMinE && error === null) {
+          error = `${i + 1}번째 조각: 속도가 부족해 루프를 못 넘음`;
+          stallIndex = i;
+        }
+        e -= P.loopE;
+        loops++;
+        break;
       default: break;
     }
     if (p.type !== 'lift') e -= P.frictionE;
-    if (e < P.minE && error === null) error = `${i + 1}번째 조각에서 열차가 멈춥니다 (리프트나 내리막이 필요합니다)`;
+    if (e < P.minE && error === null) {
+      error = `${i + 1}번째 조각에서 열차가 멈춥니다 (리프트나 내리막이 필요합니다)`;
+      stallIndex = i;
+    }
     e = Math.max(e, P.minE);
     const v = Math.sqrt(e);
     speeds.push(v);
@@ -248,20 +297,34 @@ function simulate(b: Building, placed: PlacedPiece[]): Sim {
     pts.push({ x, y, h, w });
   };
   const sv = Math.sqrt(P.startE);
-  add(station[0].x + 0.5 - sdx * 0.5, station[0].y + 0.5 - sdy * 0.5, 0, sv);
-  for (const s of station) add(s.x + 0.5, s.y + 0.5, 0, sv, pts[pts.length - 1]);
+  const base = b.baseH ?? 0;
+  add(station[0].x + 0.5 - sdx * 0.5, station[0].y + 0.5 - sdy * 0.5, base, sv);
+  for (const s of station) add(s.x + 0.5, s.y + 0.5, base, sv, pts[pts.length - 1]);
   const lastS = station[2];
-  add(lastS.x + 0.5 + sdx * 0.5, lastS.y + 0.5 + sdy * 0.5, 0, sv, pts[pts.length - 1]);
+  add(lastS.x + 0.5 + sdx * 0.5, lastS.y + 0.5 + sdy * 0.5, base, sv, pts[pts.length - 1]);
   const holdIdx = 2; // 두 번째 역 칸 중심(선두가 서는 곳)
+  const pieceIdx: [number, number][] = [];
   placed.forEach((p, i) => {
     const v = speeds[i];
     const [odx, ody] = DIRS[p.dirOut];
     const cx = p.x + 0.5;
     const cy = p.y + 0.5;
     const hMid = (p.hIn + p.hOut) / 2;
+    const first = pts.length;
     // 입구 가장자리는 이전 조각의 출구 가장자리와 같은 점이라 건너뛴다
-    add(cx, cy, hMid, v, pts[pts.length - 1]);
+    if (p.type === 'loop') {
+      // 수직 원: 아래에서 앞으로 올라가 꼭대기에서 뒤집힌 뒤 내려와 앞으로 빠져나간다
+      const N = 12;
+      for (let k = 0; k <= N; k++) {
+        const th = (k / N) * Math.PI * 2;
+        const along = 0.42 * Math.sin(th);
+        add(cx + odx * along, cy + ody * along, p.hIn + (1 - Math.cos(th)) * (LOOP_RISE / 2), v, pts[pts.length - 1]);
+      }
+    } else {
+      add(cx, cy, hMid, v, pts[pts.length - 1]);
+    }
     add(cx + odx * 0.5, cy + ody * 0.5, p.hOut, v, pts[pts.length - 1]);
+    pieceIdx.push([first, pts.length - 1]);
   });
   // 닫힌 코스라면 마지막 점이 역의 입구 가장자리(첫 점)와 같은 위치다
   const total = pts.reduce((s, p) => s + p.w, 0) || 1;
@@ -271,22 +334,25 @@ function simulate(b: Building, placed: PlacedPiece[]): Sim {
     return { x: p.x, y: p.y, h: p.h, t: acc / total };
   });
   const holdT = route[holdIdx]?.t ?? 0;
-
-  if (placed.length === 0) return { error, stats: null, route, holdT };
-
+  const pieceT = pieceIdx.map(([a, b2]): [number, number] => [route[Math.max(0, a - 1)].t, route[b2].t]);
   const ticks = total * P.tileTicks;
+  const lapTicks = clamp(Math.round(ticks), 60, 900);
+
+  if (placed.length === 0) return { error, stats: null, route, holdT, speeds, pieceT, stallIndex, lapTicks };
   const stats: CoasterStats = {
     length: placed.length,
     maxSpeed: Math.round(maxV * P.kmh),
     maxDrop,
-    maxHeight,
+    maxHeight: Math.max(0, maxHeight - base),
     turns,
-    fun: clamp(Math.round(15 + 0.8 * placed.length + 5 * maxDrop + 1.5 * turns + 1.5 * maxHeight), 5, 100),
-    intensity: clamp(Math.round((maxV - 0.9) * 45 + maxDrop * 4 + fastTurns * 3), 0, 100),
-    nausea: clamp(Math.round(turns * 1.5 + maxTurnRun * 7 + hillChanges * 0.5), 0, 100),
-    duration: clamp(Math.round(ticks), 60, 900),
+    loops,
+    fun: clamp(Math.round(15 + 0.8 * placed.length + 5 * maxDrop + 1.5 * turns + 1.5 * maxHeight + 12 * Math.min(loops, 3)), 5, 100),
+    // 브레이크는 열차를 달래 줘서 조각 하나당 강도를 5 깎는다(최대 3개)
+    intensity: clamp(Math.round((maxV - 0.9) * 45 + maxDrop * 4 + fastTurns * 3 + 10 * Math.min(loops, 3) - 5 * Math.min(brakes, 3)), 0, 100),
+    nausea: clamp(Math.round(turns * 1.5 + maxTurnRun * 7 + hillChanges * 0.5 + 8 * loops), 0, 100),
+    duration: lapTicks,
   };
-  return { error, stats, route, holdT };
+  return { error, stats, route, holdT, speeds, pieceT, stallIndex, lapTicks };
 }
 
 /** 열차 경로 위 비율 t(0~1)의 위치 */

@@ -2,7 +2,9 @@ import { sceneryDef, type SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef, buildingTiles, newTrack } from './coaster';
 import type { Tile } from './map';
+import { trackOccupancy } from './trackedit';
 import { evictAll } from './venue';
+import { MAX_RELIABILITY } from './ride';
 import { type Building, World } from './world';
 
 export const PATH_COST = 10;
@@ -10,7 +12,7 @@ export const PATH_REFUND = 5;
 export const REFUND_RATE = 0.5;
 
 export interface Footprint { x: number; y: number; w: number; h: number }
-export type PlaceFailure = 'bounds' | 'occupied' | 'path' | 'money';
+export type PlaceFailure = 'bounds' | 'occupied' | 'path' | 'slope' | 'money';
 export type PlaceCheck = { ok: true } | { ok: false; reason: PlaceFailure };
 
 /** 회전(0~3)에 따른 풋프린트 크기. 홀수 회전은 가로/세로 교환. */
@@ -42,13 +44,24 @@ export function anchorFor(def: BuildingDef, rot: number, cursor: Tile): Tile {
 export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: number, rot: number): PlaceCheck {
   const f = footprintAt(def, x, y, rot);
   const map = world.map;
+  const occ = trackOccupancy(world);
   for (let ty = f.y; ty < f.y + f.h; ty++) {
     for (let tx = f.x; tx < f.x + f.w; tx++) {
       if (!map.inBounds(tx, ty)) return { ok: false, reason: 'bounds' };
       if (map.occupant[map.index(tx, ty)] !== 0) return { ok: false, reason: 'occupied' };
       if (map.path[map.index(tx, ty)] === 1) return { ok: false, reason: 'path' };
+      // 머리 위로 지나가는 트랙 아래에도 지을 수 없다
+      if (occ.has(map.index(tx, ty))) return { ok: false, reason: 'occupied' };
     }
   }
+  // 건물은 풋프린트와 입구 칸이 모두 같은 높이(평평한 땅)여야 한다.
+  // 입구 칸이 맵 밖이면 높이를 비교하지 않는다(기존 동작 유지).
+  const base = map.heightAt(f.x, f.y);
+  for (let ty = f.y; ty < f.y + f.h; ty++) {
+    for (let tx = f.x; tx < f.x + f.w; tx++) if (map.heightAt(tx, ty) !== base) return { ok: false, reason: 'slope' };
+  }
+  const e = entranceOf(f, rot);
+  if (map.inBounds(e.x, e.y) && map.heightAt(e.x, e.y) !== base) return { ok: false, reason: 'slope' };
   if (world.money < def.cost) return { ok: false, reason: 'money' };
   return { ok: true };
 }
@@ -69,8 +82,13 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
     price: def.price,
     served: 0,
     income: 0,
+    reliability: MAX_RELIABILITY,
+    broken: false,
+    brokenTicks: 0,
+    cycles: 0,
   };
   const map = world.map;
+  b.baseH = map.heightAt(f.x, f.y);
   for (let ty = f.y; ty < f.y + f.h; ty++) {
     for (let tx = f.x; tx < f.x + f.w; tx++) {
       map.occupant[map.index(tx, ty)] = b.id;
@@ -95,8 +113,11 @@ export function demolishAt(world: World, x: number, y: number): number | null {
   const b = buildingAt(world, x, y);
   if (b) {
     evictAll(world, b);
-    // 롤러코스터는 역 풋프린트뿐 아니라 트랙이 차지한 타일도 비운다
-    for (const t of buildingTiles(b)) map.occupant[map.index(t.x, t.y)] = 0;
+    // 롤러코스터는 역 풋프린트뿐 아니라 트랙이 차지한 타일도 비운다(다른 건물/코스터의 점유는 건드리지 않는다)
+    for (const t of buildingTiles(b)) {
+      const i = map.index(t.x, t.y);
+      if (map.occupant[i] === b.id) map.occupant[i] = 0;
+    }
     world.buildings.delete(b.id);
     // 코스터의 cost는 지금까지 쓴 돈(역 + 조각)이라 환급도 그 절반
     const refund = Math.floor(buildingDef(b).cost * REFUND_RATE);

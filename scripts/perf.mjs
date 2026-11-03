@@ -38,6 +38,17 @@ try {
       const b = mod.placeBuilding(w, data.getDef('coaster'), 30, sy, 0);
       for (const ch of 'CCCLDDDLSSSSSSSLSSSLS') te.appendPiece(w, b, KIND[ch]);
     }
+    // 지형: 길·건물 반대쪽(x<20)에 언덕을 깔아 지면 조각이 비탈·절벽을 그리는 비용을 포함한다
+    for (let y = 8; y < 47; y++) for (let x = 0; x < 20; x++) {
+      w.map.setHeight(x, y, Math.round(2 + 1.5 * Math.sin(x / 3) * Math.cos(y / 3)));
+    }
+    for (let k = 0; k < 6; k++) for (let y = 8; y < 47; y++) for (let x = 0; x < 19; x++) {
+      for (const [dx, dy] of [[1, 0], [0, 1]]) {
+        const a = w.map.heightAt(x, y), b = w.map.heightAt(x + dx, y + dy);
+        if (b > a + 1) w.map.setHeight(x + dx, y + dy, a + 1);
+        if (a > b + 1) w.map.setHeight(x, y, b + 1);
+      }
+    }
     window.__coasters = [...w.buildings.values()].filter((b) => b.track?.ok).length;
     window.__ops = [...w.buildings.values()].filter((b) => !b.track && w.network.isOperational(b)).length;
   });

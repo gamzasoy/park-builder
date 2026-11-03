@@ -1,5 +1,6 @@
+import { hash32 } from '../core/hash';
 import type { BuildingDef } from '../data/types';
-import { applyEffects, goIdle, remember, type Guest } from './guest';
+import { applyEffects, goIdle, remember, think, TRASH_MAX, TRASH_MIN, type Guest, type Thought } from './guest';
 import type { Building, World } from './world';
 
 /** 대기열 맨 앞의 유효한 손님에게 요금을 받고 시설에 들인다. 들일 손님이 없으면 null. */
@@ -30,6 +31,10 @@ export function release(world: World, b: Building, def: BuildingDef, id: number)
   const g = world.guestById.get(id);
   if (!g) return;
   applyEffects(g, def);
+  // 먹고 마신 손님은 곧 쓰레기를 버린다(시점은 손님 id·틱으로 결정)
+  if (def.serves === 'hunger' || def.serves === 'thirst') {
+    g.trash = TRASH_MIN + (hash32(g.id, world.tick, 11) % (TRASH_MAX - TRASH_MIN + 1));
+  }
   goIdle(g);
 }
 
@@ -42,10 +47,12 @@ export function renumberQueue(world: World, b: Building): void {
 }
 
 /** 철거 등으로 시설이 사라질 때 줄 서 있거나 이용 중인 손님을 모두 내보냄 */
-export function evictAll(world: World, b: Building): void {
+export function evictAll(world: World, b: Building, thought?: Thought): void {
   for (const id of [...b.queue, ...b.inside]) {
     const g = world.guestById.get(id);
-    if (g) goIdle(g);
+    if (!g) continue;
+    goIdle(g);
+    if (thought) think(g, thought);
   }
   b.queue.length = 0;
   b.inside.length = 0;
