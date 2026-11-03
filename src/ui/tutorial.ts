@@ -105,7 +105,9 @@ export class TutorialPanel {
     try {
       const raw = defaultStorage()?.getItem(PREF_KEY);
       const o = raw ? JSON.parse(raw) : null;
-      return { collapsed: o?.collapsed === true, hidden: o?.hidden === true };
+      // 휴대폰 가로 화면에서는 접힌 상태로 시작(저장된 선택이 없을 때)
+      const mobile = window.matchMedia?.('(pointer: coarse) and (max-height: 520px)').matches === true;
+      return { collapsed: o ? o.collapsed === true : mobile, hidden: o?.hidden === true };
     } catch {
       return { collapsed: false, hidden: false };
     }
