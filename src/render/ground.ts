@@ -182,6 +182,101 @@ function addForestTree(
   }
 }
 
+/** 지형 칸 하나(윗면 + 앞쪽 두 변의 절벽). 지면 조각과, 언덕 뒤 손님·건물을 가리는 다시 그리기가 함께 쓴다 */
+export function paintTerrainTile(
+  ctx: CanvasRenderingContext2D, map: TileMap, tx: number, ty: number,
+  P: (tx: number, ty: number, lv?: number) => Vec2, z: number,
+): void {
+  const showTufts = z >= 0.6;
+  ctx.lineJoin = 'round';
+  const face = (pts: Vec2[], fill: string): void => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+  const [cT, cR, cB, cL] = cornerLevels(map, tx, ty);
+  const T = P(tx, ty, cT);
+  const R = P(tx + 1, ty, cR);
+  const B = P(tx + 1, ty + 1, cB);
+  const L = P(tx, ty + 1, cL);
+  const isPath = map.isPath(tx, ty);
+  const t = map.heightAt(tx, ty);
+
+  // 윗면: 왼쪽에서 오는 빛 — 오른쪽이 높은(왼쪽을 향한) 비탈은 밝게, 반대는 어둡게. 높은 땅은 살짝 밝게
+  const lit = 1 + 0.09 * (cR - cL) + 0.1 * t;
+  if (isPath) {
+    face([T, R, B, L], shade(PATH_TONES[(tx + ty) & 1], lit));
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 1;
+    // 포장 줄눈: 마주 보는 변의 중점끼리 잇는 선
+    const mid = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const mTR = mid(T, R); const mRB = mid(R, B); const mBL = mid(B, L); const mLT = mid(L, T);
+    ctx.beginPath();
+    ctx.moveTo(mLT.x, mLT.y); ctx.lineTo(mRB.x, mRB.y);
+    ctx.moveTo(mTR.x, mTR.y); ctx.lineTo(mBL.x, mBL.y);
+    ctx.stroke();
+    // 연석: 길이 아닌 이웃과 맞닿은 변
+    ctx.strokeStyle = '#6f6e68';
+    ctx.lineWidth = Math.max(1, 2 * z);
+    ctx.beginPath();
+    if (!map.isPath(tx, ty - 1)) { ctx.moveTo(T.x, T.y); ctx.lineTo(R.x, R.y); }
+    if (!map.isPath(tx - 1, ty)) { ctx.moveTo(T.x, T.y); ctx.lineTo(L.x, L.y); }
+    ctx.stroke();
+    const curb = (a: Vec2, b: Vec2): void => {
+      face([a, b, { x: b.x, y: b.y - 2.5 * z }, { x: a.x, y: a.y - 2.5 * z }], '#7d7c76');
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    };
+    if (!map.isPath(tx + 1, ty)) curb(R, B);
+    if (!map.isPath(tx, ty + 1)) curb(L, B);
+  } else {
+    face([T, R, B, L], shade(GRASS[Math.floor(tileHash(tx, ty, 2) * GRASS.length)], lit));
+    if (showTufts) {
+      const hw = (TILE_W / 2) * z;
+      const hh = (TILE_H / 2) * z;
+      const c = { x: T.x, y: T.y + hh };
+      ctx.lineWidth = Math.max(1, z);
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.strokeStyle = pass === 0 ? '#2d6c2a' : '#5ea951';
+        ctx.beginPath();
+        for (let i = pass === 0 ? 0 : 2; i < (pass === 0 ? 2 : 3); i++) {
+          const u = tileHash(tx, ty, 10 + i) - 0.5;
+          const v = tileHash(tx, ty, 20 + i) - 0.5;
+          const px = c.x + (u - v) * hw * 0.9;
+          const py = c.y + (u + v) * hh * 0.9;
+          ctx.moveTo(px - 2 * z, py); ctx.lineTo(px - 1 * z, py - 3 * z);
+          ctx.moveTo(px, py); ctx.lineTo(px + 0.5 * z, py - 4 * z);
+          ctx.moveTo(px + 2 * z, py); ctx.lineTo(px + 2.5 * z, py - 2.5 * z);
+        }
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 절벽 옆면: 앞쪽 변(+x 이웃과 R-B, +y 이웃과 L-B)에서 이웃의 윗면보다 높은 만큼
+  const side = isPath ? [STONE_L, STONE_R] : [DIRT_L, DIRT_R];
+  const east = cornerLevels(map, tx + 1, ty);
+  const south = cornerLevels(map, tx, ty + 1);
+  const wall = (a: Vec2, b: Vec2, ha: number, hb: number, na: number, nb: number, pa: [number, number], pb: [number, number], fill: string): void => {
+    const la = Math.min(ha, na);
+    const lb = Math.min(hb, nb);
+    if (ha - la < 0.01 && hb - lb < 0.01) return;
+    const a2 = P(pa[0], pa[1], la);
+    const b2 = P(pb[0], pb[1], lb);
+    // 아래 칸 윗면과 맞닿는 이음새가 비치지 않게 1px 겹친다
+    face([a, b, { x: b2.x, y: b2.y + 1 }, { x: a2.x, y: a2.y + 1 }], fill);
+    if (!isPath) {
+      ctx.strokeStyle = '#2f6e2c';
+      ctx.lineWidth = Math.max(1.5, 2.5 * z);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+  };
+  wall(L, B, cL, cB, south[0], south[1], [tx, ty + 1], [tx + 1, ty + 1], side[0]);
+  wall(R, B, cR, cB, east[0], east[3], [tx + 1, ty], [tx + 1, ty + 1], side[1]);
+}
+
 /**
  * 지형이 있는 조각: 칸마다 (뒤→앞 순서로) 윗면 + 앞쪽 두 변의 절벽 옆면을 그린다.
  * 앞 칸이 뒤 칸을 가려야 해서 평지처럼 색별로 모아 그릴 수 없다. 조각은 캐시되므로 지형·길을 고칠 때만 든다.
@@ -191,17 +286,8 @@ function paintTerrainChunk(
   P: (tx: number, ty: number, lv?: number) => Vec2, z: number,
 ): void {
   const trees: { x: number; y: number; kind: number; seed: number }[] = [];
-  const showTufts = z >= 0.6;
   ctx.lineJoin = 'round';
 
-  const face = (pts: Vec2[], fill: string): void => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-  };
 
   for (let ty = ty0; ty < ty0 + CHUNK; ty++) {
     for (let tx = tx0; tx < tx0 + CHUNK; tx++) {
@@ -209,84 +295,7 @@ function paintTerrainChunk(
         addForestTree(trees, tx, ty, P(tx, ty), (TILE_H / 2) * z, map);
         continue;
       }
-      const [cT, cR, cB, cL] = cornerLevels(map, tx, ty);
-      const T = P(tx, ty, cT);
-      const R = P(tx + 1, ty, cR);
-      const B = P(tx + 1, ty + 1, cB);
-      const L = P(tx, ty + 1, cL);
-      const isPath = map.isPath(tx, ty);
-      const t = map.heightAt(tx, ty);
-
-      // 윗면: 왼쪽에서 오는 빛 — 오른쪽이 높은(왼쪽을 향한) 비탈은 밝게, 반대는 어둡게. 높은 땅은 살짝 밝게
-      const lit = 1 + 0.09 * (cR - cL) + 0.1 * t;
-      if (isPath) {
-        face([T, R, B, L], shade(PATH_TONES[(tx + ty) & 1], lit));
-        ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-        ctx.lineWidth = 1;
-        // 포장 줄눈: 마주 보는 변의 중점끼리 잇는 선
-        const mid = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-        const mTR = mid(T, R); const mRB = mid(R, B); const mBL = mid(B, L); const mLT = mid(L, T);
-        ctx.beginPath();
-        ctx.moveTo(mLT.x, mLT.y); ctx.lineTo(mRB.x, mRB.y);
-        ctx.moveTo(mTR.x, mTR.y); ctx.lineTo(mBL.x, mBL.y);
-        ctx.stroke();
-        // 연석: 길이 아닌 이웃과 맞닿은 변
-        ctx.strokeStyle = '#6f6e68';
-        ctx.lineWidth = Math.max(1, 2 * z);
-        ctx.beginPath();
-        if (!map.isPath(tx, ty - 1)) { ctx.moveTo(T.x, T.y); ctx.lineTo(R.x, R.y); }
-        if (!map.isPath(tx - 1, ty)) { ctx.moveTo(T.x, T.y); ctx.lineTo(L.x, L.y); }
-        ctx.stroke();
-        const curb = (a: Vec2, b: Vec2): void => {
-          face([a, b, { x: b.x, y: b.y - 2.5 * z }, { x: a.x, y: a.y - 2.5 * z }], '#7d7c76');
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        };
-        if (!map.isPath(tx + 1, ty)) curb(R, B);
-        if (!map.isPath(tx, ty + 1)) curb(L, B);
-      } else {
-        face([T, R, B, L], shade(GRASS[Math.floor(tileHash(tx, ty, 2) * GRASS.length)], lit));
-        if (showTufts) {
-          const hw = (TILE_W / 2) * z;
-          const hh = (TILE_H / 2) * z;
-          const c = { x: T.x, y: T.y + hh };
-          ctx.lineWidth = Math.max(1, z);
-          for (let pass = 0; pass < 2; pass++) {
-            ctx.strokeStyle = pass === 0 ? '#2d6c2a' : '#5ea951';
-            ctx.beginPath();
-            for (let i = pass === 0 ? 0 : 2; i < (pass === 0 ? 2 : 3); i++) {
-              const u = tileHash(tx, ty, 10 + i) - 0.5;
-              const v = tileHash(tx, ty, 20 + i) - 0.5;
-              const px = c.x + (u - v) * hw * 0.9;
-              const py = c.y + (u + v) * hh * 0.9;
-              ctx.moveTo(px - 2 * z, py); ctx.lineTo(px - 1 * z, py - 3 * z);
-              ctx.moveTo(px, py); ctx.lineTo(px + 0.5 * z, py - 4 * z);
-              ctx.moveTo(px + 2 * z, py); ctx.lineTo(px + 2.5 * z, py - 2.5 * z);
-            }
-            ctx.stroke();
-          }
-        }
-      }
-
-      // 절벽 옆면: 앞쪽 변(+x 이웃과 R-B, +y 이웃과 L-B)에서 이웃의 윗면보다 높은 만큼
-      const side = isPath ? [STONE_L, STONE_R] : [DIRT_L, DIRT_R];
-      const east = cornerLevels(map, tx + 1, ty);
-      const south = cornerLevels(map, tx, ty + 1);
-      const wall = (a: Vec2, b: Vec2, ha: number, hb: number, na: number, nb: number, pa: [number, number], pb: [number, number], fill: string): void => {
-        const la = Math.min(ha, na);
-        const lb = Math.min(hb, nb);
-        if (ha - la < 0.01 && hb - lb < 0.01) return;
-        const a2 = P(pa[0], pa[1], la);
-        const b2 = P(pb[0], pb[1], lb);
-        // 아래 칸 윗면과 맞닿는 이음새가 비치지 않게 1px 겹친다
-        face([a, b, { x: b2.x, y: b2.y + 1 }, { x: a2.x, y: a2.y + 1 }], fill);
-        if (!isPath) {
-          ctx.strokeStyle = '#2f6e2c';
-          ctx.lineWidth = Math.max(1.5, 2.5 * z);
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        }
-      };
-      wall(L, B, cL, cB, south[0], south[1], [tx, ty + 1], [tx + 1, ty + 1], side[0]);
-      wall(R, B, cR, cB, east[0], east[3], [tx + 1, ty], [tx + 1, ty + 1], side[1]);
+      paintTerrainTile(ctx, map, tx, ty, P, z);
     }
   }
   trees.sort((a, b) => a.y - b.y);
@@ -389,4 +398,31 @@ function paintChunk(
   // 숲은 화면 위(뒤)부터
   trees.sort((a, b) => a.y - b.y);
   for (const t of trees) drawScenery(ctx, t.kind, t.x, t.y, z, t.seed);
+}
+
+/**
+ * 지점 (x, y)(타일 좌표, 땅 높이 h단계)에 서 있는 키 bodyPx짜리 물체를 화면에서 가리는, 앞쪽의 솟은 칸들을 out에 모은다.
+ * 지면은 캐시해 먼저 그리므로, 이 칸들을 물체보다 나중에 다시 그려 언덕 뒤에 선 것이 앞면 위로 비치지 않게 한다.
+ * 칸의 위 꼭짓점이 발끝보다 위로 올라와 있고 아래 꼭짓점이 머리 아래에 있으면 가린다. 같은 높이의 칸은 해당하지 않는다.
+ */
+export function occludingTiles(map: TileMap, x: number, y: number, h: number, bodyPx: number, out: Map<number, { tx: number; ty: number }>): void {
+  const sum = x + y;
+  const diff = x - y;
+  const k0 = Math.floor(sum);
+  const feet = sum * (TILE_H / 2) - terrainPx(h);
+  for (let s = 1; s <= 9; s++) {
+    const tsum = k0 + s;
+    for (let d = Math.ceil(diff - 1); d <= Math.floor(diff + 1); d++) {
+      if (((tsum + d) & 1) !== 0) continue;
+      const tx = (tsum + d) / 2;
+      const ty = (tsum - d) / 2;
+      if (!map.inBounds(tx, ty)) continue;
+      const c = cornerLevels(map, tx, ty);
+      const yT = tsum * (TILE_H / 2) - terrainPx(c[0]);
+      if (yT >= feet - 2) continue;
+      const yB = (tsum + 2) * (TILE_H / 2) - terrainPx(c[2]);
+      if (yB < feet - bodyPx) continue;
+      out.set(ty * 4096 + tx, { tx, ty });
+    }
+  }
 }

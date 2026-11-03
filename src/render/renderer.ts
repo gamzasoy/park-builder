@@ -12,7 +12,7 @@ import type { Camera } from './camera';
 import { shade } from './color';
 import { guestDisplayPos, staffDisplayPos } from './guestpos';
 import { BUBBLE_FONT, POSITIVE, THOUGHT_TEXT } from './thoughts';
-import { GroundCache } from './ground';
+import { GroundCache, occludingTiles, paintTerrainTile } from './ground';
 import { drawRideSprite, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, terrainPx, tileToWorld, type Vec2 } from './iso';
 import { cornerLevels, surfaceLevel } from './relief';
@@ -30,6 +30,15 @@ export interface View {
 }
 
 const groundCache = new GroundCache();
+
+let raisedFor: { map: TileMap; version: number; any: boolean } | null = null;
+/** 솟은 칸이 하나라도 있는가(없으면 가림 처리를 통째로 건너뛴다). 지형이 바뀔 때만 다시 센다 */
+function hasRaisedTerrain(map: TileMap): boolean {
+  if (!raisedFor || raisedFor.map !== map || raisedFor.version !== map.version) {
+    raisedFor = { map, version: map.version, any: map.terrain.some((v) => v > 0) };
+  }
+  return raisedFor.any;
+}
 
 export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: World, view: View): void {
   const { hover, preview, alpha, selectedId, selectedGuestId } = view;
@@ -98,6 +107,17 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   addSceneryTiles(scenery, ctx, cam, map, tileScreen, visible, hh);
   const gs = tileScreen(map.gate.x, map.gate.y, map.heightAt(map.gate.x, map.gate.y));
   if (visible(gs)) scenery.push({ key: map.gate.x + map.gate.y + 1.6, draw: () => drawGate(ctx, cam, map.gate, map.heightAt(map.gate.x, map.gate.y)) });
+  // 언덕 뒤에 선 건물·손님이 언덕 앞면 위로 비치지 않게, 그것을 가리는 솟은 칸을 물체 뒤에 다시 그린다
+  if (hasRaisedTerrain(map)) {
+    const occ = new Map<number, { tx: number; ty: number }>();
+    for (const w of walkers) occludingTiles(map, w.x, w.y, w.h, 40, occ);
+    for (const b of buildings) {
+      occludingTiles(map, b.x + b.w, b.y + b.h, map.heightAt(b.x, b.y), Math.min(getDef(b.defId).height, 60) + 10, occ);
+    }
+    for (const { tx, ty } of occ.values()) {
+      scenery.push({ key: tx + ty, draw: () => paintTerrainTile(ctx, map, tx, ty, tileScreen, cam.zoom) });
+    }
+  }
   scenery.sort((a, b) => a.key - b.key);
 
   let si = 0;
