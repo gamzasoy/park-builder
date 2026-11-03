@@ -25,4 +25,10 @@ export interface BuildingDef {
   fun?: number;
   /** 매점이 해소하는 욕구 */
   serves?: NeedKey;
+  /** true면 플레이어가 트랙을 직접 이어 만드는 롤러코스터(역 정의) */
+  coaster?: boolean;
+  /** 강도(0~100): 높으면 손님이 덜 즐거워한다. 계산된 코스터에만 있다 */
+  intensity?: number;
+  /** 멀미(0~100): 높으면 손님 에너지를 더 깎는다. 계산된 코스터에만 있다 */
+  nausea?: number;
 }

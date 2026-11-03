@@ -1,10 +1,11 @@
-import { getDef } from '../data';
+import { buildingDef } from './coaster';
 import { DAY_TICKS, settleDay } from './economy';
 import { updateGuest } from './guest';
 import { trackDebt, updateGoals } from './goals';
 import { RATING_EVERY, updateRating } from './rating';
 import { updateRide } from './ride';
 import { updateShop } from './shop';
+import { TUTORIAL_EVERY, updateTutorial } from './tutorial';
 import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
 import type { World } from './world';
@@ -14,7 +15,7 @@ export function stepGuests(world: World): void {
   world.tick++;
   world.guestById = new Map(world.guests.map((g) => [g.id, g]));
   for (const b of world.buildings.values()) {
-    const def = getDef(b.defId);
+    const def = buildingDef(b);
     if (def.kind === 'ride') updateRide(world, b, def);
     else updateShop(world, b, def);
     renumberQueue(world, b);
@@ -38,5 +39,6 @@ export function stepWorld(world: World): void {
     settleDay(world);
     trackDebt(world);
   }
+  if (world.tick % TUTORIAL_EVERY === 0) updateTutorial(world);
   updateGoals(world);
 }

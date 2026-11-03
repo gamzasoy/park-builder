@@ -7,12 +7,16 @@ import { tileToWorld } from './render/iso';
 import { drawFrame } from './render/renderer';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { DAY_TICKS, DAYS_PER_MONTH } from './sim/economy';
+import { createGuest } from './sim/guest';
 import { stepWorld } from './sim/sim';
 import { World } from './sim/world';
 import { Hud, won } from './ui/hud';
 import { Modal } from './ui/modal';
 import { BuildingPanel, FinancePanel, GuestPanel } from './ui/panels';
 import { Sound } from './ui/sound';
+import { TrackEditor } from './ui/trackEditor';
+import { TutorialPanel } from './ui/tutorial';
+import type { TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
 const AUTOSAVE_MS = 15_000;
@@ -58,6 +62,7 @@ function newGame(): void {
   world.adopt(fresh);
   tools.reset();
   financePanel.sync();
+  tutorialPanel.reset();
   seenReports = world.reports.length;
   loop.speed = 1;
   modal.hide();
@@ -121,6 +126,7 @@ const loop = new GameLoop(
   () => stepWorld(world),
   (alpha) => {
     const now = performance.now();
+    input.arrowsPan = tools.tool.kind !== 'track';
     input.update(Math.min((now - lastFrame) / 1000, 0.1));
     lastFrame = now;
     drawFrame(ctx, cam, world, {
@@ -134,6 +140,8 @@ const loop = new GameLoop(
     toolbar.sync();
     buildingPanel.update();
     guestPanel.update();
+    trackEditor.update();
+    tutorialPanel.update();
     financePanel.update();
     watchReports();
     watchStatus();
@@ -150,10 +158,21 @@ const hud = new Hud(world, tools, loop, {
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools);
 const buildingPanel = new BuildingPanel(world, tools);
 const guestPanel = new GuestPanel(world, tools);
+const trackEditor = new TrackEditor(world, tools);
+const tutorialPanel = new TutorialPanel(world, toolbar);
 
 input.onLeftDown = (t, pos) => tools.onDown(t, pos);
 input.onLeftUp = (t) => tools.onUp(t);
+const TRACK_KEYS: Record<string, TrackType> = {
+  arrowup: 'straight', arrowleft: 'left', arrowright: 'right', pageup: 'up', pagedown: 'down', c: 'lift',
+};
 input.onKeyDown = (k) => {
+  // 트랙 편집 중에는 방향키·PgUp/PgDn·C로 다음 조각을 잇는다
+  if (tools.tool.kind === 'track') {
+    if (TRACK_KEYS[k]) return tools.placeTrackPiece(TRACK_KEYS[k]);
+    if (k === 'backspace') return tools.undoTrackPiece();
+    if (k === 'enter') return tools.endTrackEdit();
+  }
   if (k === 'r') tools.rotate();
   else if (k === 'escape') tools.cancel();
   // 속도 단축키: Space 일시정지 토글, 1/2/3 = 1x/2x/4x
@@ -192,5 +211,27 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__game = {
     world,
     step: (n: number) => { for (let i = 0; i < n; i++) stepWorld(world); },
+    /** 타일 중앙의 화면 좌표(E2E에서 실제 마우스 입력용) */
+    tileToScreen: (tx: number, ty: number) => {
+      const w = tileToWorld(tx + 0.5, ty + 0.5);
+      const s = cam.worldToScreen(w.x, w.y);
+      const r = canvas.getBoundingClientRect();
+      return { x: s.x + r.left, y: s.y + r.top };
+    },
+    /** 성능 측정용: 손님 n명을 공원 입구에 즉시 생성 */
+    spawn: (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const g = createGuest(world);
+        g.money = 1000;
+        world.guests.push(g);
+        world.stats.entered++;
+      }
+    },
+    /** 렌더 1회 실행(성능 측정용) */
+    render: () => drawFrame(ctx, cam, world, {
+      hover: null, preview: null, alpha: 0.5, selectedId: null, selectedGuestId: null,
+    }),
+    setSpeed: (s: 0 | 1 | 2 | 4) => { loop.speed = s; },
+    setZoom: (z: number) => { cam.zoom = z; },
   };
 }

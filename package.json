@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "node scripts/e2e.mjs",
+    "perf": "node scripts/perf.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

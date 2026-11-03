@@ -1,18 +1,25 @@
 import { getDef } from '../data';
+import { buildingTiles, restoreTrack, type TrackType } from '../sim/coaster';
 import type { Guest } from '../sim/guest';
+import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import type { Tile } from '../sim/map';
 import {
   type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
 } from '../sim/world';
 
 /** 저장 형식 버전. 형식을 바꾸면 올리고 migrate에서 이전 버전을 변환한다. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'park-builder-save';
 export const BACKUP_KEY = 'park-builder-save.bak';
 
 /** 걷는 손님의 경로는 [x0, y0, x1, y1, ...]로 납작하게 저장 */
 interface GuestSave extends Omit<Guest, 'path'> {
   path: number[];
+}
+
+/** 코스터 트랙은 조각 목록과 지출만 저장하고 나머지는 불러올 때 다시 계산한다 */
+interface BuildingSave extends Omit<Building, 'track'> {
+  track?: { pieces: TrackType[]; spent: number };
 }
 
 export interface SaveData {
@@ -38,8 +45,10 @@ export interface SaveData {
   endReason: string;
   goalHold: number;
   debtDays: number;
-  buildings: Building[];
+  buildings: BuildingSave[];
   guests: GuestSave[];
+  /** v2에서 추가. 없으면(이전 저장본) 안내를 이미 끝낸 것으로 본다 */
+  tutorial?: TutorialState;
 }
 
 const flatten = (path: readonly Tile[]): number[] => path.flatMap((t) => [t.x, t.y]);
@@ -73,7 +82,10 @@ export function serializeWorld(world: World): SaveData {
     endReason: world.endReason,
     goalHold: world.goalHold,
     debtDays: world.debtDays,
-    buildings: [...world.buildings.values()],
+    tutorial: { completed: [...world.tutorial.completed] },
+    buildings: [...world.buildings.values()].map(({ track, ...b }): BuildingSave => (
+      track ? { ...b, track: { pieces: [...track.pieces], spent: track.spent } } : b
+    )),
     guests: world.guests.map((g) => ({
       ...g,
       // 이동 중이 아니면 경로는 필요 없다(필요할 때 다시 계산)
@@ -107,7 +119,19 @@ export function deserializeWorld(data: SaveData): World {
         m.occupant[m.index(x, y)] = b.id;
       }
     }
-    w.buildings.set(b.id, { ...b, queue: [...b.queue], inside: [...b.inside] });
+    const { track: savedTrack, ...rest } = b;
+    const building: Building = { ...rest, queue: [...b.queue], inside: [...b.inside] };
+    if (savedTrack) {
+      // 트랙 상태를 다시 계산하고, 트랙이 차지한 타일도 점유로 표시
+      building.track = restoreTrack(building, savedTrack.pieces, savedTrack.spent);
+      for (const t of buildingTiles(building).slice(b.w * b.h)) {
+        if (!m.inBounds(t.x, t.y) || m.occupant[m.index(t.x, t.y)] !== 0 || m.path[m.index(t.x, t.y)] === 1) {
+          throw new Error('bad track footprint');
+        }
+        m.occupant[m.index(t.x, t.y)] = b.id;
+      }
+    }
+    w.buildings.set(b.id, building);
   }
 
   w.guests = data.guests.map((g) => ({
@@ -139,12 +163,18 @@ export function deserializeWorld(data: SaveData): World {
   w.endReason = String(data.endReason ?? '');
   w.goalHold = data.goalHold;
   w.debtDays = data.debtDays;
+  // 안내 진행 상황이 없는 저장본은 이미 하던 공원이므로 초보 안내를 다시 보여 주지 않는다
+  w.tutorial = {
+    completed: Array.isArray(data.tutorial?.completed)
+      ? data.tutorial.completed.filter((id): id is string => STEP_IDS.includes(id))
+      : [...STEP_IDS],
+  };
   return w;
 }
 
-/** 이전 버전 저장을 현재 형식으로 변환. 지원하지 않는 버전이면 null. (v1이 첫 버전이라 변환 없음) */
+/** 이전 버전 저장을 현재 형식으로 변환. 지원하지 않는 버전이면 null. (v1 → v2: 트랙 필드가 추가됐을 뿐이라 그대로 읽는다) */
 function migrate(data: { version?: unknown }): SaveData | null {
-  return data.version === SAVE_VERSION ? (data as SaveData) : null;
+  return data.version === SAVE_VERSION || data.version === 1 ? (data as SaveData) : null;
 }
 
 export type LoadResult =

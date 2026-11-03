@@ -12,6 +12,8 @@ export class Input {
   onLeftDown?: (t: Tile | null, pos: Vec2 | null) => void;
   onLeftUp?: (t: Tile | null) => void;
   onKeyDown?: (key: string) => void;
+  /** false면 방향키로 카메라를 움직이지 않는다(트랙 편집에서 방향키는 조각 선택). WASD는 항상 동작. */
+  arrowsPan = true;
 
   private keys = new Set<string>();
   private dragging = false;
@@ -37,8 +39,9 @@ export class Input {
   /** 매 프레임 호출: 키보드 팬. dt는 초. */
   update(dt: number): void {
     const k = this.keys;
-    const dx = (k.has('a') || k.has('arrowleft') ? 1 : 0) - (k.has('d') || k.has('arrowright') ? 1 : 0);
-    const dy = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
+    const ar = this.arrowsPan;
+    const dx = (k.has('a') || (ar && k.has('arrowleft')) ? 1 : 0) - (k.has('d') || (ar && k.has('arrowright')) ? 1 : 0);
+    const dy = (k.has('w') || (ar && k.has('arrowup')) ? 1 : 0) - (k.has('s') || (ar && k.has('arrowdown')) ? 1 : 0);
     if (dx || dy) this.cam.panByScreen(dx * PAN_SPEED * dt, dy * PAN_SPEED * dt);
   }
 

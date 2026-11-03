@@ -1,5 +1,5 @@
-import { getDef } from '../data';
 import type { BuildingDef } from '../data/types';
+import { buildingDef } from './coaster';
 import { fairPrice } from './economy';
 import type { Tile } from './map';
 import type { Building, World } from './world';
@@ -19,7 +19,7 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
@@ -175,7 +175,7 @@ function leaveCause(g: Guest): Thought | null {
 /** 운영 중인 시설 중 적정가보다 비싼 곳이 있는가 */
 function anyOverpriced(world: World): boolean {
   for (const b of world.buildings.values()) {
-    if (world.network.isOperational(b) && b.price > fairPrice(getDef(b.defId))) return true;
+    if (world.network.isOperational(b) && b.price > fairPrice(buildingDef(b))) return true;
   }
   return false;
 }
@@ -208,7 +208,7 @@ function pickTarget(world: World, g: Guest): { b: Building; path: readonly Tile[
 
   for (const b of world.buildings.values()) {
     if (!world.network.isOperational(b)) continue;
-    const def = getDef(b.defId);
+    const def = buildingDef(b);
     if (b.price > g.money || b.queue.length >= MAX_QUEUE) continue;
     const path = world.network.findPath(g.tile, b.entrance);
     if (!path) continue;
@@ -364,11 +364,14 @@ export function remember(g: Guest, buildingId: number): void {
 export function applyEffects(g: Guest, def: BuildingDef): void {
   const n = g.needs;
   if (def.kind === 'ride') {
-    n.happiness = clamp(n.happiness + (def.fun ?? 0) * 0.25);
-    n.energy = clamp(n.energy - 6);
+    // 강도가 너무 높은 코스터는 덜 즐겁고, 멀미가 심하면 에너지가 더 깎인다(일반 놀이기구는 둘 다 0)
+    const intensity = def.intensity ?? 0;
+    const gain = (def.fun ?? 0) * 0.25 * (intensity > 75 ? 0.5 : 1);
+    n.happiness = clamp(n.happiness + gain);
+    n.energy = clamp(n.energy - 6 - (def.nausea ?? 0) * 0.1);
     n.hunger = clamp(n.hunger + 4);
     n.thirst = clamp(n.thirst + 4);
-    think(g, 'fun');
+    think(g, intensity > 85 ? 'tooIntense' : 'fun');
   } else if (def.serves) {
     n[def.serves] = clamp(n[def.serves] - 70);
     n.happiness = clamp(n.happiness + 6);

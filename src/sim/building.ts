@@ -1,5 +1,5 @@
-import { getDef } from '../data';
 import type { BuildingDef } from '../data/types';
+import { buildingDef, buildingTiles, newTrack } from './coaster';
 import type { Tile } from './map';
 import { evictAll } from './venue';
 import { type Building, World } from './world';
@@ -73,6 +73,7 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
   for (let ty = f.y; ty < f.y + f.h; ty++) {
     for (let tx = f.x; tx < f.x + f.w; tx++) map.occupant[map.index(tx, ty)] = b.id;
   }
+  if (def.coaster) b.track = newTrack(b, def.cost);
   world.buildings.set(b.id, b);
   world.transact('construction', -def.cost);
   return b;
@@ -90,11 +91,11 @@ export function demolishAt(world: World, x: number, y: number): number | null {
   const b = buildingAt(world, x, y);
   if (b) {
     evictAll(world, b);
-    for (let ty = b.y; ty < b.y + b.h; ty++) {
-      for (let tx = b.x; tx < b.x + b.w; tx++) map.occupant[map.index(tx, ty)] = 0;
-    }
+    // 롤러코스터는 역 풋프린트뿐 아니라 트랙이 차지한 타일도 비운다
+    for (const t of buildingTiles(b)) map.occupant[map.index(t.x, t.y)] = 0;
     world.buildings.delete(b.id);
-    const refund = Math.floor(getDef(b.defId).cost * REFUND_RATE);
+    // 코스터의 cost는 지금까지 쓴 돈(역 + 조각)이라 환급도 그 절반
+    const refund = Math.floor(buildingDef(b).cost * REFUND_RATE);
     world.transact('construction', refund);
     return refund;
   }
