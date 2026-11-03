@@ -1,8 +1,15 @@
 import type { Speed } from '../core/loop';
 import type { ToolController } from '../input/tools';
 import { dateOf, setEntranceFee } from '../sim/economy';
+import { GOAL, goalProgress } from '../sim/goals';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
+
+export interface HudActions {
+  onFinance: () => void;
+  onSave: () => void;
+  onNewGame: () => void;
+}
 
 export const won = (n: number): string => `₩${n.toLocaleString('ko-KR')}`;
 /** 부호 포함 금액: +₩1,200 / −₩300 */
@@ -27,6 +34,7 @@ export class Hud {
   private guests = document.getElementById('guests')!;
   private rating = document.getElementById('rating')!;
   private hint = document.getElementById('hint')!;
+  private goal = document.getElementById('goal')!;
   private speedButtons = new Map<Speed, HTMLButtonElement>();
   private fee: Stepper;
   private shownSpeed: Speed | -1 = -1;
@@ -35,7 +43,7 @@ export class Hud {
     private world: World,
     private tools: ToolController,
     private clock: { speed: Speed },
-    onFinance: () => void,
+    actions: HudActions,
   ) {
     for (const s of SPEEDS) {
       const b = document.querySelector<HTMLButtonElement>(`button[data-speed="${s}"]`)!;
@@ -44,10 +52,15 @@ export class Hud {
     }
     this.fee = new Stepper(1, 5, (d) => setEntranceFee(this.world, this.world.entranceFee + d));
     document.getElementById('fee-ctl')!.append(this.fee.el);
-    document.getElementById('finance-btn')!.addEventListener('click', (e) => {
-      (e.currentTarget as HTMLElement).blur();
-      onFinance();
-    });
+    const wire = (id: string, fn: () => void): void => {
+      document.getElementById(id)!.addEventListener('click', (e) => {
+        (e.currentTarget as HTMLElement).blur();
+        fn();
+      });
+    };
+    wire('finance-btn', actions.onFinance);
+    wire('save-btn', actions.onSave);
+    wire('new-btn', actions.onNewGame);
   }
 
   update(): void {
@@ -74,7 +87,25 @@ export class Hud {
 
     this.fee.text = won(w.entranceFee);
 
+    this.updateGoal();
+
     const text = performance.now() < this.tools.messageUntil ? this.tools.message : HINTS[this.tools.tool.kind];
     setText(this.hint, text);
+  }
+
+  private updateGoal(): void {
+    const w = this.world;
+    if (w.status === 'won') return setText(this.goal, '목표 달성');
+    if (w.status === 'lost') return setText(this.goal, '게임 종료');
+    if (w.status === 'sandbox') return setText(this.goal, '자유 모드');
+
+    const p = goalProgress(w);
+    const mark = (ok: boolean): string => (ok ? '✓' : '');
+    setText(
+      this.goal,
+      `목표 ${GOAL.months}개월 내 · 손님 ${p.guests}/${GOAL.guests}${mark(p.guestsMet)}` +
+        ` · 평점 ${p.rating}/${GOAL.rating}${mark(p.ratingMet)}` +
+        ` · 유지 ${Math.round(p.hold * 100)}% · 남은 ${p.remainingDays}일`,
+    );
   }
 }

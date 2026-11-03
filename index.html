@@ -27,7 +27,7 @@
       .stepper button { padding: 1px 6px; min-width: 22px; }
       .stepper b { min-width: 52px; text-align: center; }
       .stepper.over b { color: #ff8a80; }
-      #finance-btn { padding: 3px 10px; }
+      #finance-btn, #save-btn, #new-btn { padding: 3px 10px; }
       #hint { position: fixed; top: 46px; left: 16px; padding: 4px 10px; border-radius: 6px; background: rgba(15,25,20,0.75); font-size: 13px; opacity: 0.95; pointer-events: none; }
 
       #toolbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 20px; flex-wrap: wrap; padding: 8px 16px; background: var(--panel); }
@@ -51,6 +51,18 @@
       #finance thead th:not(:first-child) { text-align: right; color: #fff; }
       #finance tr.total th, #finance tr.total td { border-top: 1px solid var(--line); font-weight: 700; color: #fff; }
       #f-extra { margin-top: 8px; color: var(--muted); font-size: 12px; }
+      #goal { position: fixed; top: 46px; right: 16px; padding: 4px 10px; border-radius: 6px; background: rgba(15,25,20,0.75); font-size: 13px; pointer-events: none; }
+
+      #modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); }
+      #modal .dialog { width: min(420px, calc(100vw - 32px)); padding: 20px 22px; background: #16241c; border: 1px solid var(--line); border-radius: 12px; }
+      #modal h2 { margin: 0 0 8px; font-size: 20px; }
+      #modal p { margin: 0 0 12px; color: #d6e4da; line-height: 1.5; }
+      #m-rows { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+      #m-rows th { text-align: left; font-weight: 400; color: var(--muted); padding: 4px 0; }
+      #m-rows td { text-align: right; padding: 4px 0; font-variant-numeric: tabular-nums; }
+      #m-buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+      #m-buttons button { padding: 7px 14px; }
+      #m-buttons button.primary { background: var(--accent); border-color: #8fe0aa; font-weight: 600; }
     </style>
   </head>
   <body>
@@ -68,8 +80,11 @@
       </span>
       <span class="fee">입장료 <span id="fee-ctl"></span></span>
       <button id="finance-btn">재무</button>
+      <button id="save-btn" title="지금 저장 (자동 저장도 됩니다)">저장</button>
+      <button id="new-btn">새 게임</button>
     </div>
     <div id="hint"></div>
+    <div id="goal"></div>
     <div id="panel" class="card" hidden>
       <div class="head"><b id="p-name"></b><button id="p-close" title="닫기 (Esc)">×</button></div>
       <div class="p-row"><span>상태</span><span id="p-status"></span></div>
@@ -90,6 +105,14 @@
       <div id="f-extra"></div>
     </div>
     <div id="toolbar"></div>
+    <div id="modal" hidden>
+      <div class="dialog">
+        <h2 id="m-title"></h2>
+        <p id="m-msg"></p>
+        <table id="m-rows"></table>
+        <div id="m-buttons"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

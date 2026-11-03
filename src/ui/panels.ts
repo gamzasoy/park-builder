@@ -103,6 +103,11 @@ export class FinancePanel {
     this.seenReports = world.reports.length;
   }
 
+  /** 불러오기/새 게임 후 보고서 개수를 다시 맞춰 자동 열림을 막는다 */
+  sync(): void {
+    this.seenReports = this.world.reports.length;
+  }
+
   toggle(open = this.root.hidden): void {
     this.root.hidden = !open;
   }

@@ -29,6 +29,9 @@ export interface Building {
   income: number;
 }
 
+/** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */
+export type GameStatus = 'playing' | 'won' | 'lost' | 'sandbox';
+
 export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'construction' | 'upkeep';
 export type Ledger = Record<LedgerKey, number>;
 
@@ -69,7 +72,15 @@ export class World {
   /** 시뮬레이션 틱 카운터 */
   tick = 0;
   rng = new Rng(12345);
-  stats = { entered: 0, left: 0 };
+  stats = { entered: 0, left: 0, peakGuests: 0 };
+
+  status: GameStatus = 'playing';
+  /** 종료 사유(결과 화면에 표시) */
+  endReason = '';
+  /** 목표 조건을 연속으로 만족한 틱 수 */
+  goalHold = 0;
+  /** 잔고가 마이너스로 하루를 마친 연속 일수 */
+  debtDays = 0;
 
   /** 입장료(플레이어가 조정) */
   entranceFee = 10;
@@ -90,5 +101,34 @@ export class World {
 
   resetLedger(): void {
     this.ledger = emptyLedger();
+  }
+
+  /** 다른 World의 상태를 이 인스턴스로 옮긴다(불러오기/새 게임). 외부가 쥔 참조(map, network 등)를 유지하기 위해 제자리에서 교체. */
+  adopt(src: World): void {
+    this.map.path.set(src.map.path);
+    this.map.occupant.set(src.map.occupant);
+    this.map.version++; // 길찾기 캐시 무효화
+    this.money = src.money;
+    this.buildings.clear();
+    for (const [id, b] of src.buildings) this.buildings.set(id, b);
+    this.nextBuildingId = src.nextBuildingId;
+    this.guests = src.guests;
+    // 저장된 경로는 불러온 길 구성에 대해 유효하므로, 새 버전에 맞춰 다시 계산되지 않게 한다
+    for (const g of this.guests) g.pathVersion = this.map.version;
+    this.guestById = new Map();
+    this.nextGuestId = src.nextGuestId;
+    this.tick = src.tick;
+    this.rng.state = src.rng.state;
+    this.stats = src.stats;
+    this.entranceFee = src.entranceFee;
+    this.ledger = src.ledger;
+    this.reports = src.reports;
+    this.monthStartEntered = src.monthStartEntered;
+    this.rating = src.rating;
+    this.ratingParts = src.ratingParts;
+    this.status = src.status;
+    this.endReason = src.endReason;
+    this.goalHold = src.goalHold;
+    this.debtDays = src.debtDays;
   }
 }

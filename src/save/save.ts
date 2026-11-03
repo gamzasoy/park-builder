@@ -1,0 +1,210 @@
+import { getDef } from '../data';
+import type { Guest } from '../sim/guest';
+import type { Tile } from '../sim/map';
+import {
+  type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
+} from '../sim/world';
+
+/** 저장 형식 버전. 형식을 바꾸면 올리고 migrate에서 이전 버전을 변환한다. */
+export const SAVE_VERSION = 1;
+export const SAVE_KEY = 'park-builder-save';
+export const BACKUP_KEY = 'park-builder-save.bak';
+
+/** 걷는 손님의 경로는 [x0, y0, x1, y1, ...]로 납작하게 저장 */
+interface GuestSave extends Omit<Guest, 'path'> {
+  path: number[];
+}
+
+export interface SaveData {
+  version: number;
+  savedAt: number;
+  width: number;
+  height: number;
+  /** 길 레이어: '0'/'1' 문자열 */
+  path: string;
+  tick: number;
+  money: number;
+  rngState: number;
+  nextBuildingId: number;
+  nextGuestId: number;
+  entranceFee: number;
+  rating: number;
+  ratingParts: RatingParts;
+  ledger: Ledger;
+  reports: MonthReport[];
+  monthStartEntered: number;
+  stats: { entered: number; left: number; peakGuests: number };
+  status: GameStatus;
+  endReason: string;
+  goalHold: number;
+  debtDays: number;
+  buildings: Building[];
+  guests: GuestSave[];
+}
+
+const flatten = (path: readonly Tile[]): number[] => path.flatMap((t) => [t.x, t.y]);
+function unflatten(flat: number[]): Tile[] {
+  const out: Tile[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) out.push({ x: flat[i], y: flat[i + 1] });
+  return out;
+}
+
+export function serializeWorld(world: World): SaveData {
+  const m = world.map;
+  return {
+    version: SAVE_VERSION,
+    savedAt: Date.now(),
+    width: m.width,
+    height: m.height,
+    path: Array.from(m.path, (v) => (v ? '1' : '0')).join(''),
+    tick: world.tick,
+    money: world.money,
+    rngState: world.rng.state,
+    nextBuildingId: world.nextBuildingId,
+    nextGuestId: world.nextGuestId,
+    entranceFee: world.entranceFee,
+    rating: world.rating,
+    ratingParts: world.ratingParts,
+    ledger: world.ledger,
+    reports: world.reports,
+    monthStartEntered: world.monthStartEntered,
+    stats: world.stats,
+    status: world.status,
+    endReason: world.endReason,
+    goalHold: world.goalHold,
+    debtDays: world.debtDays,
+    buildings: [...world.buildings.values()],
+    guests: world.guests.map((g) => ({
+      ...g,
+      // 이동 중이 아니면 경로는 필요 없다(필요할 때 다시 계산)
+      path: g.state === 'walking' || g.state === 'leaving' ? flatten(g.path) : [],
+    })),
+  };
+}
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** SaveData → 새 World. 형식이 올바르지 않으면 Error를 던진다. */
+export function deserializeWorld(data: SaveData): World {
+  const w = new World();
+  const m = w.map;
+  if (data.width !== m.width || data.height !== m.height) throw new Error('map size mismatch');
+  if (typeof data.path !== 'string' || data.path.length !== m.width * m.height) throw new Error('bad path layer');
+  for (const k of ['tick', 'money', 'rngState', 'nextBuildingId', 'nextGuestId', 'entranceFee', 'rating', 'monthStartEntered', 'goalHold', 'debtDays'] as const) {
+    if (!isNum(data[k])) throw new Error(`bad field: ${k}`);
+  }
+  if (!Array.isArray(data.buildings) || !Array.isArray(data.guests) || !Array.isArray(data.reports)) throw new Error('bad lists');
+  if (!['playing', 'won', 'lost', 'sandbox'].includes(data.status)) throw new Error('bad status');
+
+  for (let i = 0; i < data.path.length; i++) m.path[i] = data.path[i] === '1' ? 1 : 0;
+  m.path[m.index(m.gate.x, m.gate.y)] = 1;
+
+  for (const b of data.buildings) {
+    getDef(b.defId); // 알 수 없는 건물이면 throw
+    for (let y = b.y; y < b.y + b.h; y++) {
+      for (let x = b.x; x < b.x + b.w; x++) {
+        if (!m.inBounds(x, y) || m.occupant[m.index(x, y)] !== 0) throw new Error('bad building footprint');
+        m.occupant[m.index(x, y)] = b.id;
+      }
+    }
+    w.buildings.set(b.id, { ...b, queue: [...b.queue], inside: [...b.inside] });
+  }
+
+  w.guests = data.guests.map((g) => ({
+    ...g,
+    path: unflatten(g.path),
+    // 길 구성 버전은 저장하지 않으므로, 저장된 경로를 현재(불러온) 길 구성에 대해 유효한 것으로 취급
+    pathVersion: m.version,
+    needs: { ...g.needs },
+    tile: { ...g.tile },
+    visited: [...g.visited],
+  }));
+
+  w.tick = data.tick;
+  w.money = data.money;
+  w.rng.state = data.rngState >>> 0;
+  w.nextBuildingId = data.nextBuildingId;
+  w.nextGuestId = data.nextGuestId;
+  w.entranceFee = data.entranceFee;
+  w.rating = data.rating;
+  w.ratingParts = { ...data.ratingParts };
+  w.ledger = { ...data.ledger };
+  w.reports = data.reports.map((r) => ({ ...r, ledger: { ...r.ledger } }));
+  w.monthStartEntered = data.monthStartEntered;
+  w.stats = { ...data.stats };
+  w.status = data.status;
+  w.endReason = String(data.endReason ?? '');
+  w.goalHold = data.goalHold;
+  w.debtDays = data.debtDays;
+  return w;
+}
+
+/** 이전 버전 저장을 현재 형식으로 변환. 지원하지 않는 버전이면 null. (v1이 첫 버전이라 변환 없음) */
+function migrate(data: { version?: unknown }): SaveData | null {
+  return data.version === SAVE_VERSION ? (data as SaveData) : null;
+}
+
+export type LoadResult =
+  | { ok: true; world: World; savedAt: number }
+  | { ok: false; reason: 'empty' | 'corrupt' | 'version' | 'unavailable' };
+
+/** 문자열 → World. 실패 사유를 구분해서 돌려준다. */
+export function parseSave(raw: string): LoadResult {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return { ok: false, reason: 'corrupt' };
+  }
+  if (typeof obj !== 'object' || obj === null) return { ok: false, reason: 'corrupt' };
+  const data = migrate(obj as { version?: unknown });
+  if (!data) return { ok: false, reason: 'version' };
+  try {
+    return { ok: true, world: deserializeWorld(data), savedAt: isNum(data.savedAt) ? data.savedAt : 0 };
+  } catch {
+    return { ok: false, reason: 'corrupt' };
+  }
+}
+
+/** localStorage 대용으로 주입 가능한 최소 인터페이스 */
+export type KV = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/** 사생활 보호 모드 등에서 접근 자체가 throw할 수 있으므로 감싼다 */
+export function defaultStorage(): KV | null {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveToStorage(world: World, storage: KV | null = defaultStorage()): boolean {
+  if (!storage) return false;
+  try {
+    storage.setItem(SAVE_KEY, JSON.stringify(serializeWorld(world)));
+    return true;
+  } catch {
+    return false; // 용량 초과 등
+  }
+}
+
+/** 저장본을 읽는다. 읽을 수 없는 저장본은 덮어써지기 전에 백업 키로 보존한다. */
+export function loadFromStorage(storage: KV | null = defaultStorage()): LoadResult {
+  if (!storage) return { ok: false, reason: 'unavailable' };
+  let raw: string | null;
+  try {
+    raw = storage.getItem(SAVE_KEY);
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (raw === null) return { ok: false, reason: 'empty' };
+  const result = parseSave(raw);
+  if (!result.ok) {
+    try { storage.setItem(BACKUP_KEY, raw); } catch { /* 백업 실패는 무시 */ }
+  }
+  return result;
+}
+
+export function clearSave(storage: KV | null = defaultStorage()): void {
+  try { storage?.removeItem(SAVE_KEY); } catch { /* 무시 */ }
+}

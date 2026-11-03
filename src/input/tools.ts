@@ -39,6 +39,16 @@ export class ToolController {
     return t.kind === 'build' ? `build:${t.def.id}` : t.kind;
   }
 
+  /** 새 게임/불러오기 후 선택·도구 상태 초기화 */
+  reset(): void {
+    this.tool = { kind: 'none' };
+    this.selectedId = null;
+    this.rot = 0;
+    this.dragStart = null;
+    this.message = '';
+    this.messageUntil = 0;
+  }
+
   setTool(t: Tool): void {
     this.tool = t;
     if (t.kind !== 'none') this.selectedId = null;
