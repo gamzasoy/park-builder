@@ -11,7 +11,8 @@ import { stepWorld } from './sim/sim';
 import { World } from './sim/world';
 import { Hud, won } from './ui/hud';
 import { Modal } from './ui/modal';
-import { BuildingPanel, FinancePanel } from './ui/panels';
+import { BuildingPanel, FinancePanel, GuestPanel } from './ui/panels';
+import { Sound } from './ui/sound';
 import { Toolbar } from './ui/toolbar';
 
 const AUTOSAVE_MS = 15_000;
@@ -23,6 +24,18 @@ const world = new World();
 const tools = new ToolController(world);
 const input = new Input(canvas, cam);
 const modal = new Modal();
+const sound = new Sound();
+tools.onEvent = (e) => sound.play(e);
+
+const soundBtn = document.getElementById('sound-btn')!;
+const renderSoundBtn = (): void => { soundBtn.textContent = sound.muted ? '소리 꺼짐' : '소리 켜짐'; };
+renderSoundBtn();
+soundBtn.addEventListener('click', () => {
+  sound.toggle();
+  renderSoundBtn();
+  soundBtn.blur();
+  sound.play('chime'); // 켰을 때 바로 들려준다(꺼졌으면 무음)
+});
 
 // ---- 저장 / 불러오기 ----
 let lastSaveAt = performance.now();
@@ -45,6 +58,7 @@ function newGame(): void {
   world.adopt(fresh);
   tools.reset();
   financePanel.sync();
+  seenReports = world.reports.length;
   loop.speed = 1;
   modal.hide();
   saveNow();
@@ -62,6 +76,13 @@ function confirmNewGame(): void {
   });
 }
 
+// ---- 월간 보고서 알림음 ----
+let seenReports = 0;
+function watchReports(): void {
+  if (world.reports.length > seenReports) sound.play('chime');
+  seenReports = world.reports.length;
+}
+
 // ---- 목표 결과 화면 ----
 let shownStatus = '';
 function watchStatus(): void {
@@ -72,6 +93,7 @@ function watchStatus(): void {
     if (modal.kind === 'result') modal.hide();
     return;
   }
+  sound.play(world.status === 'won' ? 'win' : 'lose');
   const days = Math.floor(world.tick / DAY_TICKS);
   const months = Math.floor(days / DAYS_PER_MONTH);
   modal.show('result', {
@@ -106,11 +128,14 @@ const loop = new GameLoop(
       preview: tools.preview(input.hoverTile),
       alpha,
       selectedId: tools.selectedId,
+      selectedGuestId: tools.selectedGuestId,
     });
     hud.update();
     toolbar.sync();
     buildingPanel.update();
+    guestPanel.update();
     financePanel.update();
+    watchReports();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
@@ -124,8 +149,9 @@ const hud = new Hud(world, tools, loop, {
 });
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools);
 const buildingPanel = new BuildingPanel(world, tools);
+const guestPanel = new GuestPanel(world, tools);
 
-input.onLeftDown = (t) => tools.onDown(t);
+input.onLeftDown = (t, pos) => tools.onDown(t, pos);
 input.onLeftUp = (t) => tools.onUp(t);
 input.onKeyDown = (k) => {
   if (k === 'r') tools.rotate();
@@ -157,6 +183,7 @@ function resize(): void {
 window.addEventListener('resize', resize);
 resize();
 
+seenReports = world.reports.length;
 financePanel.sync(); // 불러온 보고서 때문에 재무 패널이 저절로 열리지 않게
 loop.start();
 

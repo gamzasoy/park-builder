@@ -16,7 +16,7 @@ export const won = (n: number): string => `₩${n.toLocaleString('ko-KR')}`;
 export const signedWon = (n: number): string => (n < 0 ? `−${won(-n)}` : `+${won(n)}`);
 
 const HINTS: Record<string, string> = {
-  none: '건물을 클릭하면 정보와 요금을 볼 수 있습니다 · 아래 툴바에서 도구를 고르세요',
+  none: '건물이나 손님을 클릭하면 정보를 볼 수 있습니다 · 아래 툴바에서 도구를 고르세요',
   path: '길: 드래그로 직선 설치 (Esc 취소)',
   build: '클릭해 설치 · R 회전 · 입구(노란 칸)를 길에 이어야 운영됩니다 (Esc 취소)',
   demolish: '철거: 건물이나 길을 클릭 (환급 50%)',

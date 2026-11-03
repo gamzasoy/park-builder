@@ -5,6 +5,8 @@ import { MAX_QUEUE, type Guest } from '../sim/guest';
 import type { Building, World } from '../sim/world';
 import type { Camera } from './camera';
 import { shade } from './color';
+import { guestDisplayPos } from './guestpos';
+import { POSITIVE, THOUGHT_TEXT } from './thoughts';
 import { TILE_H, TILE_W, tileToWorld, type Vec2 } from './iso';
 
 export interface View {
@@ -13,10 +15,11 @@ export interface View {
   /** 틱 사이 보간 비율(0~1) */
   alpha: number;
   selectedId: number | null;
+  selectedGuestId: number | null;
 }
 
 export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: World, view: View): void {
-  const { hover, preview, alpha, selectedId } = view;
+  const { hover, preview, alpha, selectedId, selectedGuestId } = view;
   const map = world.map;
   ctx.fillStyle = '#1b2a1f';
   ctx.fillRect(0, 0, cam.viewW, cam.viewH);
@@ -63,26 +66,37 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   const walkers: { g: Guest; x: number; y: number }[] = [];
   for (const g of world.guests) {
     if (g.state === 'visiting' || g.state === 'gone') continue; // 시설 안에 있는 손님은 그리지 않음
-    let x: number;
-    let y: number;
-    if (g.state === 'queueing') {
-      // 입구 타일 안에서 순번별로 3x3 격자로 흩어 줄 선 모습을 표현
-      x = g.x + ((g.slot % 3) - 1) * 0.22;
-      y = g.y + ((((g.slot / 3) | 0) % 3) - 1) * 0.22;
-    } else {
-      x = g.px + (g.x - g.px) * alpha + laneOffset(g.id, 7919);
-      y = g.py + (g.y - g.py) * alpha + laneOffset(g.id, 104729);
-    }
-    walkers.push({ g, x, y });
+    const pos = guestDisplayPos(g, alpha);
+    walkers.push({ g, x: pos.x, y: pos.y });
   }
   walkers.sort((a, b) => a.x + a.y - (b.x + b.y));
 
   let bi = 0;
   for (const w of walkers) {
     while (bi < buildings.length && bKey(buildings[bi]) <= w.x + w.y) drawBuilding(ctx, cam, buildings[bi++]);
+    if (w.g.id === selectedGuestId) drawGuestRing(ctx, cam, w.x, w.y);
     drawGuest(ctx, cam, w.g, w.x, w.y);
   }
   while (bi < buildings.length) drawBuilding(ctx, cam, buildings[bi++]);
+
+  // 생각 말풍선(건물·손님 위에). 확대했을 때만, 장면이 지저분해지지 않게 상한을 둔다.
+  if (cam.zoom >= 0.7) {
+    // 줄 선 손님처럼 한곳에 몰려 있으면 구역(셀)당 말풍선 하나만 그려 서로 겹치지 않게 한다
+    const taken = new Set<number>();
+    let shown = 0;
+    for (const w of walkers) {
+      // 줄 선 손님은 한 타일에 몰려 있어 말풍선이 대기 배지를 가린다. 상태는 배지와 클릭 패널로 확인한다.
+      if (w.g.thought === null || w.g.state === 'queueing' || shown >= 40) continue;
+      const sp = tileToWorld(w.x, w.y);
+      const sc = cam.worldToScreen(sp.x, sp.y);
+      const cell = Math.round(sc.x / (70 * cam.zoom)) * 100_000 + Math.round(sc.y / (22 * cam.zoom));
+      if (taken.has(cell)) continue;
+      if (drawBubble(ctx, cam, w.g, w.x, w.y)) {
+        taken.add(cell);
+        shown++;
+      }
+    }
+  }
 
   // 대기 인원 표시
   ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px system-ui, sans-serif`;
@@ -143,11 +157,6 @@ function drawBuilding(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): 
 
 const LOOKS = ['#e8564a', '#4a8fe8', '#e8c24a', '#7bc86c', '#b06ce0', '#ef8fb4', '#4ac9c0', '#f08a3c'];
 
-/** 같은 길 위에서 손님이 한 점에 겹치지 않도록 하는 고정 오프셋(타일 단위, 렌더 전용) */
-function laneOffset(id: number, salt: number): number {
-  return (((id * salt) % 100) / 100 - 0.5) * 0.3;
-}
-
 function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number): void {
   const w = tileToWorld(tx, ty);
   const s = cam.worldToScreen(w.x, w.y);
@@ -183,6 +192,57 @@ function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, b: Building): void
   ctx.strokeStyle = 'rgba(255,255,255,0.95)';
   ctx.lineWidth = 3;
   ctx.stroke();
+}
+
+function drawGuestRing(ctx: CanvasRenderingContext2D, cam: Camera, tx: number, ty: number): void {
+  const w = tileToWorld(tx, ty);
+  const s = cam.worldToScreen(w.x, w.y);
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.ellipse(s.x, s.y, 10 * cam.zoom, 5 * cam.zoom, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/** 머리 위 생각 말풍선. 화면 밖이면 false. 사라지기 직전 0.5초는 서서히 투명해진다. */
+function drawBubble(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number): boolean {
+  if (g.thought === null) return false;
+  const w = tileToWorld(tx, ty);
+  const s = cam.worldToScreen(w.x, w.y);
+  const z = cam.zoom;
+  if (s.x < -60 || s.x > cam.viewW + 60 || s.y < 0 || s.y > cam.viewH + 30) return false;
+
+  const text = THOUGHT_TEXT[g.thought];
+  const fontPx = Math.max(10, 11 * z);
+  ctx.font = `${fontPx}px system-ui, sans-serif`;
+  const padX = 6 * z;
+  const bw = ctx.measureText(text).width + padX * 2;
+  const bh = fontPx + 7 * z;
+  const x = s.x - bw / 2;
+  const y = s.y - 20 * z - bh;
+
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, g.thoughtTimer / 15);
+  ctx.fillStyle = POSITIVE.has(g.thought) ? '#d8f5df' : '#fff';
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, bw, bh, 5 * z);
+  ctx.fill();
+  ctx.stroke();
+  // 꼬리
+  ctx.beginPath();
+  ctx.moveTo(s.x - 3 * z, y + bh);
+  ctx.lineTo(s.x, y + bh + 5 * z);
+  ctx.lineTo(s.x + 3 * z, y + bh);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, s.x, y + bh / 2 + fontPx * 0.35);
+  ctx.textAlign = 'start';
+  ctx.restore();
+  return true;
 }
 
 function poly(ctx: CanvasRenderingContext2D, pts: Vec2[], fill: string): void {

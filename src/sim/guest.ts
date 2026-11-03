@@ -16,6 +16,14 @@ export const MAX_QUEUE = 15;
 /** 대기열에서 참는 최대 틱 */
 export const PATIENCE = 400;
 
+/** 머리 위 말풍선에 표시되는 생각 */
+export type Thought =
+  | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
+  | 'fun' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive';
+/** 생각이 머무는 시간(틱) */
+export const THOUGHT_TICKS = 60;
+const NEED_CHECK_EVERY = 30;
+
 /** idle 대기 / walking·leaving 이동 / queueing 입구 앞 줄서기 / visiting 시설 안(숨김) */
 export type GuestState = 'idle' | 'walking' | 'queueing' | 'visiting' | 'leaving' | 'gone';
 
@@ -56,6 +64,9 @@ export interface Guest {
   visited: number[];
   /** 외형 색 인덱스 */
   look: number;
+  /** 현재 떠올린 생각(말풍선) */
+  thought: Thought | null;
+  thoughtTimer: number;
 }
 
 export function createGuest(world: World): Guest {
@@ -86,7 +97,33 @@ export function createGuest(world: World): Guest {
     age: 0,
     visited: [],
     look: r.int(0, 7),
+    thought: null,
+    thoughtTimer: 0,
   };
+}
+
+export function think(g: Guest, t: Thought): void {
+  g.thought = t;
+  g.thoughtTimer = THOUGHT_TICKS;
+}
+
+/** 가장 급한 욕구에서 나오는 생각 */
+function needThought(g: Guest): Thought | null {
+  const n = g.needs;
+  if (n.hunger > 80) return 'hungry';
+  if (n.thirst > 80) return 'thirsty';
+  if (n.toilet > 80) return 'toilet';
+  if (n.energy < 20) return 'tired';
+  if (n.happiness < 25) return 'unhappy';
+  return null;
+}
+
+function tickThought(world: World, g: Guest): void {
+  if (g.thoughtTimer > 0 && --g.thoughtTimer === 0) g.thought = null;
+  if (g.thought === null && (world.tick + g.id) % NEED_CHECK_EVERY === 0) {
+    const t = needThought(g);
+    if (t) think(g, t);
+  }
 }
 
 export function updateGuest(world: World, g: Guest): void {
@@ -94,6 +131,7 @@ export function updateGuest(world: World, g: Guest): void {
   g.py = g.y;
   g.age++;
   tickNeeds(g);
+  tickThought(world, g);
 
   switch (g.state) {
     case 'idle': return idle(world, g);
@@ -125,13 +163,30 @@ function tickNeeds(g: Guest): void {
 
 const clamp = (v: number): number => Math.max(0, Math.min(100, v));
 
-function leaveReason(g: Guest): boolean {
-  return g.needs.happiness < 12 || g.needs.energy < 8 || g.money < 10 || g.age > MAX_AGE;
+/** 공원을 떠나기로 한 이유(없으면 null). 말풍선에도 쓰인다. */
+function leaveCause(g: Guest): Thought | null {
+  if (g.needs.happiness < 12) return 'unhappy';
+  if (g.needs.energy < 8) return 'tired';
+  if (g.money < 10) return 'broke';
+  if (g.age > MAX_AGE) return 'tooOld';
+  return null;
+}
+
+/** 운영 중인 시설 중 적정가보다 비싼 곳이 있는가 */
+function anyOverpriced(world: World): boolean {
+  for (const b of world.buildings.values()) {
+    if (world.network.isOperational(b) && b.price > fairPrice(getDef(b.defId))) return true;
+  }
+  return false;
 }
 
 function idle(world: World, g: Guest): void {
   g.timer++;
-  if (leaveReason(g)) return startLeaving(world, g);
+  const cause = leaveCause(g);
+  if (cause) {
+    think(g, cause);
+    return startLeaving(world, g);
+  }
   if ((world.tick + g.id) % DECIDE_EVERY !== 0) return;
 
   const pick = pickTarget(world, g);
@@ -141,6 +196,7 @@ function idle(world: World, g: Guest): void {
     g.state = 'walking';
     g.timer = 0;
   } else if (g.timer > IDLE_GIVE_UP) {
+    think(g, anyOverpriced(world) ? 'expensive' : 'bored');
     startLeaving(world, g);
   }
 }
@@ -266,6 +322,7 @@ function arrive(world: World, g: Guest): void {
   if (b.queue.length >= MAX_QUEUE) {
     // 줄이 너무 길어 포기
     g.needs.happiness = clamp(g.needs.happiness - 3);
+    think(g, 'queueFull');
     remember(g, b.id);
     return goIdle(g);
   }
@@ -284,6 +341,7 @@ function queueing(world: World, g: Guest): void {
   if (++g.timer > PATIENCE) {
     leaveQueue(world, g);
     g.needs.happiness = clamp(g.needs.happiness - 8);
+    think(g, 'waited');
     if (g.target !== null) remember(g, g.target);
     goIdle(g);
   }
@@ -310,6 +368,7 @@ export function applyEffects(g: Guest, def: BuildingDef): void {
     n.energy = clamp(n.energy - 6);
     n.hunger = clamp(n.hunger + 4);
     n.thirst = clamp(n.thirst + 4);
+    think(g, 'fun');
   } else if (def.serves) {
     n[def.serves] = clamp(n[def.serves] - 70);
     n.happiness = clamp(n.happiness + 6);

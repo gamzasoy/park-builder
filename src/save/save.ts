@@ -118,6 +118,9 @@ export function deserializeWorld(data: SaveData): World {
     needs: { ...g.needs },
     tile: { ...g.tile },
     visited: [...g.visited],
+    // 이 필드가 생기기 전의 저장본도 읽을 수 있게 기본값 지정
+    thought: g.thought ?? null,
+    thoughtTimer: g.thoughtTimer ?? 0,
   }));
 
   w.tick = data.tick;

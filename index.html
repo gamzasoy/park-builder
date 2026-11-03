@@ -27,7 +27,7 @@
       .stepper button { padding: 1px 6px; min-width: 22px; }
       .stepper b { min-width: 52px; text-align: center; }
       .stepper.over b { color: #ff8a80; }
-      #finance-btn, #save-btn, #new-btn { padding: 3px 10px; }
+      #finance-btn, #save-btn, #new-btn, #sound-btn { padding: 3px 10px; }
       #hint { position: fixed; top: 46px; left: 16px; padding: 4px 10px; border-radius: 6px; background: rgba(15,25,20,0.75); font-size: 13px; opacity: 0.95; pointer-events: none; }
 
       #toolbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 20px; flex-wrap: wrap; padding: 8px 16px; background: var(--panel); }
@@ -51,6 +51,10 @@
       #finance thead th:not(:first-child) { text-align: right; color: #fff; }
       #finance tr.total th, #finance tr.total td { border-top: 1px solid var(--line); font-weight: 700; color: #fff; }
       #f-extra { margin-top: 8px; color: var(--muted); font-size: 12px; }
+      #gpanel { right: 12px; }
+      .bar { display: inline-block; width: 120px; height: 8px; background: #2a3b31; border-radius: 4px; overflow: hidden; }
+      .bar i { display: block; height: 100%; background: var(--accent); }
+      .bar.bad i { background: #e06a5a; }
       #goal { position: fixed; top: 46px; right: 16px; padding: 4px 10px; border-radius: 6px; background: rgba(15,25,20,0.75); font-size: 13px; pointer-events: none; }
 
       #modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); }
@@ -81,6 +85,7 @@
       <span class="fee">입장료 <span id="fee-ctl"></span></span>
       <button id="finance-btn">재무</button>
       <button id="save-btn" title="지금 저장 (자동 저장도 됩니다)">저장</button>
+      <button id="sound-btn" title="효과음 켜기/끄기"></button>
       <button id="new-btn">새 게임</button>
     </div>
     <div id="hint"></div>
@@ -88,7 +93,9 @@
     <div id="panel" class="card" hidden>
       <div class="head"><b id="p-name"></b><button id="p-close" title="닫기 (Esc)">×</button></div>
       <div class="p-row"><span>상태</span><span id="p-status"></span></div>
+      <div class="p-row"><span>특징</span><span id="p-trait"></span></div>
       <div class="p-row"><span>대기/이용</span><span id="p-queue"></span></div>
+      <div class="p-row"><span>예상 대기</span><span id="p-wait"></span></div>
       <div class="p-row"><span>누적 이용</span><span id="p-served"></span></div>
       <div class="p-row"><span>누적 수익</span><span id="p-income"></span></div>
       <div class="p-row"><span>하루 유지비</span><span id="p-upkeep"></span></div>

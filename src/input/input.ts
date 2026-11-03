@@ -1,12 +1,15 @@
 import type { Camera } from '../render/camera';
 import { worldToTile } from '../render/iso';
+import type { Vec2 } from '../render/iso';
 import type { Tile } from '../sim/map';
 
 const PAN_SPEED = 600; // 화면 px/초 (zoom 1 기준)
 
 export class Input {
   hoverTile: Tile | null = null;
-  onLeftDown?: (t: Tile | null) => void;
+  /** 마우스 아래의 타일 좌표(실수). 손님 선택에 쓴다. */
+  hoverPos: Vec2 | null = null;
+  onLeftDown?: (t: Tile | null, pos: Vec2 | null) => void;
   onLeftUp?: (t: Tile | null) => void;
   onKeyDown?: (key: string) => void;
 
@@ -21,7 +24,7 @@ export class Input {
     window.addEventListener('mousemove', this.onMove);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('mouseleave', () => { this.hoverTile = null; });
+    canvas.addEventListener('mouseleave', () => { this.hoverTile = null; this.hoverPos = null; });
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
       this.keys.add(k);
@@ -44,9 +47,11 @@ export class Input {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
+  /** 화면 좌표 → 타일 좌표. hoverPos(실수)와 hoverTile(정수)을 함께 갱신. */
   private tileAt(sx: number, sy: number): Tile {
     const w = this.cam.screenToWorld(sx, sy);
     const t = worldToTile(w.x, w.y);
+    this.hoverPos = t;
     return { x: Math.floor(t.x), y: Math.floor(t.y) };
   }
 
@@ -54,7 +59,7 @@ export class Input {
     const p = this.pos(e);
     if (e.button === 0) {
       this.hoverTile = this.tileAt(p.x, p.y);
-      this.onLeftDown?.(this.hoverTile);
+      this.onLeftDown?.(this.hoverTile, this.hoverPos);
     } else if (e.button === 1 || e.button === 2) {
       // 가운데/오른쪽 버튼 드래그 = 카메라 팬
       this.dragging = true;
@@ -73,6 +78,7 @@ export class Input {
     // 툴바 등 캔버스 밖 UI 위에서는 호버 없음(팬 드래그 중에는 계속 처리)
     if (e.target !== this.canvas && !this.dragging) {
       this.hoverTile = null;
+      this.hoverPos = null;
       return;
     }
     const p = this.pos(e);
