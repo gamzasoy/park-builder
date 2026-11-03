@@ -7,6 +7,7 @@ import { tileToWorld } from './render/iso';
 import { drawFrame } from './render/renderer';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { DAY_TICKS, DAYS_PER_MONTH } from './sim/economy';
+import { createGuest } from './sim/guest';
 import { stepWorld } from './sim/sim';
 import { World } from './sim/world';
 import { Hud, won } from './ui/hud';
@@ -192,5 +193,27 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__game = {
     world,
     step: (n: number) => { for (let i = 0; i < n; i++) stepWorld(world); },
+    /** 타일 중앙의 화면 좌표(E2E에서 실제 마우스 입력용) */
+    tileToScreen: (tx: number, ty: number) => {
+      const w = tileToWorld(tx + 0.5, ty + 0.5);
+      const s = cam.worldToScreen(w.x, w.y);
+      const r = canvas.getBoundingClientRect();
+      return { x: s.x + r.left, y: s.y + r.top };
+    },
+    /** 성능 측정용: 손님 n명을 공원 입구에 즉시 생성 */
+    spawn: (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const g = createGuest(world);
+        g.money = 1000;
+        world.guests.push(g);
+        world.stats.entered++;
+      }
+    },
+    /** 렌더 1회 실행(성능 측정용) */
+    render: () => drawFrame(ctx, cam, world, {
+      hover: null, preview: null, alpha: 0.5, selectedId: null, selectedGuestId: null,
+    }),
+    setSpeed: (s: 0 | 1 | 2 | 4) => { loop.speed = s; },
+    setZoom: (z: number) => { cam.zoom = z; },
   };
 }
