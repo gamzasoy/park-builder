@@ -171,6 +171,7 @@
       #tool-actions { position: fixed; right: 12px; bottom: 118px; display: flex; flex-direction: column; gap: 6px; z-index: 4; }
       #tool-actions button { min-width: 64px; min-height: 40px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
       #rotate-hint { display: none; }
+      #tb-toggle { display: none; }
       @media (pointer: fine) { #tool-actions { display: none; } } /* 마우스·키보드(R/Esc)가 있는 PC에서는 숨김 */
 
       /* ===== 휴대폰 가로 화면 (PC 화면은 바뀌지 않음) ===== */
@@ -201,11 +202,18 @@
         #toolbar button { min-width: 52px; padding: 1px 3px 2px; font-size: 11px; }
         #toolbar button img { width: 32px; height: 29px; }
         #toolbar button small { font-size: 9px; }
-        #tool-actions { right: calc(10px + var(--sar)); bottom: calc(72px + var(--sab)); }
+        #tool-actions { right: calc(10px + var(--sar)); bottom: calc(var(--tb-reserve, 90px) + var(--sab) * 0); }
+        #tb-toggle {
+          display: block; position: fixed; z-index: 4; left: calc(8px + var(--sal)); bottom: var(--tb-h, 86px);
+          min-width: 76px; min-height: 28px; padding: 2px 12px; font-size: 13px; font-weight: 700;
+          border-bottom: 0; border-radius: 6px 6px 0 0;
+        }
+        body.tb-folded #tb-toggle { bottom: var(--sab); border-bottom: 2px solid var(--btn-dark); border-radius: 6px; }
+        body.tb-folded #toolbar { display: none; }
         /* 패널: HUD(약 36px)와 툴바(약 70px) 사이에서 스크롤 */
         .card {
           top: calc(36px + var(--sat)); width: 230px; font-size: 12px;
-          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - 92px - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
+          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - var(--tb-reserve, 90px) - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
         }
         #panel, #gpanel, #spanel { right: calc(8px + var(--sar)); }
         #finance { left: calc(8px + var(--sal)); width: min(330px, 46vw); }
@@ -217,8 +225,8 @@
         #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
         #m-buttons button { min-height: 38px; }
         #track-bar {
-          bottom: calc(72px + var(--sab)); width: min(620px, calc(100vw - 24px - var(--sal) - var(--sar)));
-          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - 92px - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: 12px;
+          bottom: calc(var(--tb-reserve, 90px) + var(--sab) * 0); width: min(620px, calc(100vw - 24px - var(--sal) - var(--sar)));
+          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - var(--tb-reserve, 90px) - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: 12px;
         }
         #t-buttons { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
         #t-buttons button { flex: none; min-width: 60px; min-height: 40px; padding: 3px 6px; }
@@ -301,6 +309,7 @@
       <button id="act-rotate" title="회전 (R)">회전</button>
       <button id="act-cancel" title="취소 (Esc)">취소</button>
     </div>
+    <button id="tb-toggle" title="도구 막대 접기/펼치기"></button>
     <div id="toolbar"></div>
     <div id="rotate-hint"><span class="phone">📱</span><span>가로로 돌려 주세요</span><small style="font-weight:400;opacity:.8">Park Builder는 가로 화면에서 플레이합니다</small></div>
     <div id="modal" hidden>

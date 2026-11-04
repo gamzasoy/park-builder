@@ -176,6 +176,28 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     sound.play('error');
   }
 });
+// 모바일: 아래 도구 막대를 접어서 공원을 넓게 볼 수 있다(선택한 도구는 접어도 유지, 선택은 기억)
+const TB_FOLD_KEY = 'park-builder:toolbar-folded';
+const tbToggle = document.getElementById('tb-toggle')!;
+const tbEl = document.getElementById('toolbar')!;
+let tbFolded = false;
+try { tbFolded = localStorage.getItem(TB_FOLD_KEY) === '1'; } catch { /* 저장소 사용 불가는 무시 */ }
+function layoutToolbar(): void {
+  document.body.classList.toggle('tb-folded', tbFolded);
+  tbToggle.textContent = tbFolded ? '▲ 도구' : '▼ 접기';
+  const root = document.documentElement.style;
+  const h = tbFolded ? 0 : tbEl.offsetHeight; // 접으면 0(PC에서도 툴바 높이를 그대로 반영)
+  root.setProperty('--tb-h', `${h}px`);
+  root.setProperty('--tb-reserve', `${tbFolded ? 34 : h + 4}px`);
+}
+tbToggle.addEventListener('click', () => {
+  tbFolded = !tbFolded;
+  try { localStorage.setItem(TB_FOLD_KEY, tbFolded ? '1' : '0'); } catch { /* 무시 */ }
+  layoutToolbar();
+});
+window.addEventListener('resize', layoutToolbar);
+window.addEventListener('orientationchange', layoutToolbar);
+
 const buildingPanel = new BuildingPanel(world, tools, testRun);
 const guestPanel = new GuestPanel(world, tools);
 const staffPanel = new StaffPanel(world, tools);
@@ -241,6 +263,7 @@ cam.x = focus.x;
 cam.y = focus.y;
 
 function resize(): void {
+  layoutToolbar();
   const dpr = Math.min(window.devicePixelRatio || 1, 2); // 고해상도 폰에서 픽셀 수 폭증 방지
   cam.viewW = window.innerWidth;
   cam.viewH = window.innerHeight;
