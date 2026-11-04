@@ -43,6 +43,20 @@ try {
   check(await game(() => document.documentElement.scrollWidth <= window.innerWidth), '페이지에 가로 스크롤이 없음');
   await shot('01-start');
 
+  // 도구 막대 접기/펼치기
+  const tbTop = () => game(() => { const t = document.getElementById('toolbar'); return getComputedStyle(t).display === 'none' ? Infinity : t.getBoundingClientRect().top; });
+  const openTop = await tbTop();
+  await page.locator('#tb-toggle').tap();
+  check((await tbTop()) === Infinity, '접기 버튼으로 도구 막대가 사라져 공원이 넓어짐');
+  check(await game(() => document.getElementById('tb-toggle').getBoundingClientRect().bottom <= window.innerHeight), '접은 뒤에도 펼치기 버튼이 화면 안에 있음');
+  await shot('01b-folded');
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  check((await tbTop()) === Infinity, '접은 상태가 새로고침 후에도 유지됨');
+  await page.locator('#tb-toggle').tap();
+  check(Math.abs((await tbTop()) - openTop) < 2, '펼치기 버튼으로 도구 막대가 다시 나타남');
+
+
   // 시작 위치에서는 길 아래쪽이 툴바에 가리므로 카메라를 작업 지점으로 옮긴다
   await game(() => { window.__game.setZoom(0.8); window.__game.focus(24, 39); });
 
