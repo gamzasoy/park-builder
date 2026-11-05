@@ -158,6 +158,7 @@
       }
       #track-bar { position: fixed; bottom: 112px; left: 50%; transform: translateX(-50%); z-index: 5; width: min(760px, calc(100vw - 24px)); padding: 8px 12px; font-size: 13px; }
       #t-info { font-weight: 600; }
+      #t-head > span { display: block; }
       #t-stats { color: var(--gold); margin: 2px 0 6px; }
       #t-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
       #t-buttons button { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 70px; padding: 4px 8px; }
@@ -175,7 +176,7 @@
       @media (pointer: fine) { #tool-actions { display: none; } } /* 마우스·키보드(R/Esc)가 있는 PC에서는 숨김 */
 
       /* ===== 휴대폰 가로 화면 (PC 화면은 바뀌지 않음) ===== */
-      @media (pointer: coarse) and (max-height: 520px) {
+      @media (pointer: coarse) and (max-height: 640px) {
         :root { --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px); --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); }
         button { min-height: 32px; }
         #hud {
@@ -234,6 +235,28 @@
         /* 트랙 편집 중에는 아래 도구 막대를 숨겨 공원을 넓게 보여 준다(편집 바만 남김) */
         body.track-editing #toolbar, body.track-editing #tb-toggle { display: none; }
         body.track-editing #track-bar { bottom: var(--sab); max-height: calc(100dvh - 40px - var(--sat) - var(--sab)); }
+        /* 편집 바를 한 줄 정보 + 버튼 한 줄로 납작하게: 공원이 화면 대부분을 차지하도록 */
+        #track-bar {
+          left: calc(6px + var(--sal)); right: calc(6px + var(--sar)); transform: none; width: auto;
+          padding: 3px 6px 4px; font-size: 11px; line-height: 1.3;
+          background: linear-gradient(rgba(111,125,79,0.94), rgba(95,108,66,0.94));
+        }
+        #t-head { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; overflow: hidden; }
+        #t-info { flex: none; }
+        #t-stats { margin: 0; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+        #t-msg { margin: 0 0 3px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #t-buttons { gap: 3px; }
+        #t-buttons button { min-width: 50px; min-height: 36px; padding: 2px 5px; font-size: 12px; }
+        #t-buttons button small { font-size: 9px; }
+        #t-buttons .key { display: none; }
+        /* 편집하는 동안 시작 가이드·안내 쪽지는 숨긴다(트랙이 가려지지 않게) */
+        body.track-editing #tutorial, body.track-editing #hint { display: none !important; }
+      }
+      /* 큰 폰·태블릿 등 위 조건에 안 맞는 터치 기기도 편집 중엔 도구 막대를 숨긴다 */
+      @media (pointer: coarse) {
+        body.track-editing #toolbar, body.track-editing #tb-toggle, body.track-editing #tutorial { display: none !important; }
+        body.track-editing #track-bar { bottom: env(safe-area-inset-bottom, 0px); }
+        #t-buttons .key { display: none; }
       }
 
       /* 세로로 들면 가로 안내를 덮어서 보여 준다 (터치 기기만) */
@@ -303,10 +326,9 @@
       <div id="f-extra"></div>
     </div>
     <div id="track-bar" hidden>
-      <div id="t-info"></div>
-      <div id="t-stats"></div>
-      <div id="t-buttons"></div>
+      <div id="t-head"><span id="t-info"></span><span id="t-stats"></span></div>
       <div id="t-msg"></div>
+      <div id="t-buttons"></div>
     </div>
     <div id="tool-actions" hidden>
       <button id="act-rotate" title="회전 (R)">회전</button>
