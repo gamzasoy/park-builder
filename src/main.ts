@@ -5,6 +5,8 @@ import { ToolController } from './input/tools';
 import { Camera } from './render/camera';
 import { tileToWorld, tileToWorldZ } from './render/iso';
 import { drawFrame } from './render/renderer';
+import { pickTile } from './input/pick';
+import type { Tile } from './sim/map';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
 import { createGuest } from './sim/guest';
@@ -18,7 +20,7 @@ import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
-import type { TrackType } from './sim/coaster';
+import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
 const AUTOSAVE_MS = 15_000;
@@ -136,9 +138,14 @@ const loop = new GameLoop(
     input.update(frameDt);
     testRun.update(world, frameDt);
     lastFrame = now;
+    const editingTrack = tools.tool.kind === 'track';
+    if (document.body.classList.contains('track-editing') !== editingTrack) document.body.classList.toggle('track-editing', editingTrack);
+    followTrackCursor();
     drawFrame(ctx, cam, world, {
       hover: input.hoverTile,
-      preview: tools.preview(input.hoverTile),
+      preview: tools.preview(input.hoverTile ?? buildFallbackTile()),
+      editingId: tools.trackBuilding?.id ?? null,
+      rotatedAt: tools.rotatedAt,
       alpha,
       selectedId: tools.selectedId,
       selectedGuestId: tools.selectedGuestId,
@@ -243,6 +250,81 @@ input.onKeyDown = (k) => {
   else if (k === '2') loop.speed = 2;
   else if (k === '3') loop.speed = 4;
 };
+
+/** 가려지지 않고 보이는 화면 영역(HUD 아래 ~ 트랙 편집 바·툴바 위) */
+function openArea(): { top: number; bottom: number } {
+  const hudEl = document.getElementById('hud')!;
+  let top = hudEl.getBoundingClientRect().bottom;
+  let bottom = cam.viewH;
+  for (const id of ['toolbar', 'track-bar']) {
+    const el = document.getElementById(id)!;
+    if (el.hidden || getComputedStyle(el).display === 'none') continue;
+    bottom = Math.min(bottom, el.getBoundingClientRect().top);
+  }
+  if (bottom - top < 80) { top = 0; bottom = cam.viewH; }
+  return { top, bottom };
+}
+
+/**
+ * 건물 도구인데 마우스/손가락이 화면 위에 없으면(터치에서 손을 뗐거나 툴바 위) 보이는 영역 가운데 칸에
+ * 미리보기를 띄운다. 그래야 회전 버튼을 눌렀을 때 건물과 입구가 도는 모습이 보인다.
+ */
+function buildFallbackTile(): Tile | null {
+  if (tools.tool.kind !== 'build') return null;
+  const { top, bottom } = openArea();
+  const w = cam.screenToWorld(cam.viewW / 2, (top + bottom) / 2);
+  const t = pickTile(world.map, w.x, w.y).tile;
+  return world.map.inBounds(t.x, t.y) ? t : null;
+}
+
+/**
+ * 트랙 편집: 다음 조각 위치(흰 화살표)가 편집 바·HUD에 가리거나 화면 밖으로 나가면 카메라를 부드럽게 옮긴다.
+ * 조각을 놓거나 지울 때만 따라가므로, 그 사이에 손으로 화면을 옮기는 것은 방해하지 않는다.
+ */
+let followKey = '';
+let followTarget: { x: number; y: number } | null = null;
+function followTrackCursor(): void {
+  const b = tools.trackBuilding;
+  const t = b?.track;
+  if (!b || !t || t.closed) {
+    followKey = '';
+    followTarget = null;
+    return;
+  }
+  const c = t.cursor;
+  const key = `${b.id}:${c.x},${c.y},${c.h}:${t.pieces.length}`;
+  if (key !== followKey) {
+    followKey = key;
+    const w = tileToWorldZ(c.x + 0.5, c.y + 0.5, 0);
+    const wy = w.y - c.h * LEVEL_PX; // 레일 높이
+    const s = cam.worldToScreen(w.x, wy);
+    const { top, bottom } = openArea();
+    const mx = Math.min(120, cam.viewW * 0.15);
+    const my = Math.min(70, (bottom - top) * 0.2);
+    let dx = 0;
+    let dy = 0;
+    if (s.x < mx) dx = s.x - mx;
+    else if (s.x > cam.viewW - mx) dx = s.x - (cam.viewW - mx);
+    if (s.y < top + my + 30) dy = s.y - (top + my + 30); // 화살표 위로 솟는 루프·기둥 여유
+    else if (s.y > bottom - my) dy = s.y - (bottom - my);
+    // 벗어났으면 보이는 영역 가운데 쪽으로 넉넉히 옮긴다
+    if (dx || dy) {
+      const cy = (top + bottom) / 2;
+      followTarget = {
+        x: cam.x + (dx ? (s.x - cam.viewW / 2) : 0) / cam.zoom,
+        y: cam.y + (dy ? (s.y - cy) : 0) / cam.zoom,
+      };
+    }
+  }
+  if (followTarget) {
+    cam.x += (followTarget.x - cam.x) * 0.2;
+    cam.y += (followTarget.y - cam.y) * 0.2;
+    if (Math.abs(followTarget.x - cam.x) < 0.5 && Math.abs(followTarget.y - cam.y) < 0.5) followTarget = null;
+  }
+}
+// 손으로 화면을 움직이기 시작하면 자동 이동을 멈춘다
+canvas.addEventListener('pointerdown', () => { followTarget = null; });
+canvas.addEventListener('wheel', () => { followTarget = null; });
 
 // 탭을 닫거나 숨길 때 저장
 window.addEventListener('pagehide', saveNow);
