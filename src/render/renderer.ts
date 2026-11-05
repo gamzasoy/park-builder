@@ -27,6 +27,10 @@ export interface View {
   selectedStaffId?: number | null;
   /** 시운전 애니메이션(렌더 전용 상태) */
   testRun?: TestRun;
+  /** 트랙을 편집 중인 코스터 id: 지붕·나무에 가린 트랙을 비쳐 보이게 덧그린다 */
+  editingId?: number | null;
+  /** 건물 회전 직후 강조 애니메이션의 기준 시각(performance.now) */
+  rotatedAt?: number;
 }
 
 const groundCache = new GroundCache();
@@ -185,6 +189,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
   drawWeather(ctx, cam, world.weather.kind, time);
 
+  // 3.5) 트랙 편집 중: 역 지붕·나무·건물에 가린 트랙을 반투명 선으로 덧그린다
+  const editing = view.editingId != null ? world.buildings.get(view.editingId) : undefined;
+  if (editing?.track) drawTrackXray(ctx, cam, editing.track.placed);
+
   // 4) 미리보기 / 호버: 칸의 윗면 모양(비탈 포함)을 따라간다. 지형 도구는 바뀐 뒤의 높이에 평평한 칸을 보여 준다
   if (preview) {
     for (const t of preview.tiles) {
@@ -198,8 +206,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
         quadFill(ctx, tilePts(cam, map, t.x, t.y), fill, 'rgba(255,255,255,0.8)');
       }
     }
-    if (preview.entrance) {
-      inset(ctx, tilePts(cam, map, preview.entrance.x, preview.entrance.y), 'rgba(255,220,80,0.5)', 'rgba(255,220,80,1)');
+    const ok = preview.tiles.every((t) => t.ok);
+    if (preview.ghost) drawGhost(ctx, cam, map, preview.ghost, ok, time);
+    if (preview.entrance && preview.ghost) {
+      drawEntranceMarker(ctx, cam, map, preview.ghost, preview.entrance, !!preview.entranceOnPath, view.rotatedAt ?? -Infinity);
     }
     if (preview.cursor) drawCursorArrow(ctx, cam, map, preview.cursor);
   } else if (hover && map.inBounds(hover.x, hover.y)) {
@@ -594,20 +604,29 @@ function drawCursorArrow(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMa
   const from = railPoint(cam, c.x + 0.5 - dx * 0.35, c.y + 0.5 - dy * 0.35, c.h);
   const to = railPoint(cam, c.x + 0.5 + dx * 0.35, c.y + 0.5 + dy * 0.35, c.h);
   const ang = Math.atan2(to.y - from.y, to.x - from.x);
-  const head = 7 * cam.zoom;
+  const head = Math.max(9, 10 * cam.zoom);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // 짙은 테두리 → 흰 화살표(잔디·트랙 위에서도 또렷하게)
+  for (const [color, extra] of [['rgba(0,0,0,0.75)', 3], ['#fff', 0]] as const) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = Math.max(3, 4 * cam.zoom) + extra;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - head * Math.cos(ang - 0.5), to.y - head * Math.sin(ang - 0.5));
+    ctx.lineTo(to.x - head * Math.cos(ang + 0.5), to.y - head * Math.sin(ang + 0.5));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
   ctx.strokeStyle = '#fff';
-  ctx.fillStyle = '#fff';
-  ctx.lineWidth = Math.max(2, 3 * cam.zoom);
-  ctx.beginPath();
-  ctx.moveTo(from.x, from.y);
-  ctx.lineTo(to.x, to.y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(to.x, to.y);
-  ctx.lineTo(to.x - head * Math.cos(ang - 0.5), to.y - head * Math.sin(ang - 0.5));
-  ctx.lineTo(to.x - head * Math.cos(ang + 0.5), to.y - head * Math.sin(ang + 0.5));
-  ctx.closePath();
-  ctx.fill();
   if (c.h > map.heightAt(c.x, c.y)) {
     // 지면 위치를 알 수 있게 바닥까지 가는 점선
     const g = railPoint(cam, c.x + 0.5, c.y + 0.5, map.heightAt(c.x, c.y));
@@ -890,4 +909,146 @@ function inset(ctx: CanvasRenderingContext2D, pts: Vec2[], fill?: string, stroke
   const cx = (pts[0].x + pts[2].x) / 2;
   const cy = (pts[0].y + pts[2].y) / 2;
   quadFill(ctx, pts.map((p) => ({ x: cx + (p.x - cx) * 0.7, y: cy + (p.y - cy) * 0.7 })), fill, stroke);
+}
+
+/** 설치 미리보기: 회전 방향이 보이도록 건물 모양을 반투명하게 그린다 */
+function drawGhost(
+  ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap,
+  g: { defId: string; x: number; y: number; w: number; h: number; rot: number }, ok: boolean, time: number,
+): void {
+  const def = getDef(g.defId);
+  const lv = map.inBounds(g.x, g.y) ? map.heightAt(g.x, g.y) : 0;
+  const P = (tx: number, ty: number): Vec2 => screenAt(cam, tx, ty, lv);
+  const q: Quad = { top: P(g.x, g.y), right: P(g.x + g.w, g.y), bottom: P(g.x + g.w, g.y + g.h), left: P(g.x, g.y + g.h) };
+  ctx.save();
+  ctx.globalAlpha = ok ? 0.6 : 0.4;
+  const opts = { z: cam.zoom, time, running: false, color: def.color, rot: g.rot };
+  if (!drawRideSprite(ctx, def.id, q, opts, g.w, g.h)) tintBox(ctx, q, 0, def.height * cam.zoom, def.color);
+  ctx.restore();
+}
+
+/** 설치 미리보기의 입구: 깜빡이는 노란 칸 + 건물에서 입구로 향하는 굵은 화살표 + "입구" 이름표 */
+function drawEntranceMarker(
+  ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap,
+  g: { x: number; y: number; w: number; h: number }, e: Tile, onPath: boolean, rotatedAt: number,
+): void {
+  const z = cam.zoom;
+  const now = performance.now();
+  const pulse = 0.5 + 0.5 * Math.sin(now / 180);
+  // 회전 직후 0.6초 동안은 크게 튀어나왔다 돌아온다
+  const pop = Math.max(0, 1 - (now - rotatedAt) / 600);
+  const color = onPath ? '90,230,130' : '255,215,60';
+  const inMap = map.inBounds(e.x, e.y);
+  const lv = inMap ? map.heightAt(e.x, e.y) : map.heightAt(g.x, g.y);
+  const pts = inMap
+    ? tilePts(cam, map, e.x, e.y)
+    : [screenAt(cam, e.x, e.y, lv), screenAt(cam, e.x + 1, e.y, lv), screenAt(cam, e.x + 1, e.y + 1, lv), screenAt(cam, e.x, e.y + 1, lv)];
+  quadFill(ctx, pts, `rgba(${color},${0.35 + 0.35 * pulse})`, `rgba(${color},1)`);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(30,25,10,0.8)';
+  inset(ctx, pts, undefined, `rgba(${color},1)`);
+
+  // 화살표: 건물 변의 가운데 → 입구 칸 가운데
+  const ex = e.x + 0.5;
+  const ey = e.y + 0.5;
+  const sx = Math.min(Math.max(ex, g.x), g.x + g.w);
+  const sy = Math.min(Math.max(ey, g.y), g.y + g.h);
+  const from = screenAt(cam, sx - (ex - sx) * 0.6, sy - (ey - sy) * 0.6, lv);
+  const to = screenAt(cam, ex, ey, lv);
+  const lift = (14 + 8 * pop) * z; // 지면에서 살짝 띄운다
+  const a = { x: from.x, y: from.y - lift };
+  const b = { x: to.x, y: to.y - lift };
+  const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  const head = Math.max(9, (12 + 6 * pop) * z);
+  const arrow = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x - Math.cos(ang) * head * 0.6, b.y - Math.sin(ang) * head * 0.6);
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - head * Math.cos(ang - 0.55), b.y - head * Math.sin(ang - 0.55));
+    ctx.lineTo(b.x - head * Math.cos(ang + 0.55), b.y - head * Math.sin(ang + 0.55));
+    ctx.closePath();
+  };
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  arrow();
+  ctx.strokeStyle = 'rgba(20,20,10,0.85)';
+  ctx.lineWidth = Math.max(6, (8 + 3 * pop) * z);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(20,20,10,0.85)';
+  ctx.fill();
+  arrow();
+  ctx.strokeStyle = `rgb(${color})`;
+  ctx.lineWidth = Math.max(3, (4.5 + 2 * pop) * z);
+  ctx.stroke();
+  ctx.fillStyle = `rgb(${color})`;
+  ctx.fill();
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+
+  // 이름표: 입구 칸 위
+  const label = onPath ? '입구 ✓ 길 연결' : '입구';
+  const fontPx = Math.max(12, (13 + 4 * pop) * Math.min(z, 1.4));
+  ctx.font = `bold ${fontPx}px ${BUBBLE_FONT}`;
+  const tw = ctx.measureText(label).width;
+  const lx = to.x;
+  const ly = to.y - lift - head - 8;
+  ctx.fillStyle = 'rgba(20,24,14,0.88)';
+  ctx.strokeStyle = `rgb(${color})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(lx - tw / 2 - 7, ly - fontPx - 2, tw + 14, fontPx + 8, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = `rgb(${color})`;
+  ctx.textAlign = 'center';
+  ctx.fillText(label, lx, ly + 1);
+  ctx.textAlign = 'start';
+}
+
+/** 편집 중인 트랙의 중심선을 맨 위에 반투명하게 덧그린다(가려진 구간도 이어져 보이게) */
+function drawTrackXray(ctx: CanvasRenderingContext2D, cam: Camera, placed: PlacedPiece[]): void {
+  if (placed.length === 0) return;
+  const z = cam.zoom;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const p of placed) {
+    const [idx, idy] = DIRS[p.dirIn];
+    const [odx, ody] = DIRS[p.dirOut];
+    const cx = p.x + 0.5;
+    const cy = p.y + 0.5;
+    const hMid = (p.hIn + p.hOut) / 2;
+    const a = railPoint(cam, cx - idx * 0.5, cy - idy * 0.5, p.hIn);
+    const b = railPoint(cam, cx + odx * 0.5, cy + ody * 0.5, p.hOut);
+    ctx.moveTo(a.x, a.y);
+    if (p.dirIn !== p.dirOut) {
+      const c = railPoint(cam, cx - idx * 0.5 + odx * 0.5, cy - idy * 0.5 + ody * 0.5, hMid);
+      ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
+    } else {
+      const m = railPoint(cam, cx, cy, hMid);
+      ctx.lineTo(m.x, m.y);
+      ctx.lineTo(b.x, b.y);
+    }
+  }
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = 'rgba(20,10,0,0.9)';
+  ctx.lineWidth = Math.max(4, 6 * z);
+  ctx.stroke();
+  ctx.strokeStyle = '#ffb347';
+  ctx.lineWidth = Math.max(2, 3 * z);
+  ctx.stroke();
+  ctx.restore();
+  // 마지막 조각 끝(= 다음 조각이 이어질 곳)에 점
+  const last = placed[placed.length - 1];
+  const [odx, ody] = DIRS[last.dirOut];
+  const end = railPoint(cam, last.x + 0.5 + odx * 0.5, last.y + 0.5 + ody * 0.5, last.hOut);
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(end.x, end.y, Math.max(4, 5 * z), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 }
