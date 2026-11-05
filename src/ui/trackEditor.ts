@@ -28,7 +28,7 @@ export class TrackEditor {
     const row = $('t-buttons');
     for (const type of TRACK_TYPES) {
       const b = document.createElement('button');
-      b.innerHTML = `<span>${TRACK_LABEL[type]}</span><small>${TRACK_KEY_HINT[type]} · ${won(PIECE_COST[type])}</small>`;
+      b.innerHTML = `<span>${TRACK_LABEL[type]}</span><small><span class="key">${TRACK_KEY_HINT[type]} · </span>${won(PIECE_COST[type])}</small>`;
       b.addEventListener('click', () => { b.blur(); this.tools.placeTrackPiece(type); });
       this.pieceBtns.set(type, b);
       row.append(b);
@@ -46,7 +46,7 @@ export class TrackEditor {
 
   private action(row: HTMLElement, label: string, hint: string, fn: () => void): HTMLButtonElement {
     const b = document.createElement('button');
-    b.innerHTML = `<span>${label}</span>${hint ? `<small>${hint}</small>` : ''}`;
+    b.innerHTML = `<span>${label}</span>${hint ? `<small class="key">${hint}</small>` : ''}`;
     b.addEventListener('click', () => { b.blur(); fn(); });
     row.append(b);
     return b;
@@ -79,7 +79,7 @@ export class TrackEditor {
     } else {
       const s0 = stationTiles(b)[0];
       const dist = Math.abs(t.cursor.x - s0.x) + Math.abs(t.cursor.y - s0.y);
-      text = `역의 시작 칸까지 ${dist}칸 — 높이 0에서 같은 방향으로 들어와야 완성됩니다 (흰 화살표 = 다음 조각 위치)`;
+      text = `역의 시작 칸까지 ${dist}칸 — 높이 0에서 같은 방향으로 들어와야 완성됩니다 (흰 화살표 = 다음 위치)`;
     }
     setText(this.msg, text);
     this.msg.dataset.bad = bad ? '1' : '0';
