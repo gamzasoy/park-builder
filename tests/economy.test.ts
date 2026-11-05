@@ -152,11 +152,11 @@ describe('rating', () => {
   it('rewards variety', () => {
     const { w } = makePark(); // 놀이기구 1 + 매점 1
     const base = computeRating(w).parts.variety;
-    expect(base).toBe(40 + 30);
+    expect(base).toBe(20 + 30);
     placePaths(w, lineTiles({ x: w.map.gate.x + 1, y: 38 }, { x: w.map.gate.x + 1, y: 34 }));
     placePaths(w, [{ x: w.map.gate.x, y: 34 }]);
     placeBuilding(w, getDef('drop'), w.map.gate.x - 1, 32, 0);
-    expect(computeRating(w).parts.variety).toBe(80 + 30);
+    expect(computeRating(w).parts.variety).toBe(40 + 30);
   });
 
   it('punishes unmet needs and long queues, and moves gradually toward the target', () => {

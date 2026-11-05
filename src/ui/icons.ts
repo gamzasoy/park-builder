@@ -48,7 +48,7 @@ export function buildingIcon(id: string): string {
   return render(`b:${id}`, (ctx) => {
     const def = getDef(id);
     // 코스터는 역보다 레일이 상징적이라 높이를 낮게 잡아 크게 보이게 한다
-    const visualH = { carousel: 60, wheel: 110, bumper: 40, drop: 150, coaster: 34 }[id] ?? 34;
+    const visualH = { carousel: 60, wheel: 110, bumper: 40, drop: 150, coaster: 34, teacups: 40, swing: 90, viking: 95, haunted: 70, slide: 80 }[id] ?? 34;
     const { q, z } = fit(def.w, def.h, visualH);
     if (id === 'coaster') {
       // 노란 레일 언덕

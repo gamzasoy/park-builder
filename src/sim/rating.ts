@@ -49,7 +49,7 @@ export function computeRating(world: World): { total: number; parts: RatingParts
     base: rides.size > 0 ? 150 : 0,
     // 운영 중인 시설이 없으면 만족시킬 것도 없다
     satisfaction: operational.length > 0 ? (400 * avgHappy) / 100 : 0,
-    variety: Math.min(rides.size, 4) * 40 + Math.min(shops.size, 3) * 30,
+    variety: Math.min(rides.size, 8) * 20 + Math.min(shops.size, 3) * 30,
     flow: operational.length > 0 ? 200 * (1 - longQueues / operational.length) : 0,
     complaints: n > 0 ? (200 * unmet) / n : 0,
     cleanliness: cleanliness(world),

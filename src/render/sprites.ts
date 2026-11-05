@@ -379,6 +379,317 @@ function dropTower(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void 
   }
 }
 
+/** 찻잔: 돌아가는 큰 원판 위에서 찻잔 세 개가 각자 또 돈다 */
+function teacups(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  const z = o.z;
+  shadow(ctx, q, z);
+  plinth(ctx, q, z);
+  const c = center(q);
+  const rx = ((q.right.x - q.left.x) / 2) * 0.8;
+  const ry = rx / 2;
+  disc(ctx, c.x, c.y - 3 * z, rx, ry, 4 * z, '#f3ead6', '#8d7a5a');
+  const floorY = c.y - 7 * z;
+  // 원판 무늬(꽃잎)
+  ctx.strokeStyle = 'rgba(95,184,208,0.45)';
+  ctx.lineWidth = Math.max(1, z);
+  ctx.beginPath();
+  ctx.ellipse(c.x, floorY, rx * 0.55, ry * 0.55, 0, 0, TAU);
+  ctx.stroke();
+
+  const spin = o.running ? o.time * 0.03 : 0;
+  const cupColors = [o.color, '#ef8fb4', '#f2c230'];
+  const cups = cupColors.map((col, i) => {
+    const a = spin + (i * TAU) / 3 + 0.5;
+    return { col, i, x: c.x + Math.cos(a) * rx * 0.55, y: floorY + Math.sin(a) * ry * 0.55 };
+  });
+  const teapot = (): void => {
+    disc(ctx, c.x, floorY, 6 * z, 3 * z, 8 * z, '#fff6e6', '#d9c7a4');
+    ctx.fillStyle = '#e8564a';
+    ctx.beginPath();
+    ctx.arc(c.x, floorY - 9.5 * z, 2 * z, 0, TAU);
+    ctx.fill();
+  };
+  const drawCup = (cup: { col: string; i: number; x: number; y: number }): void => {
+    const cr = rx * 0.32;
+    const self = o.running ? o.time * 0.12 * (cup.i % 2 ? -1 : 1) : cup.i;
+    // 받침 접시
+    ctx.fillStyle = shade(cup.col, 0.7);
+    ctx.beginPath();
+    ctx.ellipse(cup.x, cup.y, cr * 1.1, cr * 0.55, 0, 0, TAU);
+    ctx.fill();
+    // 잔 몸통(아래가 좁은 그릇)
+    const top = cup.y - 9 * z;
+    ctx.beginPath();
+    ctx.moveTo(cup.x - cr, top);
+    ctx.quadraticCurveTo(cup.x - cr * 0.9, cup.y - 1 * z, cup.x, cup.y - 1 * z);
+    ctx.quadraticCurveTo(cup.x + cr * 0.9, cup.y - 1 * z, cup.x + cr, top);
+    ctx.ellipse(cup.x, top, cr, cr * 0.5, 0, 0, Math.PI, false);
+    ctx.closePath();
+    ctx.fillStyle = cup.col;
+    ctx.fill();
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // 물방울 무늬가 돌아서 잔이 도는 게 보인다
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let k = 0; k < 3; k++) {
+      const a = self + (k * TAU) / 3;
+      if (Math.sin(a) < 0) continue;
+      ctx.beginPath();
+      ctx.arc(cup.x + Math.cos(a) * cr * 0.7, top + 4 * z, 1.3 * z, 0, TAU);
+      ctx.fill();
+    }
+    // 안쪽과 손님 머리
+    ctx.fillStyle = shade(cup.col, 0.45);
+    ctx.beginPath();
+    ctx.ellipse(cup.x, top, cr * 0.85, cr * 0.42, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#f1d3b0';
+    for (const d of [-0.35, 0.35]) {
+      const a = self + d * Math.PI;
+      ctx.beginPath();
+      ctx.arc(cup.x + Math.cos(a) * cr * 0.4, top - 2 * z + Math.sin(a) * cr * 0.15, 2 * z, 0, TAU);
+      ctx.fill();
+    }
+  };
+  const back = cups.filter((p) => p.y < floorY).sort((a, b) => a.y - b.y);
+  const front = cups.filter((p) => p.y >= floorY).sort((a, b) => a.y - b.y);
+  back.forEach(drawCup);
+  teapot();
+  front.forEach(drawCup);
+}
+
+/** 회전 그네: 기둥 꼭대기 지붕이 돌면 그네가 바깥으로 날아오른다 */
+function swingRide(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  const z = o.z;
+  shadow(ctx, q, z);
+  plinth(ctx, q, z);
+  const c = center(q);
+  const base = c.y - 3 * z;
+  const R = ((q.right.x - q.left.x) / 2) * 0.62;
+  // 운행 중엔 지붕이 조금 올라가고 그네가 펼쳐진다(0~1로 서서히)
+  const lift = o.running ? Math.min(1, 0.6 + 0.4 * Math.sin(o.time * 0.02)) : 0;
+  const poleH = (52 + 10 * lift) * z;
+  const topY = base - poleH;
+  const spin = o.running ? o.time * 0.07 : 0;
+  const chain = 22 * z;
+  const swingOut = lift * 0.9; // 줄이 기울어지는 각(라디안)
+
+  const seats = Array.from({ length: 10 }, (_, i) => {
+    const a = spin + (i * TAU) / 10;
+    const anchor = { x: c.x + Math.cos(a) * R, y: topY + Math.sin(a) * R * 0.5 };
+    const out = R + Math.sin(swingOut) * chain;
+    const seat = { x: c.x + Math.cos(a) * out, y: topY + Math.sin(a) * out * 0.5 + Math.cos(swingOut) * chain };
+    return { a, anchor, seat, i };
+  });
+  const drawSeat = (s: (typeof seats)[number]): void => {
+    line(ctx, s.anchor, s.seat, 'rgba(70,70,70,0.7)', 1);
+    ctx.fillStyle = PALETTE[s.i % PALETTE.length];
+    ctx.strokeStyle = OUTLINE;
+    ctx.beginPath();
+    ctx.roundRect(s.seat.x - 2.5 * z, s.seat.y - 1 * z, 5 * z, 3 * z, 1 * z);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f1d3b0';
+    ctx.beginPath();
+    ctx.arc(s.seat.x, s.seat.y - 2.5 * z, 1.8 * z, 0, TAU);
+    ctx.fill();
+  };
+  seats.filter((s) => Math.sin(s.a) < 0).sort((a, b) => a.seat.y - b.seat.y).forEach(drawSeat);
+  // 기둥
+  const pw = 4 * z;
+  ctx.fillStyle = '#c9ccd2';
+  ctx.fillRect(c.x - pw, topY, pw * 2, base - topY);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(c.x, topY, pw, base - topY);
+  ctx.strokeStyle = OUTLINE;
+  ctx.strokeRect(c.x - pw, topY, pw * 2, base - topY);
+  disc(ctx, c.x, base, 9 * z, 4.5 * z, 6 * z, shade(o.color, 0.9), shade(o.color, 0.6));
+  seats.filter((s) => Math.sin(s.a) >= 0).sort((a, b) => a.seat.y - b.seat.y).forEach(drawSeat);
+  // 지붕
+  disc(ctx, c.x, topY, R * 1.05, R * 0.525, 3 * z, o.color, shade(o.color, 0.65));
+  cone(ctx, c.x, topY - 3 * z, R * 1.05, R * 0.525, 14 * z, [o.color, '#4a8fe8'], 12, spin * 0.5);
+  flag(ctx, { x: c.x, y: topY - 17 * z }, z, '#e8564a', o.time);
+}
+
+/** 바이킹: A자 지지대에 매달린 배가 길이 방향으로 크게 흔들린다 */
+function vikingShip(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, alongX: boolean): void {
+  const z = o.z;
+  shadow(ctx, q, z);
+  plinth(ctx, q, z);
+  const c = center(q);
+  const u = alongX ? { x: 0.894, y: 0.447 } : { x: -0.894, y: 0.447 }; // 흔들리는 방향(긴 변)
+  const v = alongX ? { x: -0.894, y: 0.447 } : { x: 0.894, y: 0.447 }; // 회전축 방향(+ = 화면 앞)
+  const pivotH = 60 * z;
+  const pivot = { x: c.x, y: c.y - 3 * z - pivotH };
+  const theta = o.running ? 1.05 * Math.sin(o.time * 0.055) * Math.min(1, 0.4 + 0.6 * Math.abs(Math.sin(o.time * 0.004))) : 0;
+  const cs = Math.cos(theta);
+  const sn = Math.sin(theta);
+  const halfW = 9 * z; // 배의 폭(축 방향 절반)
+  /** 배 기준 좌표(lx: 길이 방향, ly: 피벗에서 아래로) → 화면 */
+  const P = (lx: number, ly: number, off: number): Vec2 => {
+    const rx = lx * cs - ly * sn;
+    const ry = lx * sn + ly * cs;
+    return { x: pivot.x + u.x * rx + v.x * off, y: pivot.y + u.y * rx + ry + v.y * off };
+  };
+  const L = 38 * z;
+  const hull: [number, number][] = [
+    [-34 * z, L - 12 * z], [-26 * z, L], [26 * z, L], [34 * z, L - 12 * z],
+    [24 * z, L + 9 * z], [0, L + 12 * z], [-24 * z, L + 9 * z],
+  ];
+  const deck: [number, number][] = [[-26 * z, L], [26 * z, L]];
+  const legs = (off: number): void => {
+    const g = (s: number): Vec2 => ({ x: c.x + u.x * 40 * z * s + v.x * off, y: c.y - 3 * z + u.y * 40 * z * s + v.y * off });
+    const top = { x: pivot.x + v.x * off, y: pivot.y + v.y * off };
+    line(ctx, g(-1), top, '#7a5a3a', Math.max(1.5, 3.5 * z));
+    line(ctx, g(1), top, '#7a5a3a', Math.max(1.5, 3.5 * z));
+  };
+  const arms = (off: number): void => {
+    for (const lx of [-18 * z, 18 * z]) line(ctx, { x: pivot.x + v.x * off, y: pivot.y + v.y * off }, P(lx, L, off), '#5d626c', Math.max(1, 2 * z));
+  };
+  legs(-halfW - 3 * z);
+  arms(-halfW);
+  // 뒷면 선체
+  poly(ctx, hull.map(([a, b]) => P(a, b, -halfW)), shade(o.color, 0.55));
+  // 갑판 + 승객 머리
+  poly(ctx, [P(deck[0][0], deck[0][1], -halfW), P(deck[1][0], deck[1][1], -halfW), P(deck[1][0], deck[1][1], halfW), P(deck[0][0], deck[0][1], halfW)], '#8a6a46');
+  ctx.fillStyle = '#f1d3b0';
+  for (let i = 0; i < 6; i++) {
+    for (const off of [-halfW * 0.5, halfW * 0.5]) {
+      const p = P(-20 * z + i * 8 * z, L - 3 * z, off);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1.9 * z, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // 앞면 선체: 줄무늬 + 뱃머리 장식
+  poly(ctx, hull.map(([a, b]) => P(a, b, halfW)), o.color);
+  poly(ctx, [P(-27 * z, L + 3 * z, halfW), P(27 * z, L + 3 * z, halfW), P(25 * z, L + 6 * z, halfW), P(-25 * z, L + 6 * z, halfW)], '#f2c230', null);
+  for (const s of [-1, 1]) {
+    const tip = P(s * 36 * z, L - 16 * z, 0);
+    ctx.fillStyle = '#f2c230';
+    ctx.strokeStyle = OUTLINE;
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, 3 * z, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+  arms(halfW);
+  // 회전축
+  line(ctx, { x: pivot.x + v.x * (-halfW - 3 * z), y: pivot.y + v.y * (-halfW - 3 * z) }, { x: pivot.x + v.x * (halfW + 3 * z), y: pivot.y + v.y * (halfW + 3 * z) }, '#3c4048', Math.max(1.5, 3 * z));
+  legs(halfW + 3 * z);
+}
+
+/** 유령의 집: 어두운 저택. 창문이 깜빡이고 지붕 위로 유령이 떠다닌다 */
+function hauntedHouse(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, alongX: boolean): void {
+  const z = o.z;
+  shadow(ctx, q, z);
+  const f = insetQuad(q, 0.9);
+  const H = 24 * z;
+  box(ctx, f, 0, H, shade(o.color, 0.9), shade(o.color, 0.75), shade(o.color, 0.55));
+  // 앞 두 벽에 창문
+  const flicker = o.running ? (Math.sin(o.time * 0.4) > 0.2 ? 1 : 0.55) : 0.8;
+  const glow = `rgba(255,214,90,${flicker})`;
+  for (const [a, b, n] of [[f.left, f.bottom, alongX ? 3 : 2], [f.bottom, f.right, alongX ? 2 : 3]] as const) {
+    for (let i = 0; i < n; i++) {
+      const t0 = (i + 0.3) / n;
+      const t1 = (i + 0.7) / n;
+      const p0 = { x: a.x + (b.x - a.x) * t0, y: a.y + (b.y - a.y) * t0 };
+      const p1 = { x: a.x + (b.x - a.x) * t1, y: a.y + (b.y - a.y) * t1 };
+      poly(ctx, [up(p0, 10 * z), up(p1, 10 * z), up(p1, 19 * z), up(p0, 19 * z)], glow, 'rgba(0,0,0,0.5)');
+    }
+  }
+  // 문(입구 쪽 벽 가운데)
+  const [da, db] = alongX ? [f.left, f.bottom] : [f.bottom, f.right];
+  const d0 = { x: da.x + (db.x - da.x) * 0.42, y: da.y + (db.y - da.y) * 0.42 };
+  const d1 = { x: da.x + (db.x - da.x) * 0.58, y: da.y + (db.y - da.y) * 0.58 };
+  poly(ctx, [d0, d1, up(d1, 9 * z), up(d0, 9 * z)], '#2a1a12', null);
+  gableRoof(ctx, insetQuad(q, 0.96), H, 16 * z, '#3a3248', alongX);
+  // 굴뚝 위 유령
+  const bob = Math.sin(o.time * (o.running ? 0.15 : 0.05)) * 4 * z;
+  const gx = up(center(q), H + 24 * z);
+  const gy = gx.y + bob;
+  ctx.fillStyle = 'rgba(245,245,255,0.92)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.arc(gx.x, gy, 6 * z, Math.PI, 0);
+  ctx.lineTo(gx.x + 6 * z, gy + 7 * z);
+  for (let i = 0; i < 3; i++) {
+    ctx.lineTo(gx.x + 6 * z - (i * 4 + 2) * z, gy + 5 * z);
+    ctx.lineTo(gx.x + 6 * z - (i * 4 + 4) * z, gy + 7 * z);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#222';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(gx.x + s * 2.2 * z, gy - 0.5 * z, 1 * z, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** 나선 미끄럼틀: 줄무늬 탑을 감아 내려오는 미끄럼판 */
+function helterSkelter(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  const z = o.z;
+  shadow(ctx, q, z);
+  plinth(ctx, q, z);
+  const c = center(q);
+  const base = c.y - 3 * z;
+  const tr = 8 * z; // 탑 반지름
+  const H = 54 * z;
+  const sr = 15 * z; // 미끄럼판 반지름
+  const turns = 2.25;
+  const N = 54;
+  const pt = (t: number): Vec2 => {
+    const a = t * turns * TAU;
+    return { x: c.x + Math.cos(a) * sr, y: base - 4 * z - (1 - t) * (H - 8 * z) + Math.sin(a) * sr * 0.5 };
+  };
+  const seg = (front: boolean): void => {
+    ctx.lineCap = 'round';
+    for (let i = 0; i < N; i++) {
+      const t0 = i / N;
+      const t1 = (i + 1) / N;
+      const a = ((t0 + t1) / 2) * turns * TAU;
+      if ((Math.sin(a) >= 0) !== front) continue;
+      const p0 = pt(t0);
+      const p1 = pt(t1);
+      line(ctx, p0, p1, '#8a6a20', Math.max(2, 5 * z));
+      line(ctx, p0, p1, i % 4 < 2 ? '#f2c230' : '#f6e08a', Math.max(1, 3.2 * z));
+    }
+    ctx.lineCap = 'butt';
+  };
+  // 내려오는 손님(미끄럼판 위 위치)
+  const rider = o.running ? pt((o.time * 0.01) % 1) : null;
+  const drawRider = (front: boolean): void => {
+    if (!rider) return;
+    const t = (o.time * 0.01) % 1;
+    if ((Math.sin(t * turns * TAU) >= 0) !== front) return;
+    ctx.fillStyle = '#7a4a2a';
+    ctx.beginPath();
+    ctx.ellipse(rider.x, rider.y - 1 * z, 3 * z, 1.5 * z, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#f1d3b0';
+    ctx.beginPath();
+    ctx.arc(rider.x, rider.y - 4 * z, 2 * z, 0, TAU);
+    ctx.fill();
+  };
+  seg(false);
+  drawRider(false);
+  // 탑: 줄무늬 원기둥
+  const bands = 6;
+  for (let i = 0; i < bands; i++) {
+    const y0 = base - (i * H) / bands;
+    const h = H / bands;
+    disc(ctx, c.x, y0, tr, tr * 0.5, h, i % 2 ? '#fff' : o.color, i % 2 ? '#e8e2d6' : shade(o.color, 0.8));
+  }
+  seg(true);
+  drawRider(true);
+  // 꼭대기 지붕
+  cone(ctx, c.x, base - H, tr * 1.6, tr * 0.8, 14 * z, [o.color, '#fff3df'], 10);
+  flag(ctx, { x: c.x, y: base - H - 14 * z }, z, '#4a8fe8', o.time);
+}
+
 /** 박공지붕. alongX면 용마루가 타일 x 방향(top→right)으로 뻗는다 */
 function gableRoof(ctx: CanvasRenderingContext2D, q: Quad, h0: number, rise: number, color: string, alongX: boolean): void {
   const e = [q.top, q.right, q.bottom, q.left].map((p) => up(p, h0));
@@ -496,6 +807,11 @@ export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Qua
     case 'wheel': ferrisWheel(ctx, q, o); return true;
     case 'bumper': bumperCars(ctx, q, o); return true;
     case 'drop': dropTower(ctx, q, o); return true;
+    case 'teacups': teacups(ctx, q, o); return true;
+    case 'swing': swingRide(ctx, q, o); return true;
+    case 'viking': vikingShip(ctx, q, o, w >= h); return true;
+    case 'haunted': hauntedHouse(ctx, q, o, w >= h); return true;
+    case 'slide': helterSkelter(ctx, q, o); return true;
     case 'coaster': stationRoof(ctx, q, o, w >= h); return true;
     case 'burger': kiosk(ctx, q, o, '#c0392b'); return true;
     case 'drinks': kiosk(ctx, q, o, '#2a8f86'); return true;

@@ -1,3 +1,4 @@
+import { hash32 } from '../core/hash';
 import { BIN } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
@@ -124,6 +125,11 @@ export function createGuest(world: World): Guest {
     trash: 0,
     umbrella: false,
   };
+}
+
+/** 손님의 담력(35~90): 이보다 강도가 높은 놀이기구는 꺼린다. id로 정해지므로 저장할 필요가 없다 */
+export function thrillTolerance(g: Guest): number {
+  return 35 + (hash32(g.id, 0, 23) % 56);
 }
 
 export function think(g: Guest, t: Thought): void {
@@ -312,6 +318,9 @@ export function pickTarget(world: World, g: Guest): { b: Building; path: readonl
     } else {
       if (g.needs.energy < 20) continue;
       score = (def.fun ?? 0) + world.rng.next() * 20 - (g.visited.includes(b.id) ? 35 : 0);
+      // 담력보다 무서운 기구는 꺼리고, 지친 손님은 멀미 나는 기구를 피한다
+      score -= Math.max(0, (def.intensity ?? 0) - thrillTolerance(g)) * 1.2;
+      if (g.needs.energy < 50) score -= (def.nausea ?? 0) * 0.3;
       if (def.outdoor && isRaining(world) && !g.umbrella) score -= RAIN_RIDE_PENALTY;
     }
     // 거리·줄·요금 부담, 그리고 적정가를 넘는 만큼 추가 감점
