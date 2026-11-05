@@ -41,7 +41,14 @@ export interface Preview {
   entrance?: Tile;
   /** 트랙 편집: 다음 조각이 놓일 위치·방향·높이 */
   cursor?: Cursor;
+  /** 건물 설치: 반투명으로 미리 그릴 건물(회전 방향이 보이게) */
+  ghost?: { defId: string; x: number; y: number; w: number; h: number; rot: number };
+  /** 건물 설치: 입구 칸이 이미 길과 닿아 있는가 */
+  entranceOnPath?: boolean;
 }
+
+/** 회전값별 입구 방향(화면 기준 화살표) */
+export const ENTRANCE_DIR_TEXT = ['↙ 왼쪽 아래', '↘ 오른쪽 아래', '↗ 오른쪽 위', '↖ 왼쪽 위'];
 
 const FAIL_TEXT: Record<PlaceFailure, string> = {
   bounds: '맵 밖에는 지을 수 없습니다',
@@ -108,8 +115,13 @@ export class ToolController {
     this.dragStart = null;
   }
 
+  /** 마지막으로 회전한 시각(미리보기 강조 애니메이션용) */
+  rotatedAt = -Infinity;
+
   rotate(): void {
     this.rot = (this.rot + 1) % 4;
+    this.rotatedAt = performance.now();
+    if (this.tool.kind === 'build') this.notify(`회전: 입구가 ${ENTRANCE_DIR_TEXT[this.rot]} 쪽`);
   }
 
   /** Esc: 진행 중인 드래그 취소 → 도구 해제 → 선택 해제 */
@@ -334,7 +346,12 @@ export class ToolController {
       for (let y = f.y; y < f.y + f.h; y++) {
         for (let x = f.x; x < f.x + f.w; x++) if (map.inBounds(x, y)) tiles.push({ x, y, ok });
       }
-      return { tiles, entrance: entranceOf(f, this.rot) };
+      const entrance = entranceOf(f, this.rot);
+      return {
+        tiles, entrance,
+        ghost: { defId: tool.def.id, ...f, rot: this.rot },
+        entranceOnPath: map.inBounds(entrance.x, entrance.y) && map.isPath(entrance.x, entrance.y),
+      };
     }
 
     if (tool.kind === 'demolish') {

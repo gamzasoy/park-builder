@@ -231,6 +231,9 @@
         #t-buttons { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
         #t-buttons button { flex: none; min-width: 60px; min-height: 40px; padding: 3px 6px; }
         #t-stats { margin: 1px 0 4px; }
+        /* 트랙 편집 중에는 아래 도구 막대를 숨겨 공원을 넓게 보여 준다(편집 바만 남김) */
+        body.track-editing #toolbar, body.track-editing #tb-toggle { display: none; }
+        body.track-editing #track-bar { bottom: var(--sab); max-height: calc(100dvh - 40px - var(--sat) - var(--sab)); }
       }
 
       /* 세로로 들면 가로 안내를 덮어서 보여 준다 (터치 기기만) */
