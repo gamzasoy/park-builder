@@ -26,7 +26,7 @@ export type Tool =
   | { kind: 'terrain'; mode: TerrainMode };
 
 /** 효과음 등 부가 반응을 위한 이벤트 */
-export type ToolEvent = 'build' | 'path' | 'demolish' | 'error' | 'chime';
+export type ToolEvent = 'build' | 'path' | 'demolish' | 'error' | 'chime' | 'pickup';
 
 /** 손님 클릭 선택 반경(타일). 렌더 오프셋과 틱 사이 보간을 고려해 넉넉하게. */
 export const GUEST_PICK_RADIUS = 0.6;
@@ -243,6 +243,8 @@ export class ToolController {
     const tool = this.tool;
     if (tool.kind === 'none') {
       const sid = pos ? this.staffNear(pos) : null;
+      // 쓰레기가 있는 칸을 누르면 직접 줍는다(손님이 붐비는 길에서도 주울 수 있게 손님 선택보다 우선)
+      if (sid === null && this.pickUpLitter(t)) return;
       const gid = pos && sid === null ? this.guestNear(pos) : null;
       this.selectedStaffId = sid;
       this.selectedGuestId = gid;
@@ -271,6 +273,17 @@ export class ToolController {
         this.onEvent?.('demolish');
       }
     }
+  }
+
+  /** 그 칸의 쓰레기를 모두 줍는다. 주운 개수(없으면 0) */
+  pickUpLitter(t: Tile): number {
+    const m = this.world.map;
+    const n = m.litterAt(t.x, t.y);
+    if (n === 0) return 0;
+    m.litter[m.index(t.x, t.y)] = 0;
+    this.notify(`쓰레기 ${n}개를 주웠습니다`);
+    this.onEvent?.('pickup');
+    return n;
   }
 
   onUp(t: Tile | null): void {
@@ -307,6 +320,11 @@ export class ToolController {
     }
 
     if (!hover) return null;
+
+    // 선택 모드에서 쓰레기 칸 위에 있으면 주울 수 있다고 표시
+    if (tool.kind === 'none') {
+      return map.litterAt(hover.x, hover.y) > 0 ? { tiles: [{ ...hover, ok: true }] } : null;
+    }
 
     if (tool.kind === 'terrain') {
       // 드래그 중에는 칸마다 독립적으로 검사한다(실제 적용은 앞 칸의 변경이 뒤 칸에 반영되므로 약간 다를 수 있다)
