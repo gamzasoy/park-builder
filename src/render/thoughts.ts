@@ -1,6 +1,6 @@
 import type { Thought } from '../sim/guest';
 
-/** 말풍선·대기열 배지 글꼴: 시스템 한글 폰트만 쓴다(외부 폰트 없음) */
+/** 말풍선·대기열 배지 글꼴: 시스템 한글 폰트만 쓴다(외부 폰트 없음). index.html의 --font와 같게 유지한다 */
 export const BUBBLE_FONT = '"Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif';
 
 export const THOUGHT_TEXT: Record<Thought, string> = {

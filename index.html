@@ -34,7 +34,8 @@
         --bar: #3c4527; --bar-2: #2d3420;
         --accent: #2f8f55; --gold: #ffd75a; --muted: rgba(255,255,255,0.72); --line: #3a4428;
         --text-shadow: 1px 1px 0 rgba(0,0,0,0.65);
-        --font: "Trebuchet MS", Verdana, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+        /* 한글 글꼴을 맨 앞에: 숫자·영문·₩도 같은 글꼴로 그려 한 줄 안에서 글씨체가 섞이지 않게(캔버스 말풍선 BUBBLE_FONT와 같다) */
+        --font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
       }
       html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; background: #1f3a1c; font-family: var(--font); color: #fff; }
       canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; }

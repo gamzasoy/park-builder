@@ -689,11 +689,11 @@ function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: numbe
   // 간판 폭에 맞게 글자 크기를 줄인다
   const signW = Math.hypot(b.x - a.x, b.y - a.y) * 0.9;
   let fontPx = Math.max(6, 8 * z);
-  ctx.font = `bold ${fontPx}px "Trebuchet MS", ${BUBBLE_FONT}`;
+  ctx.font = `bold ${fontPx}px ${BUBBLE_FONT}`;
   const tw = ctx.measureText(label).width;
   if (tw > signW) {
     fontPx = Math.max(4, fontPx * (signW / tw));
-    ctx.font = `bold ${fontPx}px "Trebuchet MS", ${BUBBLE_FONT}`;
+    ctx.font = `bold ${fontPx}px ${BUBBLE_FONT}`;
   }
   ctx.textAlign = 'center';
   ctx.fillText(label, 0, 0);
@@ -973,7 +973,7 @@ function drawStallMarker(ctx: CanvasRenderingContext2D, cam: Camera, x: number, 
   ctx.moveTo(s.x - 6 * z, s.y - 34 * z); ctx.lineTo(s.x + 6 * z, s.y - 22 * z);
   ctx.moveTo(s.x + 6 * z, s.y - 34 * z); ctx.lineTo(s.x - 6 * z, s.y - 22 * z);
   ctx.stroke();
-  ctx.font = `bold ${Math.max(9, 11 * z)}px "Trebuchet MS", sans-serif`;
+  ctx.font = `bold ${Math.max(9, 11 * z)}px ${BUBBLE_FONT}`;
   ctx.textAlign = 'center';
   ctx.lineWidth = 3;
   ctx.strokeStyle = 'rgba(0,0,0,0.7)';
