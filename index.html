@@ -154,7 +154,7 @@
       .p-row:nth-child(odd) { background: rgba(0,0,0,0.1); }
       .p-row > span:first-child { color: var(--muted); }
       #p-status[data-ok="0"] { color: #ffb0a8; }
-      #p-demolish, #p-edit, #p-test { width: 100%; margin-top: 8px; padding: 4px; }
+      #p-demolish, #p-edit, #p-test, #p-upgrade { width: 100%; margin-top: 8px; padding: 4px; }
       #finance table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.12); }
       #finance th { text-align: left; font-weight: 400; color: var(--muted); padding: 3px 4px; }
       #finance td { text-align: right; padding: 3px 4px 3px 8px; font-variant-numeric: tabular-nums; }
@@ -174,6 +174,8 @@
       #m-rows { width: 100%; border-collapse: collapse; margin-bottom: 14px; background: rgba(0,0,0,0.12); }
       #m-rows th { text-align: left; font-weight: 400; color: var(--muted); padding: 4px 6px; }
       #m-rows td { text-align: right; padding: 4px 6px; font-variant-numeric: tabular-nums; }
+      #m-input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 6px 8px; font: inherit; font-size: 16px; }
+      #m-input[hidden] { display: none; }
       #m-buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
       #m-buttons button { padding: 5px 14px; }
       #m-buttons button.primary, #t-buttons button.primary {
@@ -246,7 +248,7 @@
         .card .head { position: sticky; top: 0; z-index: 1; }
         .card .head button, .card .head div button { min-width: 36px; height: 30px; font-size: 16px; }
         .p-row { padding: 4px; }
-        #p-demolish, #p-edit, #p-test, #s-fire { min-height: 36px; }
+        #p-demolish, #p-edit, #p-test, #p-upgrade, #s-fire { min-height: 36px; }
         #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
         #m-buttons button { min-height: 38px; }
         #track-bar {
@@ -338,6 +340,7 @@
       <div class="p-row"><span>하루 유지비</span><span id="p-upkeep"></span></div>
       <div class="p-row"><span>이용 요금</span><span id="p-price-ctl"></span></div>
       <div class="p-row"><span>적정 요금</span><span id="p-fair"></span></div>
+      <button id="p-upgrade" hidden></button>
       <button id="p-edit" hidden>트랙 편집</button>
       <button id="p-test" hidden>시운전</button>
       <button id="p-demolish"></button>
@@ -372,6 +375,7 @@
         <h2 id="m-title"></h2>
         <p id="m-msg"></p>
         <table id="m-rows"></table>
+        <input id="m-input" type="text" hidden autocomplete="off" />
         <div id="m-buttons"></div>
       </div>
     </div>

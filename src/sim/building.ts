@@ -1,6 +1,6 @@
 import { sceneryDef, type SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
-import { buildingDef, buildingTiles, newTrack } from './coaster';
+import { buildingDef, buildingTiles, MAX_LEVEL, newTrack, upgradeCost } from './coaster';
 import type { Tile } from './map';
 import { trackOccupancy } from './trackedit';
 import { evictAll } from './venue';
@@ -189,4 +189,14 @@ export function placePaths(world: World, tiles: Tile[]): { placed: number; short
     placed++;
   }
   return { placed, short };
+}
+
+/** 놀이기구를 한 단계 업그레이드한다. 할 수 없으면 이유를, 성공하면 null */
+export function upgradeRide(world: World, b: Building): string | null {
+  const cost = upgradeCost(b);
+  if (cost === null) return (b.level ?? 1) >= MAX_LEVEL ? '이미 최고 단계입니다' : '업그레이드할 수 없습니다';
+  if (world.money < cost) return '돈이 부족합니다';
+  world.transact('construction', -cost);
+  b.level = (b.level ?? 1) + 1;
+  return null;
 }

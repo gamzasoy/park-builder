@@ -4,7 +4,7 @@ import { think, VIP_TICKS, type Guest } from './guest';
 import { buildingDef } from './coaster';
 import { isNight } from './daynight';
 import { admitGuest, MAX_GUESTS } from './spawner';
-import { weatherKindOf } from './weather';
+import { rainbowAt, weatherKindOf } from './weather';
 import type { World } from './world';
 
 // ---------------------------------------------------------------- 랜덤 이벤트
@@ -33,6 +33,8 @@ export const EVENT_CHANCE = 0.4;
 export const EVENT_TICKS: Record<EventKind, number> = { bus: 60, heatwave: 300, hype: 240, blackout: 80, vip: 60 };
 /** 관광버스로 들어오는 손님 수 */
 export const BUS_GUESTS = 20;
+/** 무지개가 떠 있는 동안 손님 행복 +1 주기(틱) */
+export const RAINBOW_CHEER_EVERY = 20;
 /** VIP가 더 가지고 오는 돈 */
 export const VIP_MONEY = 150;
 /** 폭염 중 틱당 추가 갈증 */
@@ -133,6 +135,14 @@ export function updateEvents(world: World): void {
     for (let i = 0; i < BUS_GUESTS && world.guests.length < MAX_GUESTS; i++) admitGuest(world);
   }
   if (world.event?.kind === 'vip' && t === world.event.start) spawnVip(world);
+  // 무지개: 비 온 다음 날 아침, 바라보는 손님의 기분이 오른다
+  if (t % RAINBOW_CHEER_EVERY === 0 && rainbowAt(world.weatherSeed, t)) {
+    for (const g of world.guests) {
+      if (g.state === 'visiting' || g.state === 'gone') continue;
+      g.needs.happiness = Math.min(100, g.needs.happiness + 1);
+      if (!g.thought && hash32(g.id, t, 43) % 6 === 0) think(g, 'rainbow');
+    }
+  }
 
   const fw = world.fireworks;
   if (!fw) return;

@@ -78,6 +78,8 @@ export class ToolController {
   /** 선택된 직원 id (건물·손님과 동시에 선택되지 않음) */
   selectedStaffId: number | null = null;
   onEvent?: (e: ToolEvent) => void;
+  /** 도구 없이 공원 입구를 눌렀을 때(이름 짓기) */
+  onGate?: () => void;
   message = '';
   messageUntil = 0;
   private dragStart: Tile | null = null;
@@ -246,6 +248,10 @@ export class ToolController {
       // 쓰레기가 있는 칸을 누르면 직접 줍는다(손님이 붐비는 길에서도 주울 수 있게 손님 선택보다 우선)
       if (sid === null && this.pickUpLitter(t)) return;
       const gid = pos && sid === null ? this.guestNear(pos) : null;
+      if (sid === null && gid === null && this.world.map.isGate(t.x, t.y)) {
+        this.onGate?.();
+        return;
+      }
       this.selectedStaffId = sid;
       this.selectedGuestId = gid;
       this.selectedId = sid === null && gid === null ? (buildingAt(this.world, t.x, t.y)?.id ?? null) : null;

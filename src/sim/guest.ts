@@ -31,7 +31,7 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks' | 'fountain' | 'vipHappy' | 'vipSad';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks' | 'fountain' | 'vipHappy' | 'vipSad' | 'rainbow';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;

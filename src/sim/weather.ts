@@ -46,3 +46,13 @@ export function updateWeather(world: World): void {
 }
 
 export const isRaining = (world: World): boolean => world.weather.kind === 'rain';
+
+/** 비 온 다음 날 아침의 무지개가 떠 있는 시간(틱) */
+export const RAINBOW_TICKS = 200;
+
+/** 틱 시점에 무지개가 떠 있는가: 전날 비가 왔고 오늘은 비가 오지 않는 날의 아침 */
+export function rainbowAt(seed: number, tick: number): boolean {
+  const day = Math.floor(tick / DAY_TICKS);
+  if (day < 1 || tick - day * DAY_TICKS >= RAINBOW_TICKS) return false;
+  return weatherKindOf(seed, day - 1) === 'rain' && weatherKindOf(seed, day) !== 'rain';
+}

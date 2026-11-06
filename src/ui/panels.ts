@@ -1,11 +1,12 @@
 import { getDef } from '../data';
-import { buildingDef } from '../sim/coaster';
+import { buildingDef, MAX_LEVEL, UPGRADE_FUN, upgradeCost } from '../sim/coaster';
 import type { ToolController } from '../input/tools';
 import type { TestRun } from '../render/testrun';
 import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
 import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
-import { demolishAt, REFUND_RATE } from '../sim/building';
+import { demolishAt, REFUND_RATE, upgradeRide } from '../sim/building';
+import { withObj } from './josa';
 import { dailyUpkeep, dailyWages, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
@@ -32,6 +33,9 @@ export class BuildingPanel {
   private price: Stepper;
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
   private editBtn = $<HTMLButtonElement>('p-edit');
+  private upgradeBtn = $<HTMLButtonElement>('p-upgrade');
+  /** 업그레이드 버튼을 누른 뒤(성공 여부) — 효과음용 */
+  onUpgrade?: (ok: boolean) => void;
   private testBtn = $<HTMLButtonElement>('p-test');
   private relRow = $('p-rel-row');
   private rel = $('p-rel');
@@ -45,6 +49,13 @@ export class BuildingPanel {
     });
     $('p-price-ctl').append(this.price.el);
     $('p-close').addEventListener('click', () => { this.tools.selectedId = null; });
+    this.upgradeBtn.addEventListener('click', () => {
+      const b = this.current();
+      if (!b) return;
+      const err = upgradeRide(this.world, b);
+      this.tools.notify(err ?? `${withObj(getDef(b.defId).name)} Lv.${b.level}로 업그레이드했습니다 (재미 +${UPGRADE_FUN})`);
+      this.onUpgrade?.(err === null);
+    });
     this.editBtn.addEventListener('click', () => {
       const b = this.current();
       if (b) this.tools.beginTrackEdit(b.id);
@@ -77,7 +88,14 @@ export class BuildingPanel {
     const def = buildingDef(b);
     const operational = this.world.network.isOperational(b);
     const trackPending = !!b.track && !b.track.ok;
-    setText(this.name, def.name);
+    const lv = b.level ?? 1;
+    setText(this.name, def.kind === 'ride' ? `${def.name} ${'★'.repeat(lv)}` : def.name);
+    const upCost = upgradeCost(b);
+    this.upgradeBtn.hidden = def.kind !== 'ride' || (upCost === null && lv < MAX_LEVEL);
+    if (!this.upgradeBtn.hidden) {
+      setText(this.upgradeBtn, upCost === null ? `최고 단계 (Lv.${lv})` : `업그레이드 → Lv.${lv + 1} (${won(upCost)} · 재미 +${UPGRADE_FUN})`);
+      this.upgradeBtn.disabled = upCost === null || this.world.money < upCost;
+    }
     setText(
       this.status,
       b.broken

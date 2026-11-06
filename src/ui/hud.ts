@@ -4,6 +4,7 @@ import { dateOf, setEntranceFee } from '../sim/economy';
 import { GOAL, goalProgress } from '../sim/goals';
 import { BUS_GUESTS } from '../sim/events';
 import { clockOf, isNight } from '../sim/daynight';
+import { rainbowAt } from '../sim/weather';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
 
@@ -40,6 +41,7 @@ export const EVENT_VIEW = {
   hype: { icon: '📸', label: '입소문', tip: '인기 블로거 방문: 잠시 동안 손님 입장이 2배' },
   blackout: { icon: '⚡', label: '정전', tip: '정전: 잠시 동안 놀이기구가 새 손님을 태우지 못합니다 · 줄 선 손님은 기다리다 지칩니다' },
   vip: { icon: '👑', label: 'VIP 방문', tip: 'VIP 손님: 왕관을 쓴 손님이 타고 싶은 놀이기구를 태워 주면 상금을 받습니다' },
+  rainbow: { icon: '🌈', label: '무지개', tip: '무지개: 비 온 다음 날 아침, 손님들의 기분이 조금씩 좋아집니다' },
   fireworks: { icon: '🎆', label: '불꽃놀이', tip: '불꽃놀이: 공원 모든 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
 } as const;
 
@@ -111,8 +113,12 @@ export class Hud {
     const wv = WEATHER_VIEW[w.weather.kind];
     const ev = w.event ? EVENT_VIEW[w.event.kind] : null;
     const show = w.fireworks ? EVENT_VIEW.fireworks : null;
-    setText(this.weather, [`${wv.icon} ${wv.label}`, ev && `${ev.icon} ${ev.label}`, show && `${show.icon} ${show.label}`].filter(Boolean).join(' · '));
-    const tip = [wv.tip, ev?.tip, show?.tip].filter(Boolean).join('\n');
+    const rb = rainbowAt(w.weatherSeed, w.tick) ? EVENT_VIEW.rainbow : null;
+    // 이벤트가 하나면 이름까지, 여럿이면 아이콘만(설명은 툴팁) — HUD가 넘치지 않게
+    const extras = [ev, show, rb].filter((x) => x !== null);
+    const extraText = extras.length === 1 ? ` · ${extras[0].icon} ${extras[0].label}` : extras.length ? ` ${extras.map((x) => x.icon).join('')}` : '';
+    setText(this.weather, `${wv.icon} ${wv.label}${extraText}`);
+    const tip = [wv.tip, ev?.tip, show?.tip, rb?.tip].filter(Boolean).join('\n');
     // 노란 쪽지와 카드가 HUD 아래에 오도록 실제 높이를 CSS에 알린다
     const h = this.hudEl.offsetHeight;
     if (h !== this.hudH) {

@@ -373,6 +373,38 @@ export function routeAt(route: readonly RoutePoint[], t: number): { x: number; y
  * 기본 정의에 덮어쓴다. 그 밖의 건물은 getDef 그대로.
  */
 export function buildingDef(b: Building): BuildingDef {
+  const def = baseBuildingDef(b);
+  const lv = b.level ?? 1;
+  if (lv <= 1 || def.kind !== 'ride') return def;
+  // 업그레이드: 단계마다 재미 +UPGRADE_FUN, 유지비 +UPGRADE_UPKEEP%, 건설비(철거 환급 기준)에 업그레이드 비용을 더한다
+  const up = lv - 1;
+  return {
+    ...def,
+    fun: (def.fun ?? 0) + UPGRADE_FUN * up,
+    upkeep: Math.round(def.upkeep * (1 + UPGRADE_UPKEEP * up)),
+    cost: def.cost + upgradeSpent(def.cost, lv),
+  };
+}
+
+/** 놀이기구 업그레이드 최대 단계 / 단계당 재미 / 단계당 유지비 증가율 / 단계당 비용(기본 건설비 대비) */
+export const MAX_LEVEL = 3;
+export const UPGRADE_FUN = 8;
+export const UPGRADE_UPKEEP = 0.25;
+export const UPGRADE_COST_RATE = 0.5;
+
+/** lv 단계까지 업그레이드하는 데 쓴 돈 */
+export function upgradeSpent(baseCost: number, lv: number): number {
+  return Math.round(baseCost * UPGRADE_COST_RATE) * Math.max(0, lv - 1);
+}
+
+/** 다음 단계 업그레이드 비용(최대 단계거나 놀이기구가 아니면 null) */
+export function upgradeCost(b: Building): number | null {
+  const def = baseBuildingDef(b);
+  if (def.kind !== 'ride' || (b.level ?? 1) >= MAX_LEVEL || (b.track && !b.track.ok)) return null;
+  return Math.round(def.cost * UPGRADE_COST_RATE);
+}
+
+function baseBuildingDef(b: Building): BuildingDef {
   const base = getDef(b.defId);
   const t = b.track;
   if (!t) return base;

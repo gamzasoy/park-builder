@@ -23,11 +23,15 @@ export function clockOf(tick: number): { hour: number; minute: number } {
 /** 어둠의 정도 0(낮)~MAX_DARK(밤). 소수 틱(렌더 보간)도 받는다 */
 export function darknessAt(tick: number): number {
   const t = ((tick % DAY_TICKS) + DAY_TICKS) % DAY_TICKS;
-  if (t < DAWN_TICKS) return MAX_DARK * (1 - t / DAWN_TICKS);
+  // 둘째 날부터: 전날 밤의 어둠이 아침에 걷힌다(첫날 아침은 처음부터 밝다)
+  if (t < DAWN_TICKS) return tick >= DAY_TICKS ? MAX_DARK * (1 - t / DAWN_TICKS) : 0;
   const hour = OPEN_HOUR + (t / DAY_TICKS) * (CLOSE_HOUR - OPEN_HOUR);
   if (hour <= DUSK_HOUR) return 0;
   return MAX_DARK * Math.min(1, (hour - DUSK_HOUR) / (NIGHT_HOUR - DUSK_HOUR));
 }
 
-/** 밤인가(불꽃놀이 효과 2배 등) */
-export const isNight = (tick: number): boolean => darknessAt(tick) >= MAX_DARK * 0.6;
+/** 밤인가(불꽃놀이 효과 2배 등). 동틀 무렵은 밤으로 치지 않는다 */
+export function isNight(tick: number): boolean {
+  const t = ((tick % DAY_TICKS) + DAY_TICKS) % DAY_TICKS;
+  return t >= DAWN_TICKS && darknessAt(tick) >= MAX_DARK * 0.6;
+}

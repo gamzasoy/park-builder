@@ -35,6 +35,8 @@ describe('day and night', () => {
     expect(isNight(DAY_TICKS - 10)).toBe(true);
     expect(isNight(DAY_TICKS * 0.5)).toBe(false);
     expect(darknessAt(DAY_TICKS + 1)).toBeGreaterThan(0); // 동틀 무렵
+    expect(isNight(DAY_TICKS + 1)).toBe(false);
+    expect(darknessAt(1)).toBe(0); // 첫날 아침은 처음부터 밝다
     expect(darknessAt(DAY_TICKS + 40)).toBe(0);
   });
 

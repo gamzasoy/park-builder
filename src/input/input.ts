@@ -42,6 +42,8 @@ export class Input {
       if (e.pointerType === 'mouse') { this.hoverTile = null; this.hoverPos = null; }
     });
     window.addEventListener('keydown', (e) => {
+      // 글자 입력칸(공원 이름 등)에 쓰는 동안에는 단축키·카메라 이동을 하지 않는다
+      if (e.target instanceof HTMLInputElement) return;
       const k = e.key.toLowerCase();
       this.keys.add(k);
       if (!e.repeat) this.onKeyDown?.(k);

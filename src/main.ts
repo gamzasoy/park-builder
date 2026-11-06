@@ -21,6 +21,9 @@ import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
+import { withObj, withRo } from './ui/josa';
+import { cleanParkName, MAX_PARK_NAME } from './sim/park';
+import { rainbowAt } from './sim/weather';
 import { MissionPanel } from './ui/missions';
 import { MISSIONS } from './sim/missions';
 import { BUS_GUESTS, FIREWORKS_COST, launchFireworks } from './sim/events';
@@ -37,6 +40,7 @@ const tools = new ToolController(world);
 const input = new Input(canvas, cam);
 input.getMap = () => world.map;
 const modal = new Modal();
+modal.bindInput();
 const sound = new Sound();
 tools.onEvent = (e) => sound.play(e);
 
@@ -95,11 +99,6 @@ function confirmNewGame(): void {
 
 // ---- 월간 보고서 알림음 ----
 let seenReports = 0;
-/** 목적격 조사: 받침이 있으면 '을', 없으면 '를' */
-function withObj(name: string): string {
-  const c = name.charCodeAt(name.length - 1) - 0xac00;
-  return name + (c >= 0 && c < 11172 && c % 28 ? '을' : '를');
-}
 
 // ---- 랜덤 이벤트 시작 알림 ----
 let seenEvent = world.event?.start ?? -1;
@@ -126,6 +125,16 @@ function watchEvent(): void {
 
 // ---- 미션 달성 알림 ----
 let seenMissions = world.missions.completed.length;
+let rainbowShown = rainbowAt(world.weatherSeed, world.tick);
+function watchRainbow(): void {
+  const now = rainbowAt(world.weatherSeed, world.tick);
+  if (now && !rainbowShown) {
+    tools.notify('🌈 비가 그치고 무지개가 떴어요! 손님들의 기분이 좋아집니다');
+    sound.play('chime');
+  }
+  rainbowShown = now;
+}
+
 let seenVips = world.stats.vips;
 function watchVips(): void {
   if (world.stats.vips > seenVips) {
@@ -222,6 +231,7 @@ const loop = new GameLoop(
     watchMissions();
     watchEvent();
     watchVips();
+    watchRainbow();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
@@ -283,6 +293,28 @@ window.addEventListener('resize', layoutToolbar);
 window.addEventListener('orientationchange', layoutToolbar);
 
 const buildingPanel = new BuildingPanel(world, tools, testRun);
+buildingPanel.onUpgrade = (ok) => sound.play(ok ? 'build' : 'error');
+
+// ---- 공원 이름: 도구 없이 입구를 누르면 이름을 짓는다 ----
+function renamePark(): void {
+  const save = (): void => {
+    world.parkName = cleanParkName(modal.inputValue);
+    modal.hide();
+    tools.notify(world.parkName ? `공원 이름을 '${world.parkName}'${withRo(world.parkName).slice(world.parkName.length)} 정했습니다` : '공원 이름을 지웠습니다');
+    sound.play('chime');
+    saveNow();
+  };
+  modal.show('rename', {
+    title: '공원 이름 짓기',
+    message: `입구 간판에 걸릴 이름이에요 (최대 ${MAX_PARK_NAME}글자).`,
+    input: { value: world.parkName, maxLength: MAX_PARK_NAME * 2, placeholder: '예: 행복랜드', onEnter: save },
+    buttons: [
+      { label: '취소', onClick: () => modal.hide() },
+      { label: '정하기', primary: true, onClick: save },
+    ],
+  });
+}
+tools.onGate = renamePark;
 const guestPanel = new GuestPanel(world, tools);
 const staffPanel = new StaffPanel(world, tools);
 const trackEditor = new TrackEditor(world, tools, testRun);
