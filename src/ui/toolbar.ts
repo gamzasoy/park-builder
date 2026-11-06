@@ -10,7 +10,7 @@ import { STAFF_KINDS, STAFF_NAME, type StaffKind } from '../sim/staff';
 /** 툴바가 한 화면 폭에 들어가도록 버튼에는 짧은 이름을 쓴다(전체 이름은 툴팁) */
 const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원' };
 import { won } from './hud';
-import { buildingIcon, demolishIcon, fireworksIcon, pathIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
+import { buildingIcon, demolishIcon, fireworksIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
 import { TERRAIN_COST } from '../sim/terrain';
 
 export class Toolbar {
@@ -23,6 +23,7 @@ export class Toolbar {
     private tools: ToolController,
     onHire: (kind: StaffKind) => void,
     onFireworks: () => void,
+    onPhoto: () => void,
   ) {
     this.group('기본', [
       this.button('path', '길', PATH_COST, { kind: 'path' }, pathIcon()),
@@ -31,12 +32,16 @@ export class Toolbar {
     this.group('놀이기구', RIDES.map((d) => this.defButton(d)));
     // 직원은 놀이기구 줄의 남는 자리에 둬서 넓은 화면에서 툴바가 두 줄을 넘지 않게 한다
     this.group('직원 고용', STAFF_KINDS.map((k) => this.hireButton(k, STAFF_LABEL[k], onHire)));
-    this.group('공연', [this.actionButton('fireworks', '불꽃놀이', `불꽃놀이 (${won(FIREWORKS_COST)}, 하루 한 번)`, won(FIREWORKS_COST), fireworksIcon(), onFireworks)]);
     this.group('매점', SHOPS.map((d) => this.defButton(d)));
     this.group('장식', SCENERY.map((d) => this.sceneryButton(d)));
     this.group('지형', [
       this.button('terrain:raise', '지형 올리기', TERRAIN_COST, { kind: 'terrain', mode: 'raise' }, terrainIcon('raise')),
       this.button('terrain:lower', '지형 내리기', TERRAIN_COST, { kind: 'terrain', mode: 'lower' }, terrainIcon('lower')),
+    ]);
+    // 둘째 줄 끝(지형 뒤)에 둬서 넓은 화면에서 툴바가 두 줄을 넘지 않게 한다
+    this.group('특별', [
+      this.actionButton('fireworks', '불꽃놀이', `불꽃놀이 (${won(FIREWORKS_COST)}, 하루 한 번, 밤엔 효과 2배)`, won(FIREWORKS_COST), fireworksIcon(), onFireworks),
+      this.actionButton('photo', '기념사진', '기념사진: 지금 공원 모습을 이미지로 저장 (P)', '무료', photoIcon(), onPhoto),
     ]);
   }
 

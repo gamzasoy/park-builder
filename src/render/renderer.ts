@@ -15,8 +15,9 @@ import { BUBBLE_FONT, POSITIVE, THOUGHT_TEXT } from './thoughts';
 import { darknessAt, MAX_DARK } from '../sim/daynight';
 import { rainbowAt, RAINBOW_TICKS } from '../sim/weather';
 import { DAY_TICKS } from '../sim/economy';
+import { seasonOf, type Season } from '../sim/season';
 import { GroundCache, occludingTiles, paintTerrainTile } from './ground';
-import { drawMascot, drawRideSprite, drawVendorTray, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
+import { drawMascot, drawRideSprite, drawVendorTray, drawScenery, drawStationFloor, PALETTE, poly, setSeason, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, terrainPx, tileToWorld, type Vec2 } from './iso';
 import { cornerLevels, surfaceLevel } from './relief';
 
@@ -65,6 +66,13 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
 
   // 1) 지면: 공원 밖 숲 바닥 → 잔디(질감) → 돌길(연석). 정적이라 조각별로 캐시해 둔다
   groundCache.draw(ctx, cam, map);
+  // 계절: 나무 색을 바꾸고, 겨울엔 땅에 눈이 덮인 듯 하얗게, 가을엔 누렇게
+  const season = seasonOf(time);
+  setSeason(season);
+  if (season === 'winter' || season === 'autumn') {
+    ctx.fillStyle = season === 'winter' ? 'rgba(236,244,255,0.42)' : 'rgba(214,160,60,0.16)';
+    ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+  }
 
   // 1.5) 길 위 쓰레기: 지면 캐시와 분리해 매 프레임 겹쳐 그린다(쌓이고 치워져도 캐시가 무효화되지 않는다)
   drawLitter(ctx, cam, map, visible);
@@ -200,7 +208,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   }
 
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
-  drawWeather(ctx, cam, world.weather.kind, time);
+  drawWeather(ctx, cam, world.weather.kind, time, season);
   if (rainbowAt(world.weatherSeed, Math.floor(time))) drawRainbow(ctx, cam, time);
   drawNight(ctx, cam, world, buildings, time);
   if (world.fireworks) drawFireworks(ctx, cam, world, time);
@@ -262,7 +270,18 @@ const RAIN_STREAKS = 110;
 const RAIN_SLOPE = 0.25; // 빗줄기 기울기(x/y)
 
 /** 흐림 = 약한 틴트, 비 = 어두운 틴트 + 고정 개수의 빗줄기(시간으로만 움직인다) */
-function drawWeather(ctx: CanvasRenderingContext2D, cam: Camera, kind: WeatherKind, time: number): void {
+function drawWeather(ctx: CanvasRenderingContext2D, cam: Camera, kind: WeatherKind, time: number, season: Season): void {
+  // 겨울의 비는 눈으로 내린다(효과는 비와 같다). 비가 아니어도 계절마다 눈송이·꽃잎·낙엽이 조금씩 날린다
+  if (season === 'winter') {
+    if (kind !== 'sunny') {
+      ctx.fillStyle = kind === 'rain' ? 'rgba(40,52,80,0.16)' : 'rgba(40,50,70,0.08)';
+      ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+    }
+    drawDrift(ctx, cam, time, kind === 'rain' ? 160 : 40, ['#ffffff'], 'snow');
+    return;
+  }
+  if (season === 'spring') drawDrift(ctx, cam, time, 26, ['#ffc4dc', '#ffe1ee'], 'petal');
+  if (season === 'autumn') drawDrift(ctx, cam, time, 22, ['#e0602a', '#e6ae2a', '#b8401f'], 'leaf');
   if (kind === 'sunny') return;
   const W = cam.viewW;
   const H = cam.viewH;
@@ -435,6 +454,29 @@ function drawFireworks(ctx: CanvasRenderingContext2D, cam: Camera, world: World,
       ctx.arc(top.x, top.y, (6 + b * 30) * z, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+  ctx.restore();
+}
+
+/** 화면 공간에서 흩날리는 눈송이·꽃잎·낙엽. 위치는 틱과 해시로만 정해진다 */
+function drawDrift(ctx: CanvasRenderingContext2D, cam: Camera, time: number, count: number, colors: string[], shape: 'snow' | 'petal' | 'leaf'): void {
+  const W = cam.viewW + 40;
+  const H = cam.viewH + 40;
+  ctx.save();
+  for (let i = 0; i < count; i++) {
+    const speed = shape === 'snow' ? 0.9 + tileHash(i, 7, 3) * 1.4 : 0.6 + tileHash(i, 7, 3) * 0.8;
+    const y = (tileHash(i, 8, 3) * H + time * speed) % H - 20;
+    const sway = Math.sin(time * 0.05 + i) * (shape === 'snow' ? 8 : 22);
+    const x = ((tileHash(i, 9, 3) * W + time * (shape === 'snow' ? 0.3 : 0.9) + sway) % W + W) % W - 20;
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.globalAlpha = shape === 'snow' ? 0.9 : 0.85;
+    ctx.beginPath();
+    if (shape === 'snow') ctx.arc(x, y, 1.2 + tileHash(i, 10, 3) * 1.8, 0, Math.PI * 2);
+    else {
+      const rot = time * 0.06 + i;
+      ctx.ellipse(x, y, shape === 'leaf' ? 4 : 3, shape === 'leaf' ? 2.2 : 1.8, rot, 0, Math.PI * 2);
+    }
+    ctx.fill();
   }
   ctx.restore();
 }

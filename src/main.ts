@@ -8,7 +8,7 @@ import { drawFrame } from './render/renderer';
 import { pickTile } from './input/pick';
 import type { Tile } from './sim/map';
 import { loadFromStorage, saveToStorage } from './save/save';
-import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
+import { dateOf, DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
 import { createGuest, VIP_REWARD, VIP_TICKS } from './sim/guest';
 import { getDef } from './data';
 import { stepWorld } from './sim/sim';
@@ -22,11 +22,14 @@ import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
 import { Toasts, type ToastTone } from './ui/toast';
+import { BUBBLE_FONT } from './render/thoughts';
 import { isNight } from './sim/daynight';
 import { withObj, withRo } from './ui/josa';
 import { cleanParkName, MAX_PARK_NAME } from './sim/park';
 import { rainbowAt } from './sim/weather';
 import { MissionPanel } from './ui/missions';
+import { ReviewPanel } from './ui/reviews';
+import { seasonOf, SEASON_VIEW, type Season } from './sim/season';
 import { MISSIONS } from './sim/missions';
 import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
@@ -83,6 +86,7 @@ function newGame(): void {
   seenReports = world.reports.length;
   seenMissions = world.missions.completed.length;
   seenVips = world.stats.vips;
+  shownSeason = seasonOf(world.tick);
   loop.speed = 1;
   modal.hide();
   saveNow();
@@ -136,6 +140,22 @@ function watchRainbow(): void {
     sound.play('chime');
   }
   rainbowShown = now;
+}
+
+// ---- 계절이 바뀌면 알림 ----
+let shownSeason = seasonOf(world.tick);
+const SEASON_NOTICE: Record<Season, string> = {
+  spring: '꽃잎이 흩날리고 나무에 벚꽃이 피었어요',
+  summer: '초록이 짙어졌어요. 손님들이 금방 목말라할지도 몰라요',
+  autumn: '나무가 단풍으로 물들었어요',
+  winter: '눈이 내리기 시작했어요. 겨울엔 비 대신 눈이 와요',
+};
+function watchSeason(): void {
+  const s = seasonOf(world.tick);
+  if (s === shownSeason) return;
+  shownSeason = s;
+  toasts.show(SEASON_VIEW[s].icon, `${SEASON_VIEW[s].label}이 왔어요!`, SEASON_NOTICE[s], 'info');
+  sound.play('chime');
 }
 
 let seenVips = world.stats.vips;
@@ -234,11 +254,13 @@ const loop = new GameLoop(
     tutorialPanel.update();
     financePanel.update();
     missionPanel.update();
+    reviewPanel.update();
     watchReports();
     watchMissions();
     watchEvent();
     watchVips();
     watchRainbow();
+    watchSeason();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
@@ -246,14 +268,27 @@ const loop = new GameLoop(
 
 const financePanel = new FinancePanel(world);
 const missionPanel = new MissionPanel(world);
+const reviewPanel = new ReviewPanel(world);
 const hud = new Hud(world, tools, loop, {
+  // 왼쪽 카드(재무·미션·리뷰)는 같은 자리라 하나를 열면 나머지는 닫는다
   onFinance: () => {
     financePanel.toggle();
     missionPanel.toggle(false);
+    reviewPanel.toggle(false);
   },
   onMissions: () => {
     missionPanel.toggle();
-    if (missionPanel.open) financePanel.toggle(false);
+    if (missionPanel.open) {
+      financePanel.toggle(false);
+      reviewPanel.toggle(false);
+    }
+  },
+  onReviews: () => {
+    reviewPanel.toggle();
+    if (reviewPanel.open) {
+      financePanel.toggle(false);
+      missionPanel.toggle(false);
+    }
   },
   onSave: () => (saveNow() ? tools.notify('저장했습니다') : tools.fail('저장할 수 없습니다 (브라우저 저장소 사용 불가)')),
   onNewGame: confirmNewGame,
@@ -274,7 +309,52 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     toasts.show('🎆', '불꽃놀이 시작!', isNight(world.tick) ? '밤하늘이라 효과가 두 배예요' : `손님들이 하늘을 올려다봐요 (${won(FIREWORKS_COST)})`, 'event');
     sound.play('win');
   }
-});
+}, () => takePhoto());
+
+// ---- 기념사진: 지금 화면(공원)을 이미지로 저장 ----
+function takePhoto(): void {
+  const shot = document.createElement('canvas');
+  shot.width = canvas.width;
+  shot.height = canvas.height;
+  const c = shot.getContext('2d');
+  if (!c) return tools.fail('사진을 찍을 수 없습니다');
+  c.drawImage(canvas, 0, 0);
+  // 아래쪽 띠: 공원 이름 · 날짜 · 평점
+  const s = canvas.width / Math.max(1, canvas.clientWidth);
+  const h = 34 * s;
+  c.fillStyle = 'rgba(20,26,14,0.72)';
+  c.fillRect(0, shot.height - h, shot.width, h);
+  c.fillStyle = '#f2c230';
+  c.font = `bold ${16 * s}px ${BUBBLE_FONT}`;
+  c.textBaseline = 'middle';
+  const d = dateOf(world.tick);
+  const name = world.parkName || '나의 놀이공원';
+  c.fillText(`📷 ${name}`, 12 * s, shot.height - h / 2);
+  c.textAlign = 'right';
+  c.fillStyle = '#fff';
+  c.font = `${13 * s}px ${BUBBLE_FONT}`;
+  c.fillText(`${d.year}년차 ${d.month}월 ${d.day}일 · 손님 ${world.guests.length}명 · 평점 ${Math.round(world.rating)}`, shot.width - 12 * s, shot.height - h / 2);
+  // 찰칵: 화면이 하얗게 번쩍
+  const flash = document.createElement('div');
+  flash.className = 'photo-flash';
+  document.body.append(flash);
+  setTimeout(() => flash.remove(), 500);
+  sound.play('shutter');
+  // 파일 이름은 영문으로(한글 파일 이름을 'download'로 바꿔 버리는 브라우저가 있다). 공원 이름은 사진 안에 들어간다
+  const file = `park-photo_y${d.year}-m${d.month}-d${d.day}.png`;
+  shot.toBlob((blob) => {
+    if (!blob) return tools.fail('사진을 저장할 수 없습니다');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toasts.show('📷', '찰칵! 기념사진을 저장했어요', file, 'info');
+  }, 'image/png');
+}
 // 모바일: 아래 도구 막대를 접어서 공원을 넓게 볼 수 있다(선택한 도구는 접어도 유지, 선택은 기억)
 const TB_FOLD_KEY = 'park-builder:toolbar-folded';
 const tbToggle = document.getElementById('tb-toggle')!;
@@ -358,6 +438,7 @@ input.onKeyDown = (k) => {
     if (k === 'enter') return tools.endTrackEdit();
   }
   if (k === 'r') tools.rotate();
+  else if (k === 'p') takePhoto();
   else if (k === 'escape') tools.cancel();
   // 속도 단축키: Space 일시정지 토글, 1/2/3 = 1x/2x/4x
   else if (k === ' ') loop.speed = loop.speed === 0 ? 1 : 0;

@@ -5,6 +5,7 @@ import { GOAL, goalProgress } from '../sim/goals';
 import { BUS_GUESTS } from '../sim/events';
 import { clockOf, isNight } from '../sim/daynight';
 import { rainbowAt } from '../sim/weather';
+import { seasonOf, SEASON_VIEW } from '../sim/season';
 import { floatError } from './toast';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
@@ -12,6 +13,7 @@ import { Stepper } from './stepper';
 export interface HudActions {
   onFinance: () => void;
   onMissions: () => void;
+  onReviews: () => void;
   onSave: () => void;
   onNewGame: () => void;
 }
@@ -45,6 +47,8 @@ export const EVENT_VIEW = {
   rainbow: { icon: '🌈', label: '무지개', tip: '무지개: 비 온 다음 날 아침, 손님들의 기분이 조금씩 좋아집니다' },
   fireworks: { icon: '🎆', label: '불꽃놀이', tip: '불꽃놀이: 공원 모든 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
 } as const;
+
+const SNOW_VIEW = { icon: '❄️', label: '눈', tip: '눈: 비와 같아요 · 손님 입장 −30% · 우산 없는 손님은 실외 놀이기구를 꺼리고 기분이 나빠집니다' } as const;
 
 const SPEEDS: Speed[] = [0, 1, 2, 4];
 
@@ -88,6 +92,7 @@ export class Hud {
     };
     wire('finance-btn', actions.onFinance);
     wire('missions-btn', actions.onMissions);
+    this.rating.addEventListener('click', actions.onReviews);
     wire('save-btn', actions.onSave);
     wire('new-btn', actions.onNewGame);
   }
@@ -110,9 +115,16 @@ export class Hud {
     this.rating.title =
       `기본 ${Math.round(p.base)} · 만족도 ${Math.round(p.satisfaction)} · 다양성 ${Math.round(p.variety)}` +
       ` · 흐름 ${Math.round(p.flow)} · 불만 −${Math.round(p.complaints)}` +
-      ` · 청결 ${Math.round(p.cleanliness)}`;
+      ` · 청결 ${Math.round(p.cleanliness)}` +
+      '\n누르면 손님 리뷰를 볼 수 있어요';
 
-    const wv = WEATHER_VIEW[w.weather.kind];
+    const season = seasonOf(w.tick);
+    if (this.date.dataset.season !== season) {
+      this.date.dataset.season = season;
+      this.date.title = `${SEASON_VIEW[season].icon} ${SEASON_VIEW[season].label}`;
+    }
+    // 겨울의 비는 눈(효과는 비와 같다)
+    const wv = season === 'winter' && w.weather.kind === 'rain' ? SNOW_VIEW : WEATHER_VIEW[w.weather.kind];
     const ev = w.event ? EVENT_VIEW[w.event.kind] : null;
     const show = w.fireworks ? EVENT_VIEW.fireworks : null;
     const rb = rainbowAt(w.weatherSeed, w.tick) ? EVENT_VIEW.rainbow : null;

@@ -7,6 +7,7 @@ import type { Guest } from '../sim/guest';
 import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
 import { demolishAt, REFUND_RATE, upgradeRide } from '../sim/building';
 import { withObj } from './josa';
+import { guestName } from '../sim/reviews';
 import { dailyUpkeep, dailyWages, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
@@ -295,7 +296,7 @@ export class GuestPanel {
     if (this.root.hidden) this.root.hidden = false;
 
     const vip = g.vip ? (g.vip.done ? ` 👑 VIP · 소원 성취!` : ` 👑 VIP · ${getDef(g.vip.wish).name} 원함`) : '';
-    setText(this.title, `손님 #${g.id}${vip}`);
+    setText(this.title, `${guestName(g.id)}${vip}`);
     const target = g.target !== null ? this.world.buildings.get(g.target) : undefined;
     const targetName = target ? getDef(target.defId).name : '';
     setText(this.state, STATE_TEXT[g.state] + (targetName && g.state !== 'idle' && g.state !== 'leaving' ? ` · ${targetName}` : ''));

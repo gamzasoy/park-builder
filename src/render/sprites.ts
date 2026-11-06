@@ -5,6 +5,7 @@
  */
 import { BIN, FLOWERS, FOUNTAIN, OAK, PINE } from '../data/scenery';
 import { shade } from './color';
+import type { Season } from '../sim/season';
 import type { Vec2 } from './iso';
 
 /** 풋프린트의 네 모서리(지면 높이, 화면 좌표). top = 타일 좌표 최소 모서리 */
@@ -20,6 +21,12 @@ export interface SpriteOpts {
 }
 
 const TAU = Math.PI * 2;
+
+/** 지금 그리는 계절(나무 색이 바뀐다). renderer가 프레임마다 정한다 */
+let season: Season = 'summer';
+export function setSeason(s: Season): void {
+  season = s;
+}
 const OUTLINE = 'rgba(0,0,0,0.35)';
 export const PALETTE = ['#e8564a', '#4a8fe8', '#f2c230', '#7bc86c', '#b06ce0', '#ef8fb4', '#4ac9c0', '#f08a3c'];
 
@@ -1142,16 +1149,42 @@ export function drawScenery(ctx: CanvasRenderingContext2D, kind: number, x: numb
       const top = { x, y: by - hgt * s };
       poly(ctx, [top, { x: x - hw * s, y: by }, { x, y: by + 2 * s }], '#3f8f45', null);
       poly(ctx, [top, { x, y: by + 2 * s }, { x: x + hw * s, y: by }], '#2a6630', null);
+      if (season === 'winter') {
+        // 가지 끝에 쌓인 눈
+        const k = 0.45;
+        poly(ctx, [top, { x: x - hw * s * k, y: top.y + hgt * s * k }, { x, y: top.y + hgt * s * k * 0.75 }, { x: x + hw * s * k, y: top.y + hgt * s * k }], '#f4f8ff', null);
+      }
     }
     return;
   }
   if (kind === OAK) {
     ctx.fillStyle = '#6a4428';
     ctx.fillRect(x - 2 * s, y - 10 * s, 4 * s, 10 * s);
-    const blossom = seed < 0.2; // 가끔 벚꽃
-    const dark = blossom ? '#d98ab0' : '#3c7d33';
-    const mid2 = blossom ? '#f0a8c8' : '#4f9a3e';
-    const light = blossom ? '#ffd0e4' : '#73b955';
+    if (season === 'winter') {
+      // 잎이 진 가지와 눈
+      ctx.strokeStyle = '#6a4428';
+      ctx.lineWidth = Math.max(1, 1.6 * s);
+      ctx.beginPath();
+      for (const [dx, dy] of [[-7, -20], [7, -19], [0, -27], [-4, -24], [5, -25]]) {
+        ctx.moveTo(x, y - 10 * s);
+        ctx.lineTo(x + dx * s, y + dy * s);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#f4f8ff';
+      for (const [dx, dy] of [[-7, -20], [7, -19], [0, -27]]) {
+        ctx.beginPath();
+        ctx.ellipse(x + dx * s, y + dy * s, 2.6 * s, 1.4 * s, 0, 0, TAU);
+        ctx.fill();
+      }
+      return;
+    }
+    // 봄에는 벚꽃이 많고(여름엔 가끔), 가을엔 단풍
+    const blossom = season === 'spring' ? seed < 0.6 : season === 'summer' && seed < 0.2;
+    const autumn = season === 'autumn';
+    const maple = seed < 0.5;
+    const dark = blossom ? '#d98ab0' : autumn ? (maple ? '#b8401f' : '#c98a1c') : '#3c7d33';
+    const mid2 = blossom ? '#f0a8c8' : autumn ? (maple ? '#e0602a' : '#e6ae2a') : '#4f9a3e';
+    const light = blossom ? '#ffd0e4' : autumn ? (maple ? '#ff9a4a' : '#ffd45a') : '#73b955';
     const blobs: [number, number, number][] = [[-6, -15, 7], [6, -15, 7], [0, -20, 8], [-3, -25, 6], [4, -24, 5.5]];
     for (const [dx, dy, r] of blobs) {
       ctx.fillStyle = dark;

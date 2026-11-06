@@ -7,6 +7,7 @@ import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import { MISSION_IDS, type MissionState } from '../sim/missions';
 import { cleanParkName } from '../sim/park';
+import { MAX_REVIEWS, type Review } from '../sim/reviews';
 import { eventAtTick, type Fireworks } from '../sim/events';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
@@ -78,6 +79,7 @@ export interface SaveData {
   tutorial?: TutorialState;
   missions?: MissionState;
   parkName?: string;
+  reviews?: Review[];
   fireworks?: Fireworks | null;
   lastFireworksDay?: number;
   /** v4에서 추가. 없으면 직원 없음 */
@@ -116,6 +118,7 @@ export function serializeWorld(world: World): SaveData {
     nextStaffId: world.nextStaffId,
     entranceFee: world.entranceFee,
     parkName: world.parkName,
+    reviews: world.reviews.map((r) => ({ ...r })),
     rating: world.rating,
     ratingParts: world.ratingParts,
     ledger: world.ledger,
@@ -232,6 +235,8 @@ export function deserializeWorld(data: SaveData): World {
     thoughtTimer: g.thoughtTimer ?? 0,
     trash: g.trash ?? 0,
     umbrella: g.umbrella === true,
+    gripe: typeof g.gripe === 'string' ? g.gripe : undefined,
+    leaveReason: typeof g.leaveReason === 'string' ? g.leaveReason : undefined,
     vip: g.vip && typeof g.vip.wish === 'string' && isNum(g.vip.until) ? { wish: g.vip.wish, until: g.vip.until, done: g.vip.done === true } : undefined,
   }));
 
@@ -293,6 +298,12 @@ export function deserializeWorld(data: SaveData): World {
   w.lastFireworksDay = isNum(data.lastFireworksDay) ? data.lastFireworksDay : -1;
   w.event = eventAtTick(w.weatherSeed, w.tick);
   w.parkName = typeof data.parkName === 'string' ? cleanParkName(data.parkName) : '';
+  w.reviews = Array.isArray(data.reviews)
+    ? data.reviews
+      .filter((r) => r && isNum(r.guestId) && isNum(r.stars) && isNum(r.tick) && typeof r.name === 'string' && typeof r.text === 'string')
+      .map((r) => ({ guestId: r.guestId, name: r.name, stars: Math.max(1, Math.min(5, Math.round(r.stars))), text: r.text, tick: r.tick }))
+      .slice(-MAX_REVIEWS)
+    : [];
   w.missions = {
     completed: Array.isArray(data.missions?.completed)
       ? data.missions.completed.filter((id): id is string => MISSION_IDS.includes(id))
