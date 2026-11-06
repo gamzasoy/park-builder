@@ -122,8 +122,15 @@ export class World {
   stormDamage: StormDamage | null = null;
   /** 마지막으로 도둑을 잡은 때(알림용, 저장하지 않는다) */
   lastCatch: { loot: number; tick: number } | null = null;
-  /** lost: 길을 잃은 아이 수 / reunited: 보호자에게 데려다준 아이 수 / lostGone: 끝내 못 찾고 떠난 가족 수 / families: 입장한 가족 수 */
-  stats = { entered: 0, left: 0, peakGuests: 0, vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, balloonsLost: 0, photos: 0, parades: 0, storms: 0, thefts: 0, shoplifts: 0, caught: 0 };
+  /**
+   * lost: 길을 잃은 아이 수 / reunited: 보호자에게 데려다준 아이 수 / lostGone: 끝내 못 찾고 떠난 가족 수 / families: 입장한 가족 수
+   * lastLostAt·lastThiefAt: 마지막으로 미아·도둑이 생긴 틱(다음 미아·도둑까지 간격을 두려고 저장한다)
+   */
+  stats: {
+    entered: number; left: number; peakGuests: number; vips: number; lost: number; reunited: number; lostGone: number; families: number;
+    balloonsLost: number; photos: number; parades: number; storms: number; thefts: number; shoplifts: number; caught: number;
+    lastLostAt?: number; lastThiefAt?: number;
+  } = { entered: 0, left: 0, peakGuests: 0, vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, balloonsLost: 0, photos: 0, parades: 0, storms: 0, thefts: 0, shoplifts: 0, caught: 0 };
 
   status: GameStatus = 'playing';
   /** 종료 사유(결과 화면에 표시) */

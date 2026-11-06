@@ -70,7 +70,7 @@ export interface SaveData {
   ledger: Ledger;
   reports: MonthReport[];
   monthStartEntered: number;
-  stats: { entered: number; left: number; peakGuests: number; vips?: number; lost?: number; reunited?: number; lostGone?: number; families?: number; balloonsLost?: number; photos?: number; parades?: number; storms?: number; thefts?: number; shoplifts?: number; caught?: number };
+  stats: { entered: number; left: number; peakGuests: number; vips?: number; lost?: number; reunited?: number; lostGone?: number; families?: number; balloonsLost?: number; photos?: number; parades?: number; storms?: number; thefts?: number; shoplifts?: number; caught?: number; lastLostAt?: number; lastThiefAt?: number };
   status: GameStatus;
   endReason: string;
   goalHold: number;

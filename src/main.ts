@@ -298,11 +298,15 @@ function watchStorm(): void {
 /** 도둑질 / 붙잡음 알림(도둑질 알림은 너무 잦지 않게 15초에 한 번) */
 const theftStats = (): { thefts: number; caught: number } => ({ thefts: world.stats.thefts ?? 0, caught: world.stats.caught ?? 0 });
 let seenTheft = theftStats();
-let theftToastAt = -Infinity;
+/** 이미 '도둑이야!'를 알린 도둑(도둑 한 명당 한 번만 알린다. 훔칠 때마다 알리면 정신없다) */
+const announcedThieves = new Set<number>();
 function watchThieves(): void {
   const now = theftStats();
-  if (now.thefts > seenTheft.thefts && world.tick - theftToastAt >= 150) {
-    theftToastAt = world.tick;
+  const fresh = now.thefts > seenTheft.thefts
+    ? world.guests.filter((g) => g.thief && g.state !== 'gone' && (g.thefts ?? 0) > 0 && !announcedThieves.has(g.id))
+    : [];
+  if (fresh.length) {
+    for (const g of fresh) announcedThieves.add(g.id);
     const hasGuard = world.staff.some((s) => s.kind === 'security');
     toasts.show('🦹', '도둑이야!', `머리 위에 ❗가 뜬 도둑을 눌러 잡으세요 (현상금 ${won(THIEF_BOUNTY)})${hasGuard ? ' · 경비원이 쫓아갑니다' : ' · 경비원을 고용하면 막을 수 있어요'}`, 'bad');
     sound.play('error');
