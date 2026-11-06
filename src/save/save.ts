@@ -3,7 +3,7 @@ import { sceneryDef } from '../data/scenery';
 import { restoreTrack, type TrackType } from '../sim/coaster';
 import { claimLoadedTracks } from '../sim/trackedit';
 import type { Guest } from '../sim/guest';
-import type { Staff } from '../sim/staff';
+import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
@@ -229,7 +229,7 @@ export function deserializeWorld(data: SaveData): World {
     const reset = !onPath || !isNum(s.x) || !isNum(s.y);
     return {
       ...s,
-      kind: s.kind === 'mechanic' ? 'mechanic' : 'janitor',
+      kind: STAFF_KINDS.includes(s.kind) ? s.kind : 'janitor',
       x: reset ? home.x + 0.5 : s.x,
       y: reset ? home.y + 0.5 : s.y,
       px: reset ? home.x + 0.5 : s.px ?? s.x,

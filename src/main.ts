@@ -176,7 +176,10 @@ const hud = new Hud(world, tools, loop, {
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
   const s = hireStaff(world, kind);
   if (s) {
-    tools.notify(`${STAFF_NAME[kind]}를 고용했습니다 (하루 급여 ${won(WAGE)})`);
+    const name = STAFF_NAME[kind];
+    // 받침이 있으면 '을', 없으면 '를'
+    const josa = (name.charCodeAt(name.length - 1) - 0xac00) % 28 ? '을' : '를';
+    tools.notify(`${name}${josa} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
     sound.play('build');
   } else {
     tools.notify('더 이상 고용할 수 없습니다');

@@ -1,13 +1,17 @@
 import { hash32 } from '../core/hash';
 import type { Tile } from './map';
-import { advance, setPath, type Walker } from './guest';
+import { advance, setPath, think, TRASH_MAX, TRASH_MIN, type Walker } from './guest';
 import { buildingDef } from './coaster';
 import { connected } from './pathfinding';
 import { INSPECT_BELOW, MAX_RELIABILITY } from './ride';
 import type { Building, World } from './world';
 
-/** 직원 종류. janitor는 쓰레기를, mechanic은 놀이기구 고장·점검을 맡는다. */
-export type StaffKind = 'janitor' | 'mechanic';
+/**
+ * 직원 종류. janitor는 쓰레기를, mechanic은 놀이기구 고장·점검을 맡는다.
+ * entertainer는 긴 줄 앞에서 공연해 손님 기분과 인내심을 살리고, vendor는 걸어 다니며 음료를 판다.
+ */
+export type StaffKind = 'janitor' | 'mechanic' | 'entertainer' | 'vendor';
+export const STAFF_KINDS: readonly StaffKind[] = ['janitor', 'mechanic', 'entertainer', 'vendor'];
 /** idle 대기 / walking 이동 / working 작업 중(제자리) */
 export type StaffState = 'idle' | 'walking' | 'working';
 
@@ -37,7 +41,23 @@ export interface Staff extends Walker {
   job?: 'repair' | 'inspect';
 }
 
-export const STAFF_NAME: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공' };
+export const STAFF_NAME: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈 연기자', vendor: '음료 판매원' };
+
+/** 연기자: 이 길이 이상인 줄을 찾아가 SHOW_TICKS 동안 공연한다 */
+export const SHOW_QUEUE = 3;
+export const SHOW_TICKS = 100;
+/** 공연 효과: CHEER_EVERY 틱마다 반경 CHEER_RADIUS 칸 안 손님의 행복 +1, 줄 선 손님은 기다린 시간 −CHEER_PATIENCE */
+export const CHEER_EVERY = 10;
+export const CHEER_RADIUS = 3;
+export const CHEER_PATIENCE = 20;
+/** 판매원: 갈증이 VENDOR_THIRST 이상인 손님을 찾아가 VENDOR_PRICE에 음료를 판다(갈증 −VENDOR_QUENCH) */
+export const VENDOR_THIRST = 50;
+export const VENDOR_PRICE = 5;
+export const VENDOR_QUENCH = 50;
+/** 판매원이 손님을 찾는 범위(가로+세로 칸) / 판매 거리 / 한 번 멈춰 서는 틱 */
+const VENDOR_SEEK = 12;
+const VENDOR_REACH = 1.5;
+const VENDOR_PAUSE = 10;
 
 /** 공원 입구에 직원을 새로 세운다. 상한이면 null. */
 export function hireStaff(world: World, kind: StaffKind): Staff | null {
@@ -93,6 +113,9 @@ export function updateStaff(world: World, s: Staff): void {
     s.target = null;
   }
 
+  if (s.kind === 'entertainer' && s.state === 'working' && (world.tick + s.id) % CHEER_EVERY === 0) cheer(world, s);
+  if (s.kind === 'vendor' && (world.tick + s.id) % THINK_EVERY === 0) sell(world, s);
+
   if (s.state === 'working') {
     if (--s.timer <= 0) {
       finishJob(world, s);
@@ -131,7 +154,11 @@ export function updateStaff(world: World, s: Staff): void {
 
   // idle: 일거리를 찾아 간다. 없으면 근처를 배회.
   if ((world.tick + s.id) % THINK_EVERY !== 0) return;
-  const found = s.kind === 'janitor' ? findLitterJob(world, s) : findRideJob(world, s);
+  const found =
+    s.kind === 'janitor' ? findLitterJob(world, s)
+    : s.kind === 'mechanic' ? findRideJob(world, s)
+    : s.kind === 'entertainer' ? findShowJob(world, s)
+    : findCustomer(world, s);
   if (found) {
     if (found.length <= 1) {
       s.target = found[0];
@@ -163,6 +190,7 @@ function jobValid(world: World, s: Staff): boolean {
   const t = s.target;
   if (!t) return false;
   if (s.kind === 'janitor') return world.map.litterAt(t.x, t.y) > 0;
+  if (s.kind === 'entertainer' || s.kind === 'vendor') return true;
   const b = rideAtEntrance(world, t);
   if (!b) return false;
   return s.job === 'repair' ? b.broken : !b.broken && b.reliability < INSPECT_BELOW;
@@ -170,6 +198,8 @@ function jobValid(world: World, s: Staff): boolean {
 
 function jobTicks(s: Staff): number {
   if (s.kind === 'janitor') return SWEEP_TICKS;
+  if (s.kind === 'entertainer') return SHOW_TICKS;
+  if (s.kind === 'vendor') return VENDOR_PAUSE;
   return s.job === 'repair' ? REPAIR_TICKS : INSPECT_TICKS;
 }
 
@@ -180,6 +210,7 @@ function finishJob(world: World, s: Staff): void {
     m.litter[m.index(t.x, t.y)] = 0;
     return;
   }
+  if (s.kind !== 'mechanic') return;
   const b = rideAtEntrance(world, t);
   if (!b) return;
   if (b.broken) {
@@ -228,6 +259,60 @@ function findRideJob(world: World, s: Staff): Tile[] | null {
     return [...world.network.findPath(s.tile, weakest.entrance)!];
   }
   return null;
+}
+
+/** 다른 연기자가 맡지 않은 가장 긴 줄(SHOW_QUEUE 이상)의 입구까지 경로 */
+function findShowJob(world: World, s: Staff): Tile[] | null {
+  const m = world.map;
+  const claimed = new Set<number>();
+  for (const o of world.staff) if (o !== s && o.kind === 'entertainer' && o.target) claimed.add(m.index(o.target.x, o.target.y));
+  let best: Building | null = null;
+  for (const b of world.buildings.values()) {
+    if (b.queue.length < SHOW_QUEUE || claimed.has(m.index(b.entrance.x, b.entrance.y))) continue;
+    if (best && b.queue.length <= best.queue.length) continue;
+    if (world.network.findPath(s.tile, b.entrance)) best = b;
+  }
+  return best ? [...world.network.findPath(s.tile, best.entrance)!] : null;
+}
+
+/** 음료를 살 수 있는 상태의 목마른 손님인가 */
+function wantsDrink(g: { state: string; money: number; needs: { thirst: number } }): boolean {
+  return (g.state === 'idle' || g.state === 'walking' || g.state === 'queueing') && g.needs.thirst >= VENDOR_THIRST && g.money >= VENDOR_PRICE;
+}
+
+/** 가까운(VENDOR_SEEK 안) 목마른 손님이 서 있는 길까지 경로 */
+function findCustomer(world: World, s: Staff): Tile[] | null {
+  let best: readonly Tile[] | null = null;
+  for (const g of world.guests) {
+    if (!wantsDrink(g) || Math.abs(g.tile.x - s.tile.x) + Math.abs(g.tile.y - s.tile.y) > VENDOR_SEEK) continue;
+    const path = world.network.findPath(s.tile, g.tile);
+    if (path && (!best || path.length < best.length)) best = path;
+  }
+  return best ? [...best] : null;
+}
+
+/** 공연: 주변 손님의 기분을 올리고, 줄 선 손님은 기다린 시간을 덜어 준다 */
+function cheer(world: World, s: Staff): void {
+  for (const g of world.guests) {
+    if (g.state === 'visiting' || g.state === 'gone' || g.state === 'leaving') continue;
+    if (Math.abs(g.x - s.x) > CHEER_RADIUS || Math.abs(g.y - s.y) > CHEER_RADIUS) continue;
+    g.needs.happiness = Math.min(100, g.needs.happiness + 1);
+    if (g.state === 'queueing') g.timer = Math.max(0, g.timer - CHEER_PATIENCE);
+    if (!g.thought) think(g, 'show');
+  }
+}
+
+/** 판매원 바로 옆의 목마른 손님 한 명에게 음료를 판다 */
+function sell(world: World, s: Staff): void {
+  for (const g of world.guests) {
+    if (!wantsDrink(g) || Math.hypot(g.x - s.x, g.y - s.y) > VENDOR_REACH) continue;
+    g.money -= VENDOR_PRICE;
+    world.transact('shops', VENDOR_PRICE);
+    g.needs.thirst = Math.max(0, g.needs.thirst - VENDOR_QUENCH);
+    g.needs.happiness = Math.min(100, g.needs.happiness + 3);
+    if (g.trash === 0) g.trash = TRASH_MIN + (hash32(g.id, world.tick, 11) % (TRASH_MAX - TRASH_MIN + 1));
+    return;
+  }
 }
 
 /** 길을 따라 BFS로 가장 가까운(다른 직원이 맡지 않은) 쓰레기 있는 길 타일까지의 경로 */

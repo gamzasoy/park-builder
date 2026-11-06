@@ -1,5 +1,6 @@
 import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
+import type { StaffKind } from './staff';
 import type { Building, MonthReport, World } from './world';
 
 /** 하루 = 600틱(1배속 60초), 한 달 = 10일(1배속 10분) */
@@ -10,8 +11,8 @@ export const MAX_FEE = 50;
 /** 새 게임의 입장료 */
 export const START_FEE = 10;
 const MAX_REPORTS = 24;
-/** 직원 1명당 하루 급여 */
-export const WAGE = 60;
+/** 직원 종류별 하루 급여 */
+export const WAGE: Record<StaffKind, number> = { janitor: 60, mechanic: 60, entertainer: 70, vendor: 50 };
 
 export interface GameDate { year: number; month: number; day: number }
 
@@ -37,6 +38,11 @@ export function dailyUpkeep(world: World): number {
   return sum;
 }
 
+/** 고용한 직원들의 하루 급여 합 */
+export function dailyWages(world: World): number {
+  return world.staff.reduce((a, s) => a + WAGE[s.kind], 0);
+}
+
 export function setPrice(b: Building, price: number): void {
   b.price = Math.max(0, Math.min(MAX_PRICE, Math.round(price)));
 }
@@ -54,7 +60,8 @@ export function feeFactor(fee: number): number {
 export function settleDay(world: World): void {
   const upkeep = dailyUpkeep(world);
   if (upkeep > 0) world.transact('upkeep', -upkeep);
-  if (world.staff.length > 0) world.transact('wages', -WAGE * world.staff.length);
+  const wages = dailyWages(world);
+  if (wages > 0) world.transact('wages', -wages);
 
   const dayIndex = Math.floor(world.tick / DAY_TICKS); // 끝난 날 수
   if (dayIndex > 0 && dayIndex % DAYS_PER_MONTH === 0) finishMonth(world, dayIndex);

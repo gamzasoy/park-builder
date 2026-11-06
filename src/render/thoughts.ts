@@ -21,7 +21,8 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   litter: '너무 더러워!',
   broken: '고장났네…',
   rain: '비가 와…',
+  show: '인형탈 귀여워!',
 };
 
 /** 긍정적인 생각은 초록 말풍선 */
-export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery']);
+export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery', 'show']);

@@ -5,7 +5,8 @@
 import { getDef } from '../data';
 import type { SceneryDef } from '../data/scenery';
 import { tileToWorld, type Vec2 } from '../render/iso';
-import { drawRideSprite, drawScenery, poly, type Quad } from '../render/sprites';
+import { drawMascot, drawRideSprite, drawScenery, drawVendorTray, poly, type Quad } from '../render/sprites';
+import type { StaffKind } from '../sim/staff';
 
 const W = 44;
 const H = 40;
@@ -83,10 +84,18 @@ export function sceneryIcon(def: SceneryDef): string {
   });
 }
 
-export function staffIcon(kind: 'janitor' | 'mechanic'): string {
+export function staffIcon(kind: StaffKind): string {
   return render(`staff:${kind}`, (ctx) => {
-    const vest = kind === 'janitor' ? '#f08a24' : '#2f78d0';
     const cx = W / 2;
+    if (kind === 'entertainer') {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawMascot(ctx, cx, H - 4, 1.55, Math.PI, true);
+      return;
+    }
+    const vest = { janitor: '#f08a24', mechanic: '#2f78d0', vendor: '#d94848' }[kind];
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
@@ -124,6 +133,8 @@ export function staffIcon(kind: 'janitor' | 'mechanic'): string {
       ctx.beginPath();
       ctx.moveTo(cx + 12, H - 6); ctx.lineTo(cx + 19, H - 6);
       ctx.stroke();
+    } else if (kind === 'vendor') {
+      drawVendorTray(ctx, cx, H - 5.6, 2.14);
     }
   });
 }

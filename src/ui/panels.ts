@@ -6,7 +6,7 @@ import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
 import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
 import { demolishAt, REFUND_RATE } from '../sim/building';
-import { dailyUpkeep, fairPrice, setPrice, WAGE } from '../sim/economy';
+import { dailyUpkeep, dailyWages, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
 import { Stepper } from './stepper';
@@ -189,7 +189,7 @@ export class FinancePanel {
 
     setText(
       this.extra,
-      `하루 유지비 ${won(dailyUpkeep(w))} · 급여 ${won(WAGE * w.staff.length)}` +
+      `하루 유지비 ${won(dailyUpkeep(w))} · 급여 ${won(dailyWages(w))}` +
         (last ? ` · 지난 달 입장 ${last.entered}명 · 월말 평점 ${last.rating}` : ''),
     );
   }
@@ -293,6 +293,13 @@ const STAFF_STATE_TEXT: Record<Staff['state'], string> = {
   working: '작업 중',
 };
 
+const WORKING_TEXT: Record<Staff['kind'], string> = {
+  janitor: '청소 중',
+  mechanic: '수리·점검 중',
+  entertainer: '공연 중',
+  vendor: '판매 중',
+};
+
 /** 선택한 직원의 상태와 해고 */
 export class StaffPanel {
   private root = document.createElement('div');
@@ -347,7 +354,7 @@ export class StaffPanel {
     }
     if (this.root.hidden) this.root.hidden = false;
     setText(this.title, `${STAFF_NAME[s.kind]} #${s.id}`);
-    setText(this.state, STAFF_STATE_TEXT[s.state]);
-    setText(this.wage, `${won(WAGE)} / 일`);
+    setText(this.state, s.state === 'working' ? WORKING_TEXT[s.kind] : STAFF_STATE_TEXT[s.state]);
+    setText(this.wage, `${won(WAGE[s.kind])} / 일`);
   }
 }

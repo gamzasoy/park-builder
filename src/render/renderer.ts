@@ -13,7 +13,7 @@ import { shade } from './color';
 import { guestDisplayPos, staffDisplayPos } from './guestpos';
 import { BUBBLE_FONT, POSITIVE, THOUGHT_TEXT } from './thoughts';
 import { GroundCache, occludingTiles, paintTerrainTile } from './ground';
-import { drawRideSprite, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
+import { drawMascot, drawRideSprite, drawVendorTray, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, terrainPx, tileToWorld, type Vec2 } from './iso';
 import { cornerLevels, surfaceLevel } from './relief';
 
@@ -765,12 +765,15 @@ function drawWrench(ctx: CanvasRenderingContext2D, x: number, y: number, z: numb
   ctx.restore();
 }
 
+/** 직원 조끼·모자 색 */
+const STAFF_VEST: Record<Staff['kind'], string> = { janitor: '#f08a24', mechanic: '#2f78d0', entertainer: '#f2c230', vendor: '#d94848' };
+
 /** 직원: 눈에 띄는 작업복(청소부 = 주황 조끼 + 모자). 작업 중이면 빗자루를 쓴다. */
 function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: number, ty: number, lv: number, time: number): void {
   const s = screenAt(cam, tx, ty, lv);
   const z = cam.zoom;
   if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -40 || s.y > cam.viewH + 30) return;
-  const vest = st.kind === 'janitor' ? '#f08a24' : '#2f78d0';
+  const vest = STAFF_VEST[st.kind];
 
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
@@ -778,6 +781,10 @@ function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: nu
   ctx.fill();
 
   const swing = st.state === 'walking' ? Math.sin((tx + ty) * 14) * 1.6 * z : 0;
+  if (st.kind === 'entertainer') {
+    drawMascot(ctx, s.x, s.y, z, time + st.id * 7, st.state === 'working', swing);
+    return;
+  }
   ctx.strokeStyle = '#2a3342';
   ctx.lineWidth = Math.max(1, 1.8 * z);
   ctx.beginPath();
@@ -827,6 +834,7 @@ function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: nu
   ctx.arc(s.x, s.y - 14.2 * z, 2.8 * z, Math.PI, 0);
   ctx.fill();
   ctx.fillRect(s.x - 3.6 * z, s.y - 14.4 * z, 7.2 * z, 1.1 * z);
+  if (st.kind === 'vendor') drawVendorTray(ctx, s.x, s.y, z);
 }
 
 function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, b: Building): void {

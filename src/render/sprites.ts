@@ -945,6 +945,97 @@ export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Qua
   }
 }
 
+// ---------------------------------------------------------------- 직원
+
+/**
+ * 인형탈 연기자: 노란 몸통에 큰 곰 머리. (x, y)는 발 위치, dancing이면 팔을 흔들며 들썩인다.
+ * 게임 화면과 툴바 아이콘이 함께 쓴다.
+ */
+export function drawMascot(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number, dancing: boolean, walkSwing = 0): void {
+  const hop = dancing ? Math.abs(Math.sin(time * 0.35)) * 1.6 * z : 0;
+  const by = y - hop;
+  // 다리
+  ctx.strokeStyle = '#8a5a2b';
+  ctx.lineWidth = Math.max(1.5, 2.2 * z);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - 1.5 * z, by - 5 * z); ctx.lineTo(x - 1.5 * z + walkSwing, by - 0.5 * z);
+  ctx.moveTo(x + 1.5 * z, by - 5 * z); ctx.lineTo(x + 1.5 * z - walkSwing, by - 0.5 * z);
+  ctx.stroke();
+  // 팔(춤출 때는 번갈아 위로)
+  const wave = dancing ? Math.sin(time * 0.5) : 0;
+  ctx.beginPath();
+  ctx.moveTo(x - 3.5 * z, by - 9.5 * z); ctx.lineTo(x - 6 * z, by - (8 + 5 * Math.max(0, wave)) * z);
+  ctx.moveTo(x + 3.5 * z, by - 9.5 * z); ctx.lineTo(x + 6 * z, by - (8 + 5 * Math.max(0, -wave)) * z);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+  // 몸통
+  ctx.fillStyle = '#f2c230';
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, 0.8 * z);
+  ctx.beginPath();
+  ctx.ellipse(x, by - 8.5 * z, 4.2 * z, 4.6 * z, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  // 머리와 귀
+  const hy = by - 16 * z;
+  ctx.fillStyle = '#a8703a';
+  for (const dx of [-3.6, 3.6]) {
+    ctx.beginPath();
+    ctx.arc(x + dx * z, hy - 3.4 * z, 1.8 * z, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(x, hy, 5 * z, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f1d9b0';
+  ctx.beginPath();
+  ctx.ellipse(x, hy + 1.6 * z, 2.6 * z, 1.9 * z, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#2a2a2a';
+  for (const dx of [-1.8, 1.8]) {
+    ctx.beginPath();
+    ctx.arc(x + dx * z, hy - 1 * z, 0.7 * z, 0, TAU);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(x, hy + 1 * z, 0.8 * z, 0, TAU);
+  ctx.fill();
+  // 빨간 나비넥타이
+  ctx.fillStyle = '#e8453c';
+  poly(ctx, [
+    { x: x - 2.4 * z, y: by - 12.6 * z }, { x, y: by - 11.8 * z }, { x: x - 2.4 * z, y: by - 11 * z },
+  ], '#e8453c', null);
+  poly(ctx, [
+    { x: x + 2.4 * z, y: by - 12.6 * z }, { x, y: by - 11.8 * z }, { x: x + 2.4 * z, y: by - 11 * z },
+  ], '#e8453c', null);
+}
+
+/** 음료 판매원이 앞에 메고 다니는 컵 상자. (x, y)는 발 위치 */
+export function drawVendorTray(ctx: CanvasRenderingContext2D, x: number, y: number, z: number): void {
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = Math.max(1, 0.6 * z);
+  ctx.beginPath();
+  ctx.moveTo(x - 3 * z, y - 11 * z); ctx.lineTo(x - 3.5 * z, y - 7 * z);
+  ctx.moveTo(x + 3 * z, y - 11 * z); ctx.lineTo(x + 3.5 * z, y - 7 * z);
+  ctx.stroke();
+  // 컵 세 개
+  const cups = ['#3ab0a0', '#e8453c', '#f2c230'];
+  for (let i = 0; i < 3; i++) {
+    const cx = x + (i - 1) * 2.4 * z;
+    poly(ctx, [
+      { x: cx - 1 * z, y: y - 10.2 * z }, { x: cx + 1 * z, y: y - 10.2 * z },
+      { x: cx + 0.8 * z, y: y - 7.5 * z }, { x: cx - 0.8 * z, y: y - 7.5 * z },
+    ], cups[i], null);
+  }
+  poly(ctx, [
+    { x: x - 4.2 * z, y: y - 7.8 * z }, { x: x + 4.2 * z, y: y - 7.8 * z },
+    { x: x + 4.2 * z, y: y - 5.4 * z }, { x: x - 4.2 * z, y: y - 5.4 * z },
+  ], '#c8a06a');
+}
+
 // ---------------------------------------------------------------- 장식
 
 /** 나무·꽃. (x, y)는 타일 중앙의 지면 화면 좌표, seed는 0~1 고정값(모양 변주) */

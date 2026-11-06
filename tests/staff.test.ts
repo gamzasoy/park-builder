@@ -146,8 +146,8 @@ describe('janitor', () => {
     w.tick = DAY_TICKS;
     const money = w.money;
     settleDay(w);
-    expect(w.money).toBe(money - dailyUpkeep(w) - WAGE * 2);
-    expect(w.ledger.wages).toBe(-WAGE * 2);
+    expect(w.money).toBe(money - dailyUpkeep(w) - WAGE.janitor * 2);
+    expect(w.ledger.wages).toBe(-WAGE.janitor * 2);
     expect(fireStaff(w, s.id)).toBe(true);
     expect(fireStaff(w, s.id)).toBe(false);
     expect(w.staff).toHaveLength(1);
