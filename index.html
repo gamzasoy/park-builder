@@ -121,7 +121,8 @@
       }
       .toast {
         position: relative; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; overflow: hidden;
-        padding: 10px 16px 12px 12px; pointer-events: auto; cursor: pointer;
+        /* 카드는 클릭을 아래 공원으로 통과시킨다(× 버튼만 누를 수 있음) */
+        padding: 10px 34px 12px 12px; pointer-events: none;
         color: #fff; background: linear-gradient(#3b4a2a, #2a3620); border: 2px solid #f2c230; border-radius: 8px;
         box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
         animation: toast-in 0.45s cubic-bezier(.2,1.4,.4,1);
@@ -134,6 +135,10 @@
       .toast .t-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
       .toast .t-body b { font-size: 16px; text-shadow: 0 1px 0 rgba(0,0,0,0.6); }
       .toast .t-body span { font-size: 13px; color: #e8ecd8; }
+      .toast .t-close {
+        position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0; pointer-events: auto;
+        font-size: 15px; line-height: 1; color: #fff; background: rgba(0,0,0,0.25); border: 0; border-radius: 4px; cursor: pointer;
+      }
       .toast .t-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: 0.55; transform-origin: left; animation: toast-bar linear forwards; }
       .toast.event .t-bar { color: #f2c230; } .toast.good .t-bar { color: #6fdc7a; } .toast.bad .t-bar { color: #ff7a6b; } .toast.info .t-bar { color: #8fc8ff; }
       @keyframes toast-in { 0% { opacity: 0; transform: translateY(-24px) scale(0.9); } 100% { opacity: 1; transform: none; } }

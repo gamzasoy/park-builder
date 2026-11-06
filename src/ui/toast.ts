@@ -1,6 +1,7 @@
 /**
  * 큰 알림(토스트): 이벤트·미션 달성·VIP처럼 놓치면 안 되는 소식을 화면 위쪽 가운데에 카드로 띄운다.
- * 아이콘·색(종류별)·나타나는 애니메이션·남은 시간 막대가 있고, 누르면 바로 닫힌다. 최대 MAX_TOASTS개를 쌓는다.
+ * 아이콘·색(종류별)·나타나는 애니메이션·남은 시간 막대가 있고, × 버튼으로 바로 닫는다. 최대 MAX_TOASTS개를 쌓는다.
+ * 카드 자체는 클릭을 통과시켜, 알림이 떠 있어도 그 아래 공원을 누를 수 있다.
  * 짧은 조작 안내(회전, 돈 부족 등)는 여기가 아니라 왼쪽 위 노란 쪽지(tools.notify)를 쓴다.
  */
 export type ToastTone = 'event' | 'good' | 'bad' | 'info';
@@ -40,8 +41,12 @@ export class Toasts {
     const bar = document.createElement('i');
     bar.className = 't-bar';
     bar.style.animationDuration = `${SHOW_MS}ms`;
-    el.append(i, body, bar);
-    el.addEventListener('click', () => this.dismiss(el));
+    const x = document.createElement('button');
+    x.className = 't-close';
+    x.textContent = '×';
+    x.title = '닫기';
+    x.addEventListener('click', () => this.dismiss(el));
+    el.append(i, body, bar, x);
     this.root.prepend(el);
     while (this.root.children.length > MAX_TOASTS) this.root.lastElementChild!.remove();
     setTimeout(() => this.dismiss(el), SHOW_MS);
