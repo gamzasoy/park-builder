@@ -179,6 +179,28 @@ try {
   check(moved.money === moneyBefore, '옮기는 데 돈이 들지 않음');
   await page.screenshot({ path: 'e2e-out/09-coaster-moved.png' });
 
+  // ---- 길게 눌러 끌어 옮기기: 역을 길게 누른 채 원래 자리로 끌어다 놓는다 ----
+  await page.keyboard.press('Escape');
+  await game(() => { window.__game.focus(25, 35); window.__game.setZoom(0.7); });
+  const lp = await at(30, 40);
+  const home = await at(21, 30);
+  await page.mouse.move(lp.x, lp.y);
+  await page.mouse.down();
+  await page.waitForTimeout(650);
+  check(await page.evaluate(() => /끌어서 놓으면/.test(document.getElementById('hint').textContent)), '길게 누르면 옮기기가 시작됨');
+  await page.mouse.move(home.x, home.y, { steps: 10 });
+  await page.mouse.up();
+  const back2 = await game(() => {
+    const b = [...window.__game.world.buildings.values()][0];
+    return { x: b.x, y: b.y, ok: b.track.ok };
+  });
+  check(back2.x === 20 && back2.y === 30 && back2.ok, `길게 눌러 끌어서 놓은 자리로 옮김 (${back2.x},${back2.y})`);
+  // 짧게 누르면(클릭) 옮겨지지 않는다
+  const sp = await at(21, 30);
+  await page.mouse.click(sp.x, sp.y);
+  await page.waitForTimeout(600);
+  check(await game(() => { const b = [...window.__game.world.buildings.values()][0]; return b.x === 20 && b.y === 30; }), '짧게 누르면 옮기기가 시작되지 않음');
+
   // ---- 지형: 지형 도구로 클릭 → 높이 변경, 높이 보정된 마우스 피킹, 규칙 위반은 거절 ----
   await page.click('#new-btn');
   await page.click('#m-choices .choice >> nth=0'); // 시나리오: 초원 공원

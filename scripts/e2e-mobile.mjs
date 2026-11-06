@@ -128,6 +128,22 @@ try {
   await page.waitForSelector('#panel[hidden]', { state: 'attached', timeout: 2000 });
   check(true, '닫기 버튼으로 패널이 닫힘');
 
+  // 길게 누르기: 건물을 손가락으로 길게 누른 채 끌어 놓으면 그 자리로 옮겨진다
+  const before = await game(() => { const b = [...window.__game.world.buildings.values()][0]; return { x: b.x, y: b.y }; });
+  const lp = { x: bp.x, y: bp.y - 10 };
+  const to = await at(19, 31);
+  const camStart = await game(() => window.__game.camera());
+  await touch('touchStart', [lp]);
+  await page.waitForTimeout(650);
+  check(await game(() => /끌어서 놓으면/.test(document.getElementById('hint').textContent)), '건물을 길게 누르면 옮기기가 시작됨');
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [{ x: lp.x + ((to.x - lp.x) * i) / 6, y: lp.y + ((to.y - lp.y) * i) / 6 }]);
+  await touch('touchEnd', []);
+  const after = await game(() => { const b = [...window.__game.world.buildings.values()][0]; return { x: b.x, y: b.y }; });
+  check(after.x < before.x, `끌어서 놓은 곳으로 옮겨짐 (${before.x},${before.y} → ${after.x},${after.y})`);
+  const camEnd = await game(() => window.__game.camera());
+  check(camStart.x === camEnd.x && camStart.y === camEnd.y, '끄는 동안 화면이 움직이지 않음');
+  await shot('05b-longpress-moved');
+
   // 세로 방향: 안내 표시
   await page.setViewportSize({ width: vp.height, height: vp.width });
   check(await game(() => getComputedStyle(document.getElementById('rotate-hint')).display === 'flex'), '세로로 들면 "가로로 돌려 주세요" 안내가 덮임');

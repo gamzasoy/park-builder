@@ -503,6 +503,7 @@ const tutorialPanel = new TutorialPanel(world, toolbar);
 
 input.onLeftDown = (t, pos) => tools.onDown(t, pos);
 input.onTouchCancel = () => tools.cancelDrag();
+input.onLongPress = (t) => tools.longPress(t);
 // 한 손가락: 건설 도구가 켜져 있으면 건설 입력, 아니면 화면 이동/탭 선택
 input.buildMode = () => tools.isBuilding;
 // 건물·철거는 누르는 순간 실행되므로 터치에서는 손가락을 뗄 때 실행(위치를 맞춘 뒤 놓을 수 있게)

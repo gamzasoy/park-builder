@@ -175,6 +175,23 @@ export class ToolController {
     this.notify('옮길 곳을 누르세요 (R: 회전, Esc: 취소)');
   }
 
+  /**
+   * 길게 누르기: 도구 없이 건물을 길게 누르면 바로 옮기기를 시작한다(끌어서 놓으면 그 자리로).
+   * 시작했으면 true
+   */
+  longPress(t: Tile): boolean {
+    if (this.tool.kind !== 'none') return false;
+    const b = buildingAt(this.world, t.x, t.y);
+    if (!b) return false;
+    this.selectedId = b.id;
+    this.selectedGuestId = null;
+    this.selectedStaffId = null;
+    this.beginMove(b.id);
+    this.notify('끌어서 놓으면 옮겨집니다 (R: 회전, Esc: 취소)');
+    this.onEvent?.('pickup');
+    return true;
+  }
+
   /** 옮기는 중인 건물 */
   get movingBuilding(): Building | null {
     return this.tool.kind === 'move' ? (this.world.buildings.get(this.tool.buildingId) ?? null) : null;

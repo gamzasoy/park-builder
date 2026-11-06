@@ -3,6 +3,7 @@
  *
  * - 한 손가락 + 건설 도구: down → move* → up (미리보기가 손가락을 따라간다)
  * - 한 손가락 + 선택 모드: 거의 안 움직이면 tap, 움직이면 pan
+ * - 한 손가락 + 선택 모드에서 길게 누르기: longPress()로 건설 입력(build)으로 바꿔, 이후 move/up이 나온다(건물 끌어 옮기기)
  * - 두 손가락: 핀치 줌(중점 기준) + 중점 이동 팬. 닿는 순간 진행 중이던 한 손가락 건설은 cancel
  */
 
@@ -122,6 +123,18 @@ export class TouchGesture {
     if (this.pts.size === 0) this.state = 'idle';
     else if (this.state === 'pinch') this.state = 'ignore';
     return out;
+  }
+
+  /** 한 손가락으로 움직이지 않고 누르고 있는가(길게 누르기 판정 대상) */
+  get holding(): boolean {
+    return this.state === 'pending' && this.pts.size === 1;
+  }
+
+  /** 길게 누르기가 인정되면 그 손가락을 건설 입력으로 바꾼다. 바뀌었으면 true */
+  longPress(): boolean {
+    if (!this.holding) return false;
+    this.state = 'build';
+    return true;
   }
 
   /** 시스템이 터치를 가로챈 경우(pointercancel). 진행 중인 건설은 취소한다. */
