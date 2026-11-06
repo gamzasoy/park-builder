@@ -69,9 +69,20 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   // 계절: 나무 색을 바꾸고, 겨울엔 땅에 눈이 덮인 듯 하얗게, 가을엔 누렇게
   const season = seasonOf(time);
   setSeason(season);
-  if (season === 'winter' || season === 'autumn') {
+  // 길은 계절 틴트와 밤의 짙은 어둠에서 빼 준다(눈 덮인 땅·밤에도 길이 또렷이 보이게)
+  const dark = darknessAt(time);
+  const needOffPath = season === 'winter' || season === 'autumn' || dark > 0;
+  const offPath = needOffPath ? offPathRegion(cam, map, visible) : null;
+  if (offPath && (season === 'winter' || season === 'autumn')) {
     ctx.fillStyle = season === 'winter' ? 'rgba(236,244,255,0.42)' : 'rgba(214,160,60,0.16)';
-    ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+    ctx.fill(offPath.region);
+  }
+  if (offPath && dark > 0) {
+    // 밤: 땅(잔디)은 짙게, 길은 가로등이 비추듯 따뜻하게. 건물·손님은 마지막에 옅은 어둠만 덮는다
+    ctx.fillStyle = `rgba(12,18,52,${(dark * NIGHT_GROUND).toFixed(3)})`;
+    ctx.fill(offPath.region);
+    ctx.fillStyle = `rgba(255,205,130,${(0.22 * Math.min(1, dark / MAX_DARK)).toFixed(3)})`;
+    ctx.fill(offPath.paths);
   }
 
   // 1.5) 길 위 쓰레기: 지면 캐시와 분리해 매 프레임 겹쳐 그린다(쌓이고 치워져도 캐시가 무효화되지 않는다)
@@ -341,11 +352,45 @@ function drawRainbow(ctx: CanvasRenderingContext2D, cam: Camera, time: number): 
   ctx.restore();
 }
 
+/**
+ * 밤 어둠의 배율. 땅(길 제외)에는 NIGHT_GROUND만큼 먼저 덮고, 마지막에 화면 전체를 NIGHT_OVERALL만큼 덮는다.
+ * 그래서 잔디는 충분히 어둡지만 길·건물·손님은 밝게 남아 밤에도 알아보기 쉽다.
+ */
+const NIGHT_GROUND = 0.9;
+const NIGHT_OVERALL = 0.5;
+
+/**
+ * 화면에서 길 칸을 뺀 영역(region)과 보이는 길 칸들(paths).
+ * region은 화면 사각형(시계 방향)에 길 마름모를 반시계 방향으로 더해 nonzero 규칙으로 구멍을 뚫는다.
+ */
+function offPathRegion(cam: Camera, map: TileMap, visible: (s: Vec2) => boolean): { region: Path2D; paths: Path2D } {
+  const region = new Path2D();
+  region.moveTo(0, 0);
+  region.lineTo(cam.viewW, 0);
+  region.lineTo(cam.viewW, cam.viewH);
+  region.lineTo(0, cam.viewH);
+  region.closePath();
+  const paths = new Path2D();
+  for (let i = 0; i < map.path.length; i++) {
+    if (map.path[i] !== 1) continue;
+    const tx = i % map.width;
+    const ty = (i / map.width) | 0;
+    if (!visible(screenAt(cam, tx + 0.5, ty + 0.5, map.heightAt(tx, ty)))) continue;
+    const [t, r, b, l] = tilePts(cam, map, tx, ty);
+    for (const [p, q] of [[region, [t, l, b, r]], [paths, [t, r, b, l]]] as const) {
+      p.moveTo(q[0].x, q[0].y);
+      for (let k = 1; k < 4; k++) p.lineTo(q[k].x, q[k].y);
+      p.closePath();
+    }
+  }
+  return { region, paths };
+}
+
 /** 밤: 화면을 남색으로 어둡게 하고, 건물과 입구 문에 따뜻한 불빛을 켠다 */
 function drawNight(ctx: CanvasRenderingContext2D, cam: Camera, world: World, buildings: readonly Building[], time: number): void {
   const dark = darknessAt(time);
   if (dark <= 0) return;
-  ctx.fillStyle = `rgba(12,18,52,${dark.toFixed(3)})`;
+  ctx.fillStyle = `rgba(12,18,52,${(dark * NIGHT_OVERALL).toFixed(3)})`;
   ctx.fillRect(0, 0, cam.viewW, cam.viewH);
   const glow = Math.min(1, dark / MAX_DARK);
   if (glow < 0.2) return;
