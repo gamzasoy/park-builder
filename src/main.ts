@@ -35,6 +35,7 @@ import { seasonOf, SEASON_VIEW, type Season } from './sim/season';
 import { MISSIONS } from './sim/missions';
 import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
 import { PARADE_COST, startParade } from './sim/parade';
+import { FESTIVAL_COST, FESTIVAL_DAYS, FESTIVALS, seasonKey, startFestival } from './sim/festival';
 import { THIEF_BOUNTY } from './sim/thief';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
@@ -93,6 +94,7 @@ function newGame(id = DEFAULT_SCENARIO): void {
   seenStorm = world.storm?.start ?? -1;
   seenDamage = null;
   shownSeason = seasonOf(world.tick);
+  seenFestival = -1;
   loop.speed = 1;
   modal.hide();
   saveNow();
@@ -115,7 +117,8 @@ const GUIDE_ROWS: [string, string][] = [
   ['4. 직원', '청소부는 쓰레기를, 정비공은 고장 난 놀이기구를, 경비원은 소매치기를 맡아요. 인형탈 연기자는 긴 줄의 손님을 즐겁게 해요.'],
   ['돈', '입장료와 이용 요금으로 벌고, 유지비와 직원 급여가 나가요. 요금이 적정가보다 비싸면 손님이 불만을 가져요. 「재무」에서 수입·지출을 볼 수 있어요.'],
   ['평점', '손님의 기분·청결·놀거리로 정해져요. 평점을 누르면 손님 리뷰를 볼 수 있어요.'],
-  ['더 즐기기', '「미션」으로 보너스를 받고, 장식·지형으로 공원을 꾸며 보세요. 「특별」 탭에서 불꽃놀이·퍼레이드·사진 찍기도 할 수 있어요.'],
+  ['계절 축제', '계절마다 한 번 「특별」 탭에서 축제를 열 수 있어요(3일 동안). 봄엔 🌸 벚꽃, 여름엔 💦 물놀이, 가을엔 🎃 할로윈, 겨울엔 🎄 크리스마스 축제! 길가에 장식이 서고 손님이 더 몰려와요.'],
+  ['더 즐기기', '「미션」으로 보너스를 받고, 장식·지형으로 공원을 꾸며 보세요. 「공연」에서 불꽃놀이·퍼레이드를, 「특별」 탭에서 사진 찍기도 할 수 있어요.'],
   ['조작', isTouch
     ? '한 손가락으로 끌어 화면 이동 · 두 손가락으로 확대/축소 · 누르면 정보 보기 · 건물을 길게 눌러 끌면 옮기기 · 쓰레기를 누르면 줍기'
     : '드래그·WASD·방향키로 화면 이동 · 휠로 확대/축소 · 클릭으로 정보 보기 · R 회전 · Esc 취소 · Space 일시정지 · 1/2/3 배속 · P 사진'],
@@ -241,8 +244,40 @@ function watchSeason(): void {
   const s = seasonOf(world.tick);
   if (s === shownSeason) return;
   shownSeason = s;
-  toasts.show(SEASON_VIEW[s].icon, `${SEASON_VIEW[s].label}이 왔어요!`, SEASON_NOTICE[s], 'info');
+  // 이번 계절 축제를 아직 안 열었으면 열 수 있다고 알려 준다
+  const canFestival = world.lastFestivalKey !== seasonKey(world.tick);
+  toasts.show(SEASON_VIEW[s].icon, `${SEASON_VIEW[s].label}이 왔어요!`,
+    `${SEASON_NOTICE[s]}${canFestival ? ` · 「특별」 탭에서 ${FESTIVALS[s].icon} ${withObj(FESTIVALS[s].name)} 열 수 있어요` : ''}`, 'info');
   sound.play('chime');
+}
+
+// ---- 계절 축제: 시작·끝 알림 ----
+let seenFestival = world.festival?.start ?? -1;
+let festivalEnteredAt = world.stats.entered;
+function onFestival(): void {
+  const err = startFestival(world);
+  if (err) {
+    tools.fail(err);
+    return;
+  }
+  const f = FESTIVALS[world.festival!.season];
+  seenFestival = world.festival!.start;
+  festivalEnteredAt = world.stats.entered;
+  toasts.show(f.icon, `${f.name} 개막!`, `${FESTIVAL_DAYS}일 동안 손님이 더 몰려오고 모두의 기분이 올라요 · ${f.perk} (${won(FESTIVAL_COST)})`, 'event');
+  sound.play('win');
+}
+function watchFestival(): void {
+  const fe = world.festival;
+  if (fe) {
+    if (fe.start !== seenFestival) { seenFestival = fe.start; festivalEnteredAt = world.stats.entered; }
+    return;
+  }
+  if (seenFestival < 0) return;
+  // 방금 끝났다
+  const came = world.stats.entered - festivalEnteredAt;
+  const f = FESTIVALS[seasonOf(seenFestival)];
+  seenFestival = -1;
+  toasts.show(f.icon, `${withSubj(f.name)} 끝났어요`, `축제 동안 손님 ${came}명이 다녀갔어요. 다음 계절 축제도 기대해 주세요!`, 'good');
 }
 
 let seenVips = world.stats.vips;
@@ -402,6 +437,7 @@ const loop = new GameLoop(
     });
     hud.update();
     toolbar.sync();
+    toolbar.setFestival(seasonOf(world.tick));
     syncToolActions();
     buildingPanel.update();
     guestPanel.update();
@@ -420,6 +456,7 @@ const loop = new GameLoop(
     watchThieves();
     watchRainbow();
     watchSeason();
+    watchFestival();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
@@ -477,7 +514,7 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     toasts.show('🎉', '퍼레이드 시작!', `인형탈과 꽃차가 공원 입구에서 출발해요 (${won(PARADE_COST)})`, 'event');
     sound.play('win');
   }
-});
+}, onFestival);
 
 // ---- 기념사진: 지금 화면(공원)을 이미지로 저장 ----
 function takePhoto(): void {

@@ -23,6 +23,7 @@ import { GroundCache, occludingTiles, paintTerrainTile } from './ground';
 import { BALLOON_PALETTE, drawBalloon, drawMascot, drawParadeFloat, drawRideSprite, drawVendorTray, drawScenery, drawStationFloor, PALETTE, poly, setSeason, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, terrainPx, tileToWorld, type Vec2 } from './iso';
 import { cornerLevels, surfaceLevel } from './relief';
+import { drawBunting, drawFestivalProp, FESTIVAL_COLORS, FESTIVAL_GLOW } from './festival';
 
 export interface View {
   hover: Tile | null;
@@ -143,8 +144,17 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
       scenery.push({ key: u.x + u.y + 0.01, draw: () => drawParadeUnit(ctx, cam, u.unit, u.x, u.y, h, time, i) });
     });
   }
+  // 계절 축제: 길가 군데군데에 계절 장식을 세운다
+  const festival = world.festival;
+  const props = festival ? festivalProps(map) : [];
+  for (const p of props) {
+    const h = groundHeightAt(map, p.x, p.y);
+    const s = tileScreen(p.x, p.y, h);
+    if (!visible(s) && !visible({ x: s.x, y: s.y - 30 * cam.zoom })) continue;
+    scenery.push({ key: p.x + p.y, draw: () => drawFestivalProp(ctx, festival!.season, s.x, s.y, cam.zoom, time, p.seed) });
+  }
   const gs = tileScreen(map.gate.x, map.gate.y, map.heightAt(map.gate.x, map.gate.y));
-  if (visible(gs)) scenery.push({ key: map.gate.x + map.gate.y + 1.6, draw: () => drawGate(ctx, cam, map.gate, map.heightAt(map.gate.x, map.gate.y), world.parkName) });
+  if (visible(gs)) scenery.push({ key: map.gate.x + map.gate.y + 1.6, draw: () => drawGate(ctx, cam, map.gate, map.heightAt(map.gate.x, map.gate.y), world.parkName, festival?.season, time) });
   // 언덕 뒤에 선 건물·손님이 언덕 앞면 위로 비치지 않게, 그것을 가리는 솟은 칸을 물체 뒤에 다시 그린다
   if (hasRaisedTerrain(map)) {
     const occ = new Map<number, { tx: number; ty: number }>();
@@ -252,9 +262,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
 
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
   drawWeather(ctx, cam, world.weather.kind, time, season);
+  if (festival) drawDrift(ctx, cam, time, 34, FESTIVAL_COLORS[festival.season], 'petal');
   if (world.storm) drawStorm(ctx, cam, time, season, world.storm);
   if (rainbowAt(world.weatherSeed, Math.floor(time))) drawRainbow(ctx, cam, time);
-  drawNight(ctx, cam, world, buildings, time);
+  drawNight(ctx, cam, world, buildings, time, props);
   if (world.fireworks) drawFireworks(ctx, cam, world, time);
 
   // 3.5) 트랙 편집 중: 역 지붕·나무·건물에 가린 트랙을 반투명 선으로 덧그린다
@@ -471,7 +482,7 @@ function offPathRegion(cam: Camera, map: TileMap, visible: (s: Vec2) => boolean)
 }
 
 /** 밤: 화면을 남색으로 어둡게 하고, 건물과 입구 문에 따뜻한 불빛을 켠다 */
-function drawNight(ctx: CanvasRenderingContext2D, cam: Camera, world: World, buildings: readonly Building[], time: number): void {
+function drawNight(ctx: CanvasRenderingContext2D, cam: Camera, world: World, buildings: readonly Building[], time: number, props: readonly FestivalProp[] = []): void {
   const dark = darknessAt(time);
   if (dark <= 0) return;
   ctx.fillStyle = `rgba(12,18,52,${(dark * NIGHT_OVERALL).toFixed(3)})`;
@@ -503,6 +514,14 @@ function drawNight(ctx: CanvasRenderingContext2D, cam: Camera, world: World, bui
   }
   const gate = screenAt(cam, map.gate.x + 0.5, map.gate.y + 0.5, map.heightAt(map.gate.x, map.gate.y));
   light(gate.x, gate.y - 30 * z, 40 * z, `rgba(255,210,130,${a})`);
+  // 축제 장식: 등불·호박·트리 전구가 은은하게 빛난다
+  if (world.festival && props.length) {
+    const color = FESTIVAL_GLOW[world.festival.season].replace('A', (0.6 * glow).toFixed(3));
+    for (const p of props) {
+      const s = screenAt(cam, p.x, p.y, groundHeightAt(map, p.x, p.y));
+      light(s.x, s.y - 10 * z, 26 * z, color);
+    }
+  }
   ctx.restore();
 }
 
@@ -655,7 +674,7 @@ function addSceneryTiles(
 }
 
 /** 공원 입구: 길 양옆 기둥 두 개와 아치 간판 */
-function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: number, name: string): void {
+function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: number, name: string, festival?: Season, time = 0): void {
   const z = cam.zoom;
   const P = (x: number, y: number): Vec2 => screenAt(cam, x, y, lv);
   const a = P(g.x - 0.15, g.y + 0.5);
@@ -698,6 +717,28 @@ function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: numbe
   ctx.textAlign = 'center';
   ctx.fillText(label, 0, 0);
   ctx.restore();
+  // 축제 중: 두 기둥 꼭대기 사이에 깃발 줄
+  if (festival) drawBunting(ctx, { x: a.x, y: a.y - H - 8 * z }, { x: b.x, y: b.y - H - 8 * z }, festival, z, time);
+}
+
+interface FestivalProp { x: number; y: number; seed: number }
+
+/** 축제 장식을 세울 자리: 길 칸 5개 중 1개꼴(칸 해시로 고정), 칸의 네 모서리 중 하나. 입구 칸은 뺀다 */
+const FESTIVAL_CORNERS: readonly [number, number][] = [[0.16, 0.16], [0.84, 0.16], [0.16, 0.84], [0.84, 0.84]];
+let propCache: { map: TileMap; version: number; props: FestivalProp[] } | null = null;
+function festivalProps(map: TileMap): FestivalProp[] {
+  if (propCache && propCache.map === map && propCache.version === map.version) return propCache.props;
+  const out: FestivalProp[] = [];
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = 0; tx < map.width; tx++) {
+      if (!map.isPath(tx, ty) || (tx === map.gate.x && ty === map.gate.y)) continue;
+      if (tileHash(tx, ty, 61) >= 0.2) continue;
+      const [cx, cy] = FESTIVAL_CORNERS[Math.floor(tileHash(tx, ty, 62) * 4)];
+      out.push({ x: tx + cx, y: ty + cy, seed: tileHash(tx, ty, 63) });
+    }
+  }
+  propCache = { map, version: map.version, props: out };
+  return out;
 }
 
 interface Scenery { key: number; draw: () => void }

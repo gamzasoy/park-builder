@@ -38,7 +38,11 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   storm: '폭풍이다! 무서워',
   robbed: '내 지갑! 도둑이야!',
   caught: '도둑 잡았다! 👏',
+  blossom: '벚꽃이 너무 예뻐요 🌸',
+  splash: '물보라 시원하다! 💦',
+  candy: '사탕 받았다! 🎃',
+  xmas: '메리 크리스마스! 🎄',
 };
 
 /** 긍정적인 생각은 초록 말풍선 */
-export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery', 'show', 'fireworks', 'fountain', 'vipHappy', 'rainbow', 'reunited', 'kidFun', 'balloon', 'photo', 'parade', 'caught']);
+export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery', 'show', 'fireworks', 'fountain', 'vipHappy', 'rainbow', 'reunited', 'kidFun', 'balloon', 'photo', 'parade', 'caught', 'blossom', 'splash', 'candy', 'xmas']);

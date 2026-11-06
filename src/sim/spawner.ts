@@ -1,5 +1,6 @@
 import { hash32 } from '../core/hash';
 import { PARADE_SPAWN_FACTOR } from './parade';
+import { festivalSpawnFactor } from './festival';
 import { feeFactor } from './economy';
 import { createGuest, type Guest } from './guest';
 import { eventActive, FIREWORKS_SPAWN_FACTOR, HYPE_SPAWN_FACTOR } from './events';
@@ -30,7 +31,7 @@ export function updateSpawner(world: World): void {
   const base = Math.min(0.12, 0.02 + 0.015 * operational);
   const ratingFactor = 0.4 + (world.rating / 1000) * 1.2;
   const weatherFactor = (isRaining(world) ? RAIN_SPAWN_FACTOR : 1) * (world.storm ? STORM_SPAWN_FACTOR : 1);
-  const eventFactor = (eventActive(world, 'hype') ? HYPE_SPAWN_FACTOR : 1) * (world.fireworks ? FIREWORKS_SPAWN_FACTOR : 1) * (world.parade ? PARADE_SPAWN_FACTOR : 1);
+  const eventFactor = (eventActive(world, 'hype') ? HYPE_SPAWN_FACTOR : 1) * (world.fireworks ? FIREWORKS_SPAWN_FACTOR : 1) * (world.parade ? PARADE_SPAWN_FACTOR : 1) * festivalSpawnFactor(world);
   if (!world.rng.chance(base * ratingFactor * feeFactor(world.entranceFee) * weatherFactor * eventFactor)) return;
   // 가족인지는 다음 손님 id로 정한다(RNG 순서를 바꾸지 않는다)
   if (hash32(world.nextGuestId, 0, 89) % 100 < FAMILY_PCT) admitFamily(world);
