@@ -6,6 +6,7 @@ import type { Guest } from '../sim/guest';
 import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import { MISSION_IDS, type MissionState } from '../sim/missions';
+import { eventAtTick, type Fireworks } from '../sim/events';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
 import {
@@ -75,6 +76,8 @@ export interface SaveData {
   /** v2에서 추가. 없으면(이전 저장본) 안내를 이미 끝낸 것으로 본다 */
   tutorial?: TutorialState;
   missions?: MissionState;
+  fireworks?: Fireworks | null;
+  lastFireworksDay?: number;
   /** v4에서 추가. 없으면 직원 없음 */
   staff?: StaffSave[];
   nextStaffId?: number;
@@ -122,6 +125,8 @@ export function serializeWorld(world: World): SaveData {
     debtDays: world.debtDays,
     tutorial: { completed: [...world.tutorial.completed] },
     missions: { completed: [...world.missions.completed] },
+    fireworks: world.fireworks ? { ...world.fireworks } : null,
+    lastFireworksDay: world.lastFireworksDay,
     buildings: [...world.buildings.values()].map(({ track, ...b }): BuildingSave => (
       track ? { ...b, track: { pieces: [...track.pieces], spent: track.spent } } : b
     )),
@@ -278,6 +283,10 @@ export function deserializeWorld(data: SaveData): World {
       ? data.tutorial.completed.filter((id): id is string => STEP_IDS.includes(id))
       : [...STEP_IDS],
   };
+  const fw = data.fireworks;
+  w.fireworks = fw && isNum(fw.start) && isNum(fw.end) && isNum(fw.x) && isNum(fw.y) ? { ...fw } : null;
+  w.lastFireworksDay = isNum(data.lastFireworksDay) ? data.lastFireworksDay : -1;
+  w.event = eventAtTick(w.weatherSeed, w.tick);
   w.missions = {
     completed: Array.isArray(data.missions?.completed)
       ? data.missions.completed.filter((id): id is string => MISSION_IDS.includes(id))

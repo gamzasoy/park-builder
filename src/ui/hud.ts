@@ -2,6 +2,7 @@ import type { Speed } from '../core/loop';
 import type { ToolController } from '../input/tools';
 import { dateOf, setEntranceFee } from '../sim/economy';
 import { GOAL, goalProgress } from '../sim/goals';
+import { BUS_GUESTS } from '../sim/events';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
 
@@ -31,6 +32,15 @@ const WEATHER_VIEW = {
   rain: { icon: '🌧', label: '비', tip: '비: 손님 입장 −30% · 우산 없는 손님은 실외 놀이기구를 꺼리고 기분이 나빠집니다 · 우산 가게가 도움이 됩니다' },
 } as const;
 
+/** 랜덤 이벤트·불꽃놀이 표시(날씨 옆) */
+export const EVENT_VIEW = {
+  bus: { icon: '🚌', label: '관광버스', tip: `단체 관광버스: 손님 ${BUS_GUESTS}명이 한꺼번에 입장했습니다` },
+  heatwave: { icon: '🔥', label: '폭염', tip: '폭염: 손님이 평소보다 훨씬 빨리 목말라집니다 · 음료·아이스크림을 준비하세요' },
+  hype: { icon: '📸', label: '입소문', tip: '인기 블로거 방문: 잠시 동안 손님 입장이 2배' },
+  blackout: { icon: '⚡', label: '정전', tip: '정전: 잠시 동안 놀이기구가 새 손님을 태우지 못합니다 · 줄 선 손님은 기다리다 지칩니다' },
+  fireworks: { icon: '🎆', label: '불꽃놀이', tip: '불꽃놀이: 공원 모든 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
+} as const;
+
 const SPEEDS: Speed[] = [0, 1, 2, 4];
 
 function setText(el: HTMLElement, text: string): void {
@@ -45,6 +55,8 @@ export class Hud {
   private weather = document.getElementById('weather')!;
   private hint = document.getElementById('hint')!;
   private goal = document.getElementById('goal')!;
+  private hudEl = document.getElementById('hud')!;
+  private hudH = -1;
   private speedButtons = new Map<Speed, HTMLButtonElement>();
   private fee: Stepper;
   private shownSpeed: Speed | -1 = -1;
@@ -93,8 +105,17 @@ export class Hud {
       ` · 청결 ${Math.round(p.cleanliness)}`;
 
     const wv = WEATHER_VIEW[w.weather.kind];
-    setText(this.weather, `${wv.icon} ${wv.label}`);
-    if (this.weather.title !== wv.tip) this.weather.title = wv.tip;
+    const ev = w.event ? EVENT_VIEW[w.event.kind] : null;
+    const show = w.fireworks ? EVENT_VIEW.fireworks : null;
+    setText(this.weather, [`${wv.icon} ${wv.label}`, ev && `${ev.icon} ${ev.label}`, show && `${show.icon} ${show.label}`].filter(Boolean).join(' · '));
+    const tip = [wv.tip, ev?.tip, show?.tip].filter(Boolean).join('\n');
+    // 노란 쪽지와 카드가 HUD 아래에 오도록 실제 높이를 CSS에 알린다
+    const h = this.hudEl.offsetHeight;
+    if (h !== this.hudH) {
+      this.hudH = h;
+      document.documentElement.style.setProperty('--hud-h', `${h}px`);
+    }
+    if (this.weather.title !== tip) this.weather.title = tip;
 
     if (this.clock.speed !== this.shownSpeed) {
       this.shownSpeed = this.clock.speed;

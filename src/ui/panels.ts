@@ -130,6 +130,7 @@ const ROWS: [LedgerKey, string][] = [
   ['shops', '매점 수익'],
   ['missions', '미션 보상'],
   ['construction', '건설/철거'],
+  ['fireworks', '불꽃놀이'],
   ['upkeep', '유지비'],
   ['wages', '직원 급여'],
 ];

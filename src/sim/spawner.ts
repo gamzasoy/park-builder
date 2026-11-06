@@ -1,5 +1,6 @@
 import { feeFactor } from './economy';
 import { createGuest } from './guest';
+import { eventActive, FIREWORKS_SPAWN_FACTOR, HYPE_SPAWN_FACTOR } from './events';
 import { isRaining, RAIN_SPAWN_FACTOR } from './weather';
 import type { World } from './world';
 
@@ -19,8 +20,13 @@ export function updateSpawner(world: World): void {
   const base = Math.min(0.12, 0.02 + 0.015 * operational);
   const ratingFactor = 0.4 + (world.rating / 1000) * 1.2;
   const weatherFactor = isRaining(world) ? RAIN_SPAWN_FACTOR : 1;
-  if (!world.rng.chance(base * ratingFactor * feeFactor(world.entranceFee) * weatherFactor)) return;
+  const eventFactor = (eventActive(world, 'hype') ? HYPE_SPAWN_FACTOR : 1) * (world.fireworks ? FIREWORKS_SPAWN_FACTOR : 1);
+  if (!world.rng.chance(base * ratingFactor * feeFactor(world.entranceFee) * weatherFactor * eventFactor)) return;
+  admitGuest(world);
+}
 
+/** 손님 한 명을 입구에서 입장시킨다(입장료를 낼 수 없으면 돌아간다) */
+export function admitGuest(world: World): void {
   const guest = createGuest(world);
   if (guest.money < world.entranceFee) return; // 입장료를 낼 수 없으면 돌아감
   guest.money -= world.entranceFee;

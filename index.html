@@ -74,7 +74,7 @@
       .card .head div { display: flex; gap: 3px; }
 
       #hud {
-        position: fixed; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+        position: fixed; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; gap: 6px 9px; align-items: center;
         padding: 5px 12px; font-size: 14px; text-shadow: var(--text-shadow);
         background: linear-gradient(var(--bar), var(--bar-2));
         border-bottom: 2px solid #11160b; box-shadow: inset 0 -1px 0 #5d6a3e;
@@ -100,12 +100,13 @@
       .stepper button { padding: 0 6px; min-width: 22px; }
       .stepper b { min-width: 52px; text-align: center; }
       .stepper.over b { color: #ff8a80; }
-      #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn { padding: 2px 10px; }
+      #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn { padding: 2px 8px; }
       #help-btn { padding: 2px 9px; font-weight: 700; }
 
       /* 상태 메시지: RCT의 노란 안내 쪽지 */
       #hint, #goal {
-        position: fixed; top: 46px; padding: 3px 10px; font-size: 13px; pointer-events: none;
+        /* --hud-h: HUD가 좁은 화면에서 두 줄이 되면 hud.ts가 실제 높이로 갱신한다 */
+        position: fixed; top: calc(var(--hud-h, 36px) + 10px); padding: 3px 10px; font-size: 13px; pointer-events: none;
         color: #2a2210; background: #f6e9a8; border: 1px solid #8a7a3a; box-shadow: 2px 2px 0 rgba(0,0,0,0.35);
       }
       #hint { left: 16px; }
@@ -122,7 +123,7 @@
       #toolbar button img { width: 44px; height: 40px; image-rendering: auto; filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.35)); }
       #toolbar button small { font-size: 10px; opacity: 0.85; color: var(--gold); }
 
-      .card { position: fixed; top: 84px; width: 270px; padding: 0 10px 10px; font-size: 13px; }
+      .card { position: fixed; top: calc(var(--hud-h, 36px) + 48px); width: 270px; padding: 0 10px 10px; font-size: 13px; }
       .card .head { margin: 0 -10px 8px; padding: 3px 4px 3px 9px; font-size: 14px; }
       #panel { right: 12px; }
       #finance { left: 292px; width: 330px; }

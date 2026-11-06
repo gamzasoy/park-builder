@@ -4,12 +4,13 @@ import type { BuildingDef } from '../data/types';
 import type { Tool, ToolController } from '../input/tools';
 import { PATH_COST } from '../sim/building';
 import { WAGE } from '../sim/economy';
+import { FIREWORKS_COST } from '../sim/events';
 import { STAFF_KINDS, STAFF_NAME, type StaffKind } from '../sim/staff';
 
 /** 툴바가 한 화면 폭에 들어가도록 버튼에는 짧은 이름을 쓴다(전체 이름은 툴팁) */
 const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원' };
 import { won } from './hud';
-import { buildingIcon, demolishIcon, pathIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
+import { buildingIcon, demolishIcon, fireworksIcon, pathIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
 import { TERRAIN_COST } from '../sim/terrain';
 
 export class Toolbar {
@@ -17,7 +18,12 @@ export class Toolbar {
   private activeKey = '';
   private hintKey: string | null = null;
 
-  constructor(private root: HTMLElement, private tools: ToolController, onHire: (kind: StaffKind) => void) {
+  constructor(
+    private root: HTMLElement,
+    private tools: ToolController,
+    onHire: (kind: StaffKind) => void,
+    onFireworks: () => void,
+  ) {
     this.group('기본', [
       this.button('path', '길', PATH_COST, { kind: 'path' }, pathIcon()),
       this.button('demolish', '철거', undefined, { kind: 'demolish' }, demolishIcon()),
@@ -25,6 +31,7 @@ export class Toolbar {
     this.group('놀이기구', RIDES.map((d) => this.defButton(d)));
     // 직원은 놀이기구 줄의 남는 자리에 둬서 넓은 화면에서 툴바가 두 줄을 넘지 않게 한다
     this.group('직원 고용', STAFF_KINDS.map((k) => this.hireButton(k, STAFF_LABEL[k], onHire)));
+    this.group('공연', [this.actionButton('fireworks', '불꽃놀이', `불꽃놀이 (${won(FIREWORKS_COST)}, 하루 한 번)`, won(FIREWORKS_COST), fireworksIcon(), onFireworks)]);
     this.group('매점', SHOPS.map((d) => this.defButton(d)));
     this.group('장식', SCENERY.map((d) => this.sceneryButton(d)));
     this.group('지형', [
@@ -56,6 +63,20 @@ export class Toolbar {
 
   private sceneryButton(d: SceneryDef): HTMLButtonElement {
     return this.button(`scenery:${d.id}`, d.name, d.cost, { kind: 'scenery', def: d }, sceneryIcon(d));
+  }
+
+  /** 도구가 아니라 즉시 실행되는 버튼 */
+  private actionButton(key: string, label: string, title: string, small: string, icon: string, run: () => void): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.dataset.tool = key;
+    b.title = title;
+    b.innerHTML = `<img src="${icon}" alt="" width="44" height="40"><span>${label}</span><small>${small}</small>`;
+    b.addEventListener('click', () => {
+      b.blur();
+      run();
+    });
+    this.buttons.set(key, b);
+    return b;
   }
 
   /** 도구가 아니라 즉시 실행되는 버튼: 눌러서 직원을 고용한다 */

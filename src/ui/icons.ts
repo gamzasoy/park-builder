@@ -139,6 +139,33 @@ export function staffIcon(kind: StaffKind): string {
   });
 }
 
+export function fireworksIcon(): string {
+  return render('fireworks', (ctx) => {
+    ctx.fillStyle = '#1d2547';
+    ctx.beginPath();
+    ctx.roundRect(4, 3, W - 8, H - 6, 6);
+    ctx.fill();
+    const bursts: [number, number, number, string][] = [[16, 15, 9, '#f2c230'], [30, 12, 7, '#ef8fb4'], [27, 26, 6, '#4ac9c0']];
+    ctx.lineCap = 'round';
+    for (const [x, y, r, c] of bursts) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        ctx.moveTo(x + Math.cos(a) * r * 0.35, y + Math.sin(a) * r * 0.35);
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,230,160,0.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(16, H - 5); ctx.lineTo(16, 25);
+    ctx.stroke();
+  });
+}
+
 export function pathIcon(): string {
   return render('path', (ctx) => {
     const { q } = fit(2, 2, 0);

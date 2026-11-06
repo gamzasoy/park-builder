@@ -4,6 +4,7 @@ import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
 import { fairPrice } from './economy';
 import type { Tile } from './map';
+import { HEAT_THIRST } from './events';
 import { isRaining, RAIN_DRAIN, RAIN_DRAIN_EVERY, RAIN_RIDE_PENALTY } from './weather';
 import type { Building, World } from './world';
 
@@ -30,7 +31,7 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
@@ -223,6 +224,7 @@ export function updateGuest(world: World, g: Guest): void {
   g.py = g.y;
   g.age++;
   tickNeeds(g);
+  if (world.event?.kind === 'heatwave') g.needs.thirst = Math.min(100, g.needs.thirst + HEAT_THIRST);
   tickThought(world, g);
   tickScenery(world, g);
   tickTrash(world, g);

@@ -8,6 +8,7 @@ import { PathNetwork } from './pathfinding';
 import { DEFAULT_WEATHER_SEED, type Weather } from './weather';
 import { newTutorial, type TutorialState } from './tutorial';
 import { newMissions, type MissionState } from './missions';
+import type { Fireworks, ParkEvent } from './events';
 
 export const START_MONEY = 10000;
 
@@ -50,7 +51,7 @@ export interface Building {
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */
 export type GameStatus = 'playing' | 'won' | 'lost' | 'sandbox';
 
-export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'missions' | 'construction' | 'upkeep' | 'wages';
+export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'missions' | 'fireworks' | 'construction' | 'upkeep' | 'wages';
 export type Ledger = Record<LedgerKey, number>;
 
 export interface MonthReport {
@@ -76,7 +77,7 @@ export interface RatingParts {
   cleanliness: number;
 }
 
-export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, missions: 0, construction: 0, upkeep: 0, wages: 0 });
+export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, missions: 0, fireworks: 0, construction: 0, upkeep: 0, wages: 0 });
 
 export class World {
   readonly map = new TileMap();
@@ -98,6 +99,11 @@ export class World {
   /** 날씨 시드(새 게임 시 정해지며 world.rng와 무관) / 오늘의 날씨 */
   weatherSeed = DEFAULT_WEATHER_SEED;
   weather: Weather = { kind: 'sunny', untilTick: DAY_TICKS };
+  /** 진행 중인 랜덤 이벤트(매 틱 날씨 시드와 틱으로 다시 계산하므로 저장하지 않는다) */
+  event: ParkEvent | null = null;
+  /** 진행 중인 불꽃놀이 / 마지막으로 쏜 날(하루 한 번) */
+  fireworks: Fireworks | null = null;
+  lastFireworksDay = -1;
   stats = { entered: 0, left: 0, peakGuests: 0 };
 
   status: GameStatus = 'playing';
@@ -157,6 +163,9 @@ export class World {
     this.rng.state = src.rng.state;
     this.weatherSeed = src.weatherSeed ?? DEFAULT_WEATHER_SEED;
     this.weather = src.weather ?? { kind: 'sunny', untilTick: DAY_TICKS };
+    this.event = src.event;
+    this.fireworks = src.fireworks;
+    this.lastFireworksDay = src.lastFireworksDay;
     this.stats = src.stats;
     this.entranceFee = src.entranceFee;
     this.ledger = src.ledger;
