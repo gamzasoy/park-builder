@@ -272,7 +272,8 @@ export class GuestPanel {
     }
     if (this.root.hidden) this.root.hidden = false;
 
-    setText(this.title, `손님 #${g.id}`);
+    const vip = g.vip ? (g.vip.done ? ` 👑 VIP · 소원 성취!` : ` 👑 VIP · ${getDef(g.vip.wish).name} 원함`) : '';
+    setText(this.title, `손님 #${g.id}${vip}`);
     const target = g.target !== null ? this.world.buildings.get(g.target) : undefined;
     const targetName = target ? getDef(target.defId).name : '';
     setText(this.state, STATE_TEXT[g.state] + (targetName && g.state !== 'idle' && g.state !== 'leaving' ? ` · ${targetName}` : ''));

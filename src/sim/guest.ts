@@ -1,5 +1,5 @@
 import { hash32 } from '../core/hash';
-import { BIN } from '../data/scenery';
+import { BIN, FOUNTAIN } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
 import { fairPrice } from './economy';
@@ -31,13 +31,20 @@ export const PATIENCE = 400;
 /** 머리 위 말풍선에 표시되는 생각 */
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
-  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks';
+  | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks' | 'fountain' | 'vipHappy' | 'vipSad';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
 /** 걷는 길 옆(8칸)에 나무·꽃이 있으면 이 주기마다 행복도가 오른다 */
 export const SCENERY_EVERY = 30;
 export const SCENERY_GAIN = 1;
+/** 분수 반경(칸)과 추가 행복 */
+export const FOUNTAIN_RADIUS = 3;
+export const FOUNTAIN_GAIN = 2;
+/** VIP: 원하는 놀이기구에 더하는 점수 / 머무는 최대 틱 / 이뤄 주면 받는 상금 */
+export const VIP_WISH_BONUS = 150;
+export const VIP_TICKS = 1500;
+export const VIP_REWARD = 1500;
 
 /** 먹거리를 산 손님이 쓰레기를 버리기까지 걸리는 틱(최소~최대, 손님 id·틱으로 결정) */
 export const TRASH_MIN = 30;
@@ -97,6 +104,8 @@ export interface Guest {
   trash: number;
   /** 우산을 샀는가 */
   umbrella: boolean;
+  /** VIP 손님: 타고 싶은 놀이기구(def id)와 기한. 이뤄 주면 done */
+  vip?: { wish: string; until: number; done: boolean };
 }
 
 export function createGuest(world: World): Guest {
@@ -171,9 +180,29 @@ export function nearScenery(world: World, t: Tile): boolean {
 function tickScenery(world: World, g: Guest): void {
   if (g.state !== 'walking' && g.state !== 'leaving') return;
   const phase = (world.tick + g.id) % SCENERY_EVERY;
-  if (phase !== SCENERY_EVERY >> 1 || !nearScenery(world, g.tile)) return;
+  if (phase !== SCENERY_EVERY >> 1) return;
+  const fountain = nearFountain(world, g.tile);
+  if (!fountain && !nearScenery(world, g.tile)) return;
   g.needs.happiness = clamp(g.needs.happiness + SCENERY_GAIN);
-  if (g.thought === null && (world.tick + g.id) % (SCENERY_EVERY * 8) === SCENERY_EVERY >> 1) think(g, 'scenery');
+  if (fountain) g.needs.happiness = clamp(g.needs.happiness + FOUNTAIN_GAIN);
+  if (g.thought === null && (world.tick + g.id) % (SCENERY_EVERY * 8) === SCENERY_EVERY >> 1) think(g, fountain ? 'fountain' : 'scenery');
+}
+
+/** VIP가 기한 안에 소원을 이루지 못하면 실망하고 평범한 손님이 된다 */
+function tickVip(world: World, g: Guest): void {
+  if (!g.vip || g.vip.done || world.tick < g.vip.until) return;
+  g.vip = undefined;
+  g.needs.happiness = clamp(g.needs.happiness - 15);
+  think(g, 'vipSad');
+}
+
+/** 반경 FOUNTAIN_RADIUS 칸 안에 분수가 있는지 */
+export function nearFountain(world: World, t: Tile): boolean {
+  const m = world.map;
+  for (let dy = -FOUNTAIN_RADIUS; dy <= FOUNTAIN_RADIUS; dy++) {
+    for (let dx = -FOUNTAIN_RADIUS; dx <= FOUNTAIN_RADIUS; dx++) if (m.sceneryAt(t.x + dx, t.y + dy) === FOUNTAIN) return true;
+  }
+  return false;
 }
 
 /** 쓰레기를 버릴 시간이 되면 근처 쓰레기통에, 없으면 지금 서 있는 길에 버린다 */
@@ -230,6 +259,7 @@ export function updateGuest(world: World, g: Guest): void {
   tickTrash(world, g);
   tickLitter(world, g);
   tickRain(world, g);
+  tickVip(world, g);
 
   switch (g.state) {
     case 'idle': return idle(world, g);
@@ -337,6 +367,7 @@ export function pickTarget(world: World, g: Guest): { b: Building; path: readonl
       score -= Math.max(0, (def.intensity ?? 0) - thrillTolerance(g)) * 1.2;
       if (g.needs.energy < 50) score -= (def.nausea ?? 0) * 0.3;
       if (def.outdoor && isRaining(world) && !g.umbrella) score -= RAIN_RIDE_PENALTY;
+      if (g.vip && !g.vip.done && def.id === g.vip.wish) score += VIP_WISH_BONUS;
     }
     // 거리·줄·요금 부담, 그리고 적정가를 넘는 만큼 추가 감점
     score -= path.length * 0.4 + b.queue.length * 3 + b.price * 0.3 + Math.max(0, b.price - fairPrice(def));

@@ -3,6 +3,7 @@ import type { ToolController } from '../input/tools';
 import { dateOf, setEntranceFee } from '../sim/economy';
 import { GOAL, goalProgress } from '../sim/goals';
 import { BUS_GUESTS } from '../sim/events';
+import { clockOf, isNight } from '../sim/daynight';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
 
@@ -38,6 +39,7 @@ export const EVENT_VIEW = {
   heatwave: { icon: '🔥', label: '폭염', tip: '폭염: 손님이 평소보다 훨씬 빨리 목말라집니다 · 음료·아이스크림을 준비하세요' },
   hype: { icon: '📸', label: '입소문', tip: '인기 블로거 방문: 잠시 동안 손님 입장이 2배' },
   blackout: { icon: '⚡', label: '정전', tip: '정전: 잠시 동안 놀이기구가 새 손님을 태우지 못합니다 · 줄 선 손님은 기다리다 지칩니다' },
+  vip: { icon: '👑', label: 'VIP 방문', tip: 'VIP 손님: 왕관을 쓴 손님이 타고 싶은 놀이기구를 태워 주면 상금을 받습니다' },
   fireworks: { icon: '🎆', label: '불꽃놀이', tip: '불꽃놀이: 공원 모든 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
 } as const;
 
@@ -92,7 +94,9 @@ export class Hud {
     this.money.classList.toggle('neg', w.money < 0);
 
     const d = dateOf(w.tick);
-    setText(this.date, `${d.year}년차 ${d.month}월 ${d.day}일`);
+    const c = clockOf(w.tick);
+    const moon = isNight(w.tick) ? ' 🌙' : '';
+    setText(this.date, `${d.year}년차 ${d.month}월 ${d.day}일 ${c.hour}:${String(c.minute).padStart(2, '0')}${moon}`);
     setText(this.guests, `손님 ${w.guests.length}명`);
 
     const r = Math.round(w.rating);

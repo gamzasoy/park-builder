@@ -1,5 +1,5 @@
 import { feeFactor } from './economy';
-import { createGuest } from './guest';
+import { createGuest, type Guest } from './guest';
 import { eventActive, FIREWORKS_SPAWN_FACTOR, HYPE_SPAWN_FACTOR } from './events';
 import { isRaining, RAIN_SPAWN_FACTOR } from './weather';
 import type { World } from './world';
@@ -25,12 +25,14 @@ export function updateSpawner(world: World): void {
   admitGuest(world);
 }
 
-/** 손님 한 명을 입구에서 입장시킨다(입장료를 낼 수 없으면 돌아간다) */
-export function admitGuest(world: World): void {
+/** 손님 한 명을 입구에서 입장시킨다(입장료를 낼 수 없으면 돌아간다). vip면 돈이 모자라도 들어온다 */
+export function admitGuest(world: World, vip = false): Guest | null {
   const guest = createGuest(world);
-  if (guest.money < world.entranceFee) return; // 입장료를 낼 수 없으면 돌아감
+  if (vip && guest.money < world.entranceFee) guest.money = world.entranceFee;
+  if (guest.money < world.entranceFee) return null; // 입장료를 낼 수 없으면 돌아감
   guest.money -= world.entranceFee;
   world.transact('entrance', world.entranceFee);
   world.guests.push(guest);
   world.stats.entered++;
+  return guest;
 }

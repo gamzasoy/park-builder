@@ -9,7 +9,8 @@ import { pickTile } from './input/pick';
 import type { Tile } from './sim/map';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
-import { createGuest } from './sim/guest';
+import { createGuest, VIP_REWARD, VIP_TICKS } from './sim/guest';
+import { getDef } from './data';
 import { stepWorld } from './sim/sim';
 import { hireStaff, STAFF_NAME } from './sim/staff';
 import { World } from './sim/world';
@@ -74,6 +75,7 @@ function newGame(): void {
   tutorialPanel.reset();
   seenReports = world.reports.length;
   seenMissions = world.missions.completed.length;
+  seenVips = world.stats.vips;
   loop.speed = 1;
   modal.hide();
   saveNow();
@@ -93,6 +95,12 @@ function confirmNewGame(): void {
 
 // ---- 월간 보고서 알림음 ----
 let seenReports = 0;
+/** 목적격 조사: 받침이 있으면 '을', 없으면 '를' */
+function withObj(name: string): string {
+  const c = name.charCodeAt(name.length - 1) - 0xac00;
+  return name + (c >= 0 && c < 11172 && c % 28 ? '을' : '를');
+}
+
 // ---- 랜덤 이벤트 시작 알림 ----
 let seenEvent = world.event?.start ?? -1;
 const EVENT_NOTICE = {
@@ -105,12 +113,28 @@ function watchEvent(): void {
   const e = world.event;
   if (!e || e.start === seenEvent) return;
   seenEvent = e.start;
-  tools.notify(EVENT_NOTICE[e.kind]);
+  if (e.kind === 'vip') {
+    // VIP가 오지 못했으면(운영 중인 기구가 없거나 손님이 가득) 알리지 않는다
+    const v = world.guests.find((g) => g.vip && !g.vip.done && g.vip.until === e.start + VIP_TICKS);
+    if (!v?.vip) return;
+    tools.notify(`👑 VIP 손님 방문! ${withObj(getDef(v.vip.wish).name)} 타고 싶어 해요. 태워 주면 상금 ${won(VIP_REWARD)}`);
+  } else {
+    tools.notify(EVENT_NOTICE[e.kind]);
+  }
   sound.play(e.kind === 'blackout' ? 'error' : 'chime');
 }
 
 // ---- 미션 달성 알림 ----
 let seenMissions = world.missions.completed.length;
+let seenVips = world.stats.vips;
+function watchVips(): void {
+  if (world.stats.vips > seenVips) {
+    tools.notify(`👑 VIP 손님이 아주 만족했어요! 상금 +${won(VIP_REWARD)}`);
+    sound.play('win');
+  }
+  seenVips = world.stats.vips;
+}
+
 function watchMissions(): void {
   const done = world.missions.completed;
   if (done.length > seenMissions) {
@@ -197,6 +221,7 @@ const loop = new GameLoop(
     watchReports();
     watchMissions();
     watchEvent();
+    watchVips();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
@@ -219,10 +244,7 @@ const hud = new Hud(world, tools, loop, {
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
   const s = hireStaff(world, kind);
   if (s) {
-    const name = STAFF_NAME[kind];
-    // 받침이 있으면 '을', 없으면 '를'
-    const josa = (name.charCodeAt(name.length - 1) - 0xac00) % 28 ? '을' : '를';
-    tools.notify(`${name}${josa} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
+    tools.notify(`${withObj(STAFF_NAME[kind])} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
     sound.play('build');
   } else {
     tools.notify('더 이상 고용할 수 없습니다');

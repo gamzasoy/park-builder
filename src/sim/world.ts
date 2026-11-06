@@ -104,7 +104,7 @@ export class World {
   /** 진행 중인 불꽃놀이 / 마지막으로 쏜 날(하루 한 번) */
   fireworks: Fireworks | null = null;
   lastFireworksDay = -1;
-  stats = { entered: 0, left: 0, peakGuests: 0 };
+  stats = { entered: 0, left: 0, peakGuests: 0, vips: 0 };
 
   status: GameStatus = 'playing';
   /** 종료 사유(결과 화면에 표시) */

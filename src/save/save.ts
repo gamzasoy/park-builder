@@ -66,7 +66,7 @@ export interface SaveData {
   ledger: Ledger;
   reports: MonthReport[];
   monthStartEntered: number;
-  stats: { entered: number; left: number; peakGuests: number };
+  stats: { entered: number; left: number; peakGuests: number; vips?: number };
   status: GameStatus;
   endReason: string;
   goalHold: number;
@@ -228,6 +228,7 @@ export function deserializeWorld(data: SaveData): World {
     thoughtTimer: g.thoughtTimer ?? 0,
     trash: g.trash ?? 0,
     umbrella: g.umbrella === true,
+    vip: g.vip && typeof g.vip.wish === 'string' && isNum(g.vip.until) ? { wish: g.vip.wish, until: g.vip.until, done: g.vip.done === true } : undefined,
   }));
 
   w.staff = (data.staff ?? []).map((s) => {
@@ -272,7 +273,7 @@ export function deserializeWorld(data: SaveData): World {
   w.ledger = { ...emptyLedger(), ...data.ledger };
   w.reports = data.reports.map((r) => ({ ...r, ledger: { ...emptyLedger(), ...r.ledger } }));
   w.monthStartEntered = data.monthStartEntered;
-  w.stats = { ...data.stats };
+  w.stats = { vips: 0, ...data.stats };
   w.status = data.status;
   w.endReason = String(data.endReason ?? '');
   w.goalHold = data.goalHold;
