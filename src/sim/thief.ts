@@ -1,5 +1,6 @@
 import { hash32 } from '../core/hash';
 import { buildingDef } from './coaster';
+import { DAY_TICKS } from './economy';
 import { advance, GUEST_SPEED, remember, setPath, startLeaving, think, type Guest } from './guest';
 import type { Staff } from './staff';
 import type { World } from './world';
@@ -13,7 +14,9 @@ import type { World } from './world';
 /** 손님이 이만큼 이상일 때부터 / 혼자 오는 손님 중 도둑 비율(%) / 동시에 공원에 있는 도둑 수 상한 */
 export const THIEF_MIN_GUESTS = 25;
 export const THIEF_PCT = 4;
-export const MAX_THIEVES = 2;
+export const MAX_THIEVES = 1;
+/** 도둑이 한 번 나타나면 이만큼(틱, 게임 속 2일) 지나야 다음 도둑이 들어온다(너무 잦지 않게) */
+export const THIEF_GAP = 2 * DAY_TICKS;
 /** 훔칠 기회를 엿보는 주기(틱) / 성공 확률(%) / 손님 지갑에서 훔치는 돈(최소, 더해지는 폭) */
 export const THIEF_TRY_EVERY = 15;
 export const THIEF_TRY_PCT = 40;
@@ -45,7 +48,9 @@ export function thiefCount(world: World): number {
 /** 막 입장한 혼자 온 손님을 (손님 id로 정해지는 확률로) 도둑으로 만든다 */
 export function maybeThief(world: World, g: Guest): boolean {
   if (world.guests.length < THIEF_MIN_GUESTS || thiefCount(world) >= MAX_THIEVES) return false;
+  if (world.tick - (world.stats.lastThiefAt ?? -THIEF_GAP) < THIEF_GAP) return false;
   if (hash32(g.id, 0, 101) % 100 >= THIEF_PCT) return false;
+  world.stats.lastThiefAt = world.tick;
   g.thief = true;
   g.loot = 0;
   g.thefts = 0;

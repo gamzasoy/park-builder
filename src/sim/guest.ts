@@ -2,7 +2,7 @@ import { hash32 } from '../core/hash';
 import { BIN, FOUNTAIN } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
 import { buildingDef } from './coaster';
-import { fairPrice } from './economy';
+import { DAY_TICKS, fairPrice } from './economy';
 import type { Tile } from './map';
 import { HEAT_THIRST } from './events';
 import { addReview, GRIPES } from './reviews';
@@ -75,7 +75,9 @@ export const KID_FUN_FACTOR = 1.3;
 /** 미아: 부모를 따라 나설 때 길을 잃을 확률(%) / 이만큼 먼 길일 때만 / 찾지 못하면 이 틱 뒤 가족이 떠난다 */
 export const LOST_CHANCE = 2;
 /** 동시에 길을 잃은 아이는 이 수까지만(알림이 쏟아지지 않게) */
-export const MAX_LOST = 2;
+export const MAX_LOST = 1;
+/** 미아가 한 번 생기면 이만큼(틱, 게임 속 2일) 지나야 다음 미아가 생긴다(너무 잦지 않게) */
+export const LOST_GAP = 2 * DAY_TICKS;
 export const LOST_MIN_PATH = 6;
 export const LOST_TICKS = 600;
 /** 아이를 잃은 부모의 행복이 깎이는 주기(틱)와 양 */
@@ -730,7 +732,9 @@ function kidIdle(world: World, k: Guest): void {
   const path = world.network.findPath(k.tile, b.entrance);
   if (!path) return;
   // 미아: 먼 길을 따라 나설 때 일정 확률로(아이 id·trip으로 결정) 부모를 놓친다
-  if (path.length >= LOST_MIN_PATH && hash32(k.id, p.trip, 77) % 100 < LOST_CHANCE && lostCount(world) < MAX_LOST) {
+  if (path.length >= LOST_MIN_PATH && hash32(k.id, p.trip, 77) % 100 < LOST_CHANCE && lostCount(world) < MAX_LOST
+    && world.tick - (world.stats.lastLostAt ?? -LOST_GAP) >= LOST_GAP) {
+    world.stats.lastLostAt = world.tick;
     k.lostUntil = world.tick + LOST_TICKS;
     world.stats.lost = (world.stats.lost ?? 0) + 1;
     think(k, 'lost');

@@ -9,7 +9,7 @@ import { stepGuests, stepWorld } from '../src/sim/sim';
 import { hireStaff, STAFF_KINDS, updateStaff } from '../src/sim/staff';
 import { applyStormDamage, updateStorm } from '../src/sim/storm';
 import {
-  catchThief, isSpotted, maybeThief, SHOPLIFT_LOSS, THIEF_BOUNTY, THIEF_MIN_GUESTS, updateThief,
+  catchThief, isSpotted, MAX_THIEVES, maybeThief, SHOPLIFT_LOSS, THIEF_GAP, THIEF_BOUNTY, THIEF_MIN_GUESTS, updateThief,
 } from '../src/sim/thief';
 import { stormAt, stormOfDay, weatherKindOf } from '../src/sim/weather';
 import { World } from '../src/sim/world';
@@ -161,7 +161,28 @@ describe('thieves and security guards', () => {
       const g = createGuest(busy);
       if (maybeThief(busy, g)) busy.guests.push(g);
     }
-    expect(busy.guests.filter((g) => g.thief).length).toBe(2);
+    expect(busy.guests.filter((g) => g.thief).length).toBe(MAX_THIEVES);
+  });
+
+  it('wait THIEF_GAP after one shows up before the next one comes in', () => {
+    const { w: busy } = busyPark();
+    const spawnUntilThief = (): Guest | null => {
+      for (let i = 0; i < 400; i++) {
+        const g = createGuest(busy);
+        if (maybeThief(busy, g)) { busy.guests.push(g); return g; }
+      }
+      return null;
+    };
+    const first = spawnUntilThief()!;
+    expect(first).not.toBeNull();
+    first.state = 'gone'; // 떠나도 바로 다음 도둑이 오지는 않는다
+    busy.tick += THIEF_GAP - 1;
+    expect(spawnUntilThief()).toBeNull();
+    busy.tick += 1;
+    expect(spawnUntilThief()).not.toBeNull();
+    // 간격은 저장해도 이어진다
+    const back = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(busy))));
+    expect(back.stats.lastThiefAt).toBe(busy.stats.lastThiefAt);
   });
 
   it('pick pockets nearby guests and get spotted', () => {
