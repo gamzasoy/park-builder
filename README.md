@@ -19,7 +19,7 @@ Node.js 18 이상이 필요합니다.
 
 휴대폰 **가로 화면**을 지원하는 PWA(홈 화면에 추가해 전체 화면 앱처럼 실행, 오프라인 동작)입니다. 저장은 브라우저 `localStorage`를 그대로 씁니다.
 
-- 접속 주소: `https://gamzasoy.github.io/test-game/` (`main`에 푸시하면 GitHub Actions가 자동 배포)
+- 접속 주소: `https://test-game.vercel.app/` (Vercel에 연결된 `main`에 푸시하면 자동 배포)
 - 카카오톡 등에 링크를 보내면 `public/og-image.jpg`(1200×630)가 미리보기 이미지로 나옵니다. 주소가 바뀌면 `index.html`의 `og:url`·`og:image`도 함께 바꿔야 합니다.
 - **안드로이드(Chrome)**: 주소 접속 → 메뉴(⋮) → **홈 화면에 추가** (또는 **앱 설치**)
 - **iOS(Safari)**: 주소 접속 → 공유 버튼 → **홈 화면에 추가**
@@ -34,7 +34,7 @@ Node.js 18 이상이 필요합니다.
 | 두 손가락 | 핀치로 확대·축소, 끌면 이동. 건설 중이었다면 취소 |
 | 오른쪽 아래 `회전` / `취소` 버튼 | `R` / `Esc` 키 대응 |
 
-저장소가 비공개이면 GitHub Pages에 유료 플랜이 필요합니다. 이때는 저장소를 공개로 바꾸거나 Netlify·Cloudflare Pages 같은 무료 호스팅에 `dist/`를 올리세요. 배포 설정: 저장소 Settings → Pages → Source를 **GitHub Actions**로 바꿉니다.
+배포는 Vercel이 맡습니다. vercel.com에서 **Add New → Project**로 이 저장소를 가져오면 `vercel.json` 설정(빌드 `npm run build`, 출력 `dist`)대로 빌드됩니다. `main` 푸시는 프로덕션, 다른 브랜치·PR은 미리보기 주소로 배포됩니다. GitHub Actions는 테스트·빌드 확인(CI)만 합니다.
 
 ## 목표
 
