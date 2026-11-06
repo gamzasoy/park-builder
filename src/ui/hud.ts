@@ -1,7 +1,8 @@
 import type { Speed } from '../core/loop';
 import type { ToolController } from '../input/tools';
 import { dateOf, setEntranceFee } from '../sim/economy';
-import { GOAL, goalProgress } from '../sim/goals';
+import { goalOf, goalProgress } from '../sim/goals';
+import { scenarioOf } from '../sim/scenarios';
 import { BUS_GUESTS } from '../sim/events';
 import { clockOf, isNight } from '../sim/daynight';
 import { rainbowAt } from '../sim/weather';
@@ -183,11 +184,13 @@ export class Hud {
     if (w.status === 'sandbox') return setText(this.goal, '자유 모드');
 
     const p = goalProgress(w);
+    const g = goalOf(w);
     const mark = (ok: boolean): string => (ok ? '✓' : '');
     setText(
       this.goal,
-      `목표 ${GOAL.months}개월 내 · 손님 ${p.guests}/${GOAL.guests}${mark(p.guestsMet)}` +
-        ` · 평점 ${p.rating}/${GOAL.rating}${mark(p.ratingMet)}` +
+      `${scenarioOf(w).icon} 목표 ${g.months}개월 내 · 손님 ${p.guests}/${g.guests}${mark(p.guestsMet)}` +
+        ` · 평점 ${p.rating}/${g.rating}${mark(p.ratingMet)}` +
+        (g.money !== undefined ? ` · 잔고 ${won(g.money)}${mark(p.moneyMet)}` : '') +
         ` · 유지 ${Math.round(p.hold * 100)}% · 남은 ${p.remainingDays}일`,
     );
   }

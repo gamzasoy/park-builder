@@ -1,5 +1,4 @@
 import { GameLoop } from './core/loop';
-import { Rng } from './core/rng';
 import { Input } from './input/input';
 import { ToolController } from './input/tools';
 import { Camera } from './render/camera';
@@ -15,6 +14,8 @@ import { stepWorld } from './sim/sim';
 import { hireStaff, STAFF_NAME } from './sim/staff';
 import { World } from './sim/world';
 import { Hud, won } from './ui/hud';
+import { createScenarioWorld, DEFAULT_SCENARIO, scenarioOf, SCENARIOS, type Scenario } from './sim/scenarios';
+import { loadRecords, recordStars, starText } from './save/records';
 import { Modal } from './ui/modal';
 import { BuildingPanel, FinancePanel, GuestPanel, StaffPanel } from './ui/panels';
 import { Sound } from './ui/sound';
@@ -76,10 +77,8 @@ if (loaded.ok) {
   toasts.show('⚠️', '저장 데이터를 읽을 수 없어 새로 시작합니다', '이전 데이터는 백업해 두었어요', 'bad');
 }
 
-function newGame(): void {
-  const fresh = new World();
-  fresh.rng = new Rng((Math.random() * 2 ** 32) >>> 0);
-  fresh.weatherSeed = fresh.rng.state; // rng를 소비하지 않고 시드만 따온다
+function newGame(id = DEFAULT_SCENARIO): void {
+  const fresh = createScenarioWorld(id, (Math.random() * 2 ** 32) >>> 0);
   world.adopt(fresh);
   tools.reset();
   financePanel.sync();
@@ -92,17 +91,30 @@ function newGame(): void {
   loop.speed = 1;
   modal.hide();
   saveNow();
-  toasts.show('🎡', '새 공원을 열었어요!', '입구에서 길을 깔아 시작해 보세요', 'info');
+  const s = scenarioOf(world);
+  toasts.show(s.icon, `${s.name} 개장!`, `목표: ${goalText(s)}`, 'info');
 }
 
+/** 시나리오 목표 한 줄 요약 */
+function goalText(s: Scenario): string {
+  return `${s.months}개월 안에 손님 ${s.guests}명 · 평점 ${s.rating}${s.goalMoney ? ` · 잔고 ${won(s.goalMoney)}` : ''}`;
+}
+
+/** 시나리오 고르기(새 게임). 지금 하던 공원은 사라진다 */
 function confirmNewGame(): void {
-  modal.show('confirm', {
-    title: '새 게임',
-    message: '지금까지의 공원이 사라집니다. 새로 시작할까요?',
-    buttons: [
-      { label: '취소', onClick: () => modal.hide() },
-      { label: '새 게임', primary: true, onClick: newGame },
-    ],
+  const rec = loadRecords();
+  modal.show('scenario', {
+    title: '새 게임 — 시나리오 고르기',
+    message: '지금까지의 공원은 사라집니다. 빨리 깰수록 별을 더 받아요(기한이 절반 넘게 남으면 ★★★).',
+    choices: SCENARIOS.map((s) => ({
+      icon: s.icon,
+      title: s.name,
+      badge: rec[s.id] ? starText(rec[s.id]) : '도전 전',
+      desc: s.desc,
+      detail: `${goalText(s)} · 시작 자금 ${won(s.money)}`,
+      onClick: () => newGame(s.id),
+    })),
+    buttons: [{ label: '취소', onClick: () => modal.hide() }],
   });
 }
 
@@ -223,10 +235,15 @@ function watchStatus(): void {
   sound.play(world.status === 'won' ? 'win' : 'lose');
   const days = Math.floor(world.tick / DAY_TICKS);
   const months = Math.floor(days / DAYS_PER_MONTH);
+  const s = scenarioOf(world);
+  // 처음 깬 기록이거나 더 높은 별이면 최고 기록을 바꾼다(불러온 공원을 다시 보여 줄 때도 같은 값이라 중복 기록되지 않는다)
+  const best = world.status === 'won' && recordStars(s.id, world.stars);
+  const won_ = world.status === 'won';
   modal.show('result', {
-    title: world.status === 'won' ? '목표 달성!' : '게임 종료',
-    message: world.endReason,
+    title: won_ ? `${s.icon} ${s.name} 클리어! ${starText(world.stars)}` : `${s.icon} ${s.name} — 게임 종료`,
+    message: won_ ? `${world.endReason}${best ? ' 최고 기록이에요!' : ''}` : world.endReason,
     rows: [
+      ...(won_ ? [['별점', `${starText(world.stars)} (최고 ${starText(loadRecords()[s.id] ?? world.stars)})`] as [string, string]] : []),
       ['걸린 기간', `${months}개월 ${days % DAYS_PER_MONTH}일`],
       ['최고 손님 수', `${world.stats.peakGuests}명`],
       ['누적 입장객', `${world.stats.entered.toLocaleString('ko-KR')}명`],
@@ -236,7 +253,7 @@ function watchStatus(): void {
     ],
     buttons: [
       { label: '자유 모드로 계속', onClick: () => { world.status = 'sandbox'; modal.hide(); saveNow(); } },
-      { label: '새 게임', primary: true, onClick: newGame },
+      { label: '다른 시나리오', primary: true, onClick: confirmNewGame },
     ],
   });
   saveNow();

@@ -129,6 +129,10 @@ export class World {
   tutorial: TutorialState = newTutorial();
   /** 떠난 손님들이 남긴 최근 리뷰(오래된 것부터) */
   reviews: Review[] = [];
+  /** 시나리오 id(sim/scenarios.ts). 목표·기한이 여기에 따라 정해진다 */
+  scenario = 'meadow';
+  /** 목표를 달성했을 때 받은 별(1~3, 아직이면 0) */
+  stars = 0;
   /** 공원 이름(입구 간판). 비어 있으면 'PARK' */
   parkName = '';
   /** 보너스 미션 진행 상황 */
@@ -188,6 +192,8 @@ export class World {
     this.tutorial = src.tutorial;
     this.missions = src.missions;
     this.parkName = src.parkName;
+    this.scenario = src.scenario;
+    this.stars = src.stars;
     this.reviews = src.reviews;
   }
 }
