@@ -31,8 +31,8 @@ export function release(world: World, b: Building, def: BuildingDef, id: number)
   const g = world.guestById.get(id);
   if (!g) return;
   applyEffects(g, def);
-  // 먹고 마신 손님은 곧 쓰레기를 버린다(시점은 손님 id·틱으로 결정)
-  if (def.serves === 'hunger' || def.serves === 'thirst') {
+  // 먹고 마신(커피 포함) 손님은 곧 쓰레기를 버린다(시점은 손님 id·틱으로 결정)
+  if (def.serves === 'hunger' || def.serves === 'thirst' || def.rest) {
     g.trash = TRASH_MIN + (hash32(g.id, world.tick, 11) % (TRASH_MAX - TRASH_MIN + 1));
   }
   goIdle(g);

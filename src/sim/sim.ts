@@ -7,8 +7,10 @@ import { updateRide } from './ride';
 import { updateShop } from './shop';
 import { updateStaff } from './staff';
 import { TUTORIAL_EVERY, updateTutorial } from './tutorial';
+import { MISSION_EVERY, updateMissions } from './missions';
 import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
+import { updateEvents } from './events';
 import { updateWeather } from './weather';
 import type { World } from './world';
 
@@ -35,6 +37,7 @@ export function stepWorld(world: World): void {
   if (world.status === 'won' || world.status === 'lost') return;
 
   updateWeather(world);
+  updateEvents(world);
   updateSpawner(world);
   stepGuests(world);
   if (world.guests.length > world.stats.peakGuests) world.stats.peakGuests = world.guests.length;
@@ -44,5 +47,6 @@ export function stepWorld(world: World): void {
     trackDebt(world);
   }
   if (world.tick % TUTORIAL_EVERY === 0) updateTutorial(world);
+  if (world.tick % MISSION_EVERY === 0) updateMissions(world);
   updateGoals(world);
 }

@@ -20,6 +20,9 @@ import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
+import { MissionPanel } from './ui/missions';
+import { MISSIONS } from './sim/missions';
+import { BUS_GUESTS, FIREWORKS_COST, launchFireworks } from './sim/events';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -70,6 +73,7 @@ function newGame(): void {
   financePanel.sync();
   tutorialPanel.reset();
   seenReports = world.reports.length;
+  seenMissions = world.missions.completed.length;
   loop.speed = 1;
   modal.hide();
   saveNow();
@@ -89,6 +93,34 @@ function confirmNewGame(): void {
 
 // ---- 월간 보고서 알림음 ----
 let seenReports = 0;
+// ---- 랜덤 이벤트 시작 알림 ----
+let seenEvent = world.event?.start ?? -1;
+const EVENT_NOTICE = {
+  bus: `🚌 단체 관광버스 도착! 손님 ${BUS_GUESTS}명이 한꺼번에 들어옵니다`,
+  heatwave: '🔥 폭염 경보! 손님들이 금방 목말라져요. 음료를 준비하세요',
+  hype: '📸 인기 블로거가 공원을 소개했어요! 잠시 손님이 2배로 몰립니다',
+  blackout: '⚡ 정전! 잠시 놀이기구가 손님을 태우지 못합니다',
+} as const;
+function watchEvent(): void {
+  const e = world.event;
+  if (!e || e.start === seenEvent) return;
+  seenEvent = e.start;
+  tools.notify(EVENT_NOTICE[e.kind]);
+  sound.play(e.kind === 'blackout' ? 'error' : 'chime');
+}
+
+// ---- 미션 달성 알림 ----
+let seenMissions = world.missions.completed.length;
+function watchMissions(): void {
+  const done = world.missions.completed;
+  if (done.length > seenMissions) {
+    const m = MISSIONS.find((x) => x.id === done[done.length - 1]);
+    if (m) tools.notify(`🎉 미션 달성: ${m.title} (상금 +${won(m.reward)})`);
+    sound.play('chime');
+  }
+  seenMissions = done.length;
+}
+
 function watchReports(): void {
   if (world.reports.length > seenReports) sound.play('chime');
   seenReports = world.reports.length;
@@ -161,26 +193,49 @@ const loop = new GameLoop(
     trackEditor.update();
     tutorialPanel.update();
     financePanel.update();
+    missionPanel.update();
     watchReports();
+    watchMissions();
+    watchEvent();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
 );
 
 const financePanel = new FinancePanel(world);
+const missionPanel = new MissionPanel(world);
 const hud = new Hud(world, tools, loop, {
-  onFinance: () => financePanel.toggle(),
+  onFinance: () => {
+    financePanel.toggle();
+    missionPanel.toggle(false);
+  },
+  onMissions: () => {
+    missionPanel.toggle();
+    if (missionPanel.open) financePanel.toggle(false);
+  },
   onSave: () => tools.notify(saveNow() ? '저장했습니다' : '저장할 수 없습니다 (브라우저 저장소 사용 불가)'),
   onNewGame: confirmNewGame,
 });
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
   const s = hireStaff(world, kind);
   if (s) {
-    tools.notify(`${STAFF_NAME[kind]}를 고용했습니다 (하루 급여 ${won(WAGE)})`);
+    const name = STAFF_NAME[kind];
+    // 받침이 있으면 '을', 없으면 '를'
+    const josa = (name.charCodeAt(name.length - 1) - 0xac00) % 28 ? '을' : '를';
+    tools.notify(`${name}${josa} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
     sound.play('build');
   } else {
     tools.notify('더 이상 고용할 수 없습니다');
     sound.play('error');
+  }
+}, () => {
+  const err = launchFireworks(world);
+  if (err) {
+    tools.notify(err);
+    sound.play('error');
+  } else {
+    tools.notify(`🎆 불꽃놀이를 시작했습니다! (${won(FIREWORKS_COST)})`);
+    sound.play('win');
   }
 });
 // 모바일: 아래 도구 막대를 접어서 공원을 넓게 볼 수 있다(선택한 도구는 접어도 유지, 선택은 기억)

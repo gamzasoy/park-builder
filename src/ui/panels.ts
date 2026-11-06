@@ -6,7 +6,7 @@ import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
 import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
 import { demolishAt, REFUND_RATE } from '../sim/building';
-import { dailyUpkeep, fairPrice, setPrice, WAGE } from '../sim/economy';
+import { dailyUpkeep, dailyWages, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
 import { Stepper } from './stepper';
@@ -104,7 +104,11 @@ export class BuildingPanel {
         ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초`
         : def.umbrella
         ? `우산 판매(비 올 때) · 동시 ${def.capacity}명`
-        : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소 · 동시 ${def.capacity}명`,
+        : def.rest
+        ? `에너지 회복 · 동시 ${def.capacity}명`
+        : def.souvenir
+        ? `기념품(기분 좋은 손님) · 동시 ${def.capacity}명`
+        : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소${def.joy ? ' · 기분 UP' : ''} · 동시 ${def.capacity}명`,
     );
     // 대기 시간 추정: 놀이기구는 한 사이클에 정원만큼, 매점은 정원만큼 동시에 처리
     const seconds = Math.ceil(b.queue.length / def.capacity) * ((def.duration + (def.kind === 'ride' ? 5 : 0)) / 10);
@@ -124,7 +128,9 @@ const ROWS: [LedgerKey, string][] = [
   ['entrance', '입장료'],
   ['rides', '놀이기구 수익'],
   ['shops', '매점 수익'],
+  ['missions', '미션 보상'],
   ['construction', '건설/철거'],
+  ['fireworks', '불꽃놀이'],
   ['upkeep', '유지비'],
   ['wages', '직원 급여'],
 ];
@@ -185,7 +191,7 @@ export class FinancePanel {
 
     setText(
       this.extra,
-      `하루 유지비 ${won(dailyUpkeep(w))} · 급여 ${won(WAGE * w.staff.length)}` +
+      `하루 유지비 ${won(dailyUpkeep(w))} · 급여 ${won(dailyWages(w))}` +
         (last ? ` · 지난 달 입장 ${last.entered}명 · 월말 평점 ${last.rating}` : ''),
     );
   }
@@ -289,6 +295,13 @@ const STAFF_STATE_TEXT: Record<Staff['state'], string> = {
   working: '작업 중',
 };
 
+const WORKING_TEXT: Record<Staff['kind'], string> = {
+  janitor: '청소 중',
+  mechanic: '수리·점검 중',
+  entertainer: '공연 중',
+  vendor: '판매 중',
+};
+
 /** 선택한 직원의 상태와 해고 */
 export class StaffPanel {
   private root = document.createElement('div');
@@ -343,7 +356,7 @@ export class StaffPanel {
     }
     if (this.root.hidden) this.root.hidden = false;
     setText(this.title, `${STAFF_NAME[s.kind]} #${s.id}`);
-    setText(this.state, STAFF_STATE_TEXT[s.state]);
-    setText(this.wage, `${won(WAGE)} / 일`);
+    setText(this.state, s.state === 'working' ? WORKING_TEXT[s.kind] : STAFF_STATE_TEXT[s.state]);
+    setText(this.wage, `${won(WAGE[s.kind])} / 일`);
   }
 }

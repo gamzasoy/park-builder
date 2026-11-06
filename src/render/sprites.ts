@@ -800,6 +800,126 @@ function toilet(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, alongX: b
   gableRoof(ctx, insetQuad(q, 0.95), 15 * z, 9 * z, '#5f7d94', alongX);
 }
 
+/** 피자 가게(2×1): 차양이 달린 가게 위에 피자 간판 */
+function pizzaShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts, alongX: boolean): void {
+  const z = o.z;
+  shadow(ctx, q, z);
+  const f = insetQuad(q, 0.88);
+  box(ctx, f, 0, 16 * z, '#f3e6c8', '#e6d3a8', '#c9b48a');
+  // 앞면 차양 줄무늬와 창구
+  const [a, b] = alongX ? [f.left, f.bottom] : [f.bottom, f.right];
+  for (let i = 0; i < 6; i++) {
+    const p0 = { x: a.x + ((b.x - a.x) * i) / 6, y: a.y + ((b.y - a.y) * i) / 6 };
+    const p1 = { x: a.x + ((b.x - a.x) * (i + 1)) / 6, y: a.y + ((b.y - a.y) * (i + 1)) / 6 };
+    poly(ctx, [up(p0, 10 * z), up(p1, 10 * z), up(p1, 14 * z), up(p0, 14 * z)], i % 2 ? '#fff' : '#3c9a4a', null);
+  }
+  const w0 = { x: a.x + (b.x - a.x) * 0.2, y: a.y + (b.y - a.y) * 0.2 };
+  const w1 = { x: a.x + (b.x - a.x) * 0.8, y: a.y + (b.y - a.y) * 0.8 };
+  poly(ctx, [up(w0, 3 * z), up(w1, 3 * z), up(w1, 9 * z), up(w0, 9 * z)], '#3a2e26', null);
+  gableRoof(ctx, insetQuad(q, 0.95), 16 * z, 8 * z, '#c0392b', alongX);
+  // 피자 간판: 노란 치즈 원에 페퍼로니
+  const c = up(center(q), 32 * z);
+  line(ctx, up(center(q), 22 * z), c, '#555', Math.max(1, z));
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, z);
+  ctx.fillStyle = '#d98a2b';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 7 * z, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f5c842';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 5.6 * z, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#c0392b';
+  for (const [dx, dy] of [[-2.5, -1.5], [2, -2.5], [0.5, 2.2], [-2.8, 2.5], [3, 1.2]]) {
+    ctx.beginPath();
+    ctx.arc(c.x + dx * z, c.y + dy * z, 1.1 * z, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** 아이스크림 가판대: 키오스크 위에 커다란 콘 */
+function iceCreamShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  kiosk(ctx, q, o, '#e86f9f');
+  const z = o.z;
+  const base = up(center(q), 30 * z);
+  poly(ctx, [base, { x: base.x - 4 * z, y: base.y - 9 * z }, { x: base.x + 4 * z, y: base.y - 9 * z }], '#d9a45a');
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, z);
+  for (const [dy, col] of [[-11, '#fff4d6'], [-15.5, '#f29bc0']] as const) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(base.x, base.y + dy * z, 4.4 * z, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#c0392b';
+  ctx.beginPath();
+  ctx.arc(base.x + 0.5 * z, base.y - 20.5 * z, 1.4 * z, 0, TAU);
+  ctx.fill();
+}
+
+/** 카페: 키오스크 위에 김이 오르는 커피잔 */
+function cafeShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  kiosk(ctx, q, o, '#6b4430');
+  const z = o.z;
+  const c = up(center(q), 31 * z);
+  // 받침 접시와 잔
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, z);
+  ctx.fillStyle = '#f4efe6';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, 7 * z, 2.2 * z, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  poly(ctx, [
+    { x: c.x - 4.5 * z, y: c.y - 8 * z }, { x: c.x + 4.5 * z, y: c.y - 8 * z },
+    { x: c.x + 3.5 * z, y: c.y - 1 * z }, { x: c.x - 3.5 * z, y: c.y - 1 * z },
+  ], '#fff');
+  ctx.beginPath();
+  ctx.arc(c.x + 5 * z, c.y - 5 * z, 2 * z, -Math.PI / 2, Math.PI / 2);
+  ctx.stroke();
+  ctx.fillStyle = '#6b4430';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y - 8 * z, 4.5 * z, 1.3 * z, 0, 0, TAU);
+  ctx.fill();
+  // 김
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineWidth = Math.max(1, 1.2 * z);
+  const t = o.time * 0.15;
+  for (const dx of [-1.5, 1.5]) {
+    ctx.beginPath();
+    ctx.moveTo(c.x + dx * z, c.y - 10 * z);
+    ctx.quadraticCurveTo(c.x + (dx + Math.sin(t + dx) * 2) * z, c.y - 13 * z, c.x + dx * z, c.y - 16 * z);
+    ctx.stroke();
+  }
+}
+
+/** 기념품 가게: 키오스크 위로 줄에 매달린 풍선 세 개가 흔들린다 */
+function souvenirShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  kiosk(ctx, q, o, '#7d3fb0');
+  const z = o.z;
+  const anchor = up(center(q), 30 * z);
+  const cols = ['#e8453c', '#f2c230', '#4a8fe8'];
+  for (let i = 0; i < 3; i++) {
+    const sway = Math.sin(o.time * 0.08 + i * 2) * 1.5 * z;
+    const p = { x: anchor.x + (i - 1) * 5 * z + sway, y: anchor.y - (12 + (i % 2) * 3) * z };
+    line(ctx, anchor, { x: p.x, y: p.y + 4 * z }, 'rgba(60,60,60,0.7)', Math.max(1, 0.7 * z));
+    ctx.fillStyle = cols[i];
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = Math.max(1, z);
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, 3.2 * z, 4 * z, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.arc(p.x - 1.1 * z, p.y - 1.4 * z, 0.9 * z, 0, TAU);
+    ctx.fill();
+  }
+}
+
 /** def.id에 맞는 스프라이트를 그린다. 모르는 id면 false(호출한 쪽이 상자로 대체). */
 export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Quad, o: SpriteOpts, w: number, h: number): boolean {
   switch (id) {
@@ -816,9 +936,104 @@ export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Qua
     case 'burger': kiosk(ctx, q, o, '#c0392b'); return true;
     case 'drinks': kiosk(ctx, q, o, '#2a8f86'); return true;
     case 'umbrella': umbrellaShop(ctx, q, o); return true;
+    case 'pizza': pizzaShop(ctx, q, o, w >= h); return true;
+    case 'icecream': iceCreamShop(ctx, q, o); return true;
+    case 'cafe': cafeShop(ctx, q, o); return true;
+    case 'souvenir': souvenirShop(ctx, q, o); return true;
     case 'toilet': toilet(ctx, q, o, w >= h); return true;
     default: return false;
   }
+}
+
+// ---------------------------------------------------------------- 직원
+
+/**
+ * 인형탈 연기자: 노란 몸통에 큰 곰 머리. (x, y)는 발 위치, dancing이면 팔을 흔들며 들썩인다.
+ * 게임 화면과 툴바 아이콘이 함께 쓴다.
+ */
+export function drawMascot(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number, dancing: boolean, walkSwing = 0): void {
+  const hop = dancing ? Math.abs(Math.sin(time * 0.35)) * 1.6 * z : 0;
+  const by = y - hop;
+  // 다리
+  ctx.strokeStyle = '#8a5a2b';
+  ctx.lineWidth = Math.max(1.5, 2.2 * z);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - 1.5 * z, by - 5 * z); ctx.lineTo(x - 1.5 * z + walkSwing, by - 0.5 * z);
+  ctx.moveTo(x + 1.5 * z, by - 5 * z); ctx.lineTo(x + 1.5 * z - walkSwing, by - 0.5 * z);
+  ctx.stroke();
+  // 팔(춤출 때는 번갈아 위로)
+  const wave = dancing ? Math.sin(time * 0.5) : 0;
+  ctx.beginPath();
+  ctx.moveTo(x - 3.5 * z, by - 9.5 * z); ctx.lineTo(x - 6 * z, by - (8 + 5 * Math.max(0, wave)) * z);
+  ctx.moveTo(x + 3.5 * z, by - 9.5 * z); ctx.lineTo(x + 6 * z, by - (8 + 5 * Math.max(0, -wave)) * z);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+  // 몸통
+  ctx.fillStyle = '#f2c230';
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, 0.8 * z);
+  ctx.beginPath();
+  ctx.ellipse(x, by - 8.5 * z, 4.2 * z, 4.6 * z, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  // 머리와 귀
+  const hy = by - 16 * z;
+  ctx.fillStyle = '#a8703a';
+  for (const dx of [-3.6, 3.6]) {
+    ctx.beginPath();
+    ctx.arc(x + dx * z, hy - 3.4 * z, 1.8 * z, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(x, hy, 5 * z, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f1d9b0';
+  ctx.beginPath();
+  ctx.ellipse(x, hy + 1.6 * z, 2.6 * z, 1.9 * z, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#2a2a2a';
+  for (const dx of [-1.8, 1.8]) {
+    ctx.beginPath();
+    ctx.arc(x + dx * z, hy - 1 * z, 0.7 * z, 0, TAU);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(x, hy + 1 * z, 0.8 * z, 0, TAU);
+  ctx.fill();
+  // 빨간 나비넥타이
+  ctx.fillStyle = '#e8453c';
+  poly(ctx, [
+    { x: x - 2.4 * z, y: by - 12.6 * z }, { x, y: by - 11.8 * z }, { x: x - 2.4 * z, y: by - 11 * z },
+  ], '#e8453c', null);
+  poly(ctx, [
+    { x: x + 2.4 * z, y: by - 12.6 * z }, { x, y: by - 11.8 * z }, { x: x + 2.4 * z, y: by - 11 * z },
+  ], '#e8453c', null);
+}
+
+/** 음료 판매원이 앞에 메고 다니는 컵 상자. (x, y)는 발 위치 */
+export function drawVendorTray(ctx: CanvasRenderingContext2D, x: number, y: number, z: number): void {
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = Math.max(1, 0.6 * z);
+  ctx.beginPath();
+  ctx.moveTo(x - 3 * z, y - 11 * z); ctx.lineTo(x - 3.5 * z, y - 7 * z);
+  ctx.moveTo(x + 3 * z, y - 11 * z); ctx.lineTo(x + 3.5 * z, y - 7 * z);
+  ctx.stroke();
+  // 컵 세 개
+  const cups = ['#3ab0a0', '#e8453c', '#f2c230'];
+  for (let i = 0; i < 3; i++) {
+    const cx = x + (i - 1) * 2.4 * z;
+    poly(ctx, [
+      { x: cx - 1 * z, y: y - 10.2 * z }, { x: cx + 1 * z, y: y - 10.2 * z },
+      { x: cx + 0.8 * z, y: y - 7.5 * z }, { x: cx - 0.8 * z, y: y - 7.5 * z },
+    ], cups[i], null);
+  }
+  poly(ctx, [
+    { x: x - 4.2 * z, y: y - 7.8 * z }, { x: x + 4.2 * z, y: y - 7.8 * z },
+    { x: x + 4.2 * z, y: y - 5.4 * z }, { x: x - 4.2 * z, y: y - 5.4 * z },
+  ], '#c8a06a');
 }
 
 // ---------------------------------------------------------------- 장식

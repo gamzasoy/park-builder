@@ -24,7 +24,8 @@ export function breaksDown(b: Building): boolean {
  * 운영 불가(입구 끊김) 상태에서는 새 탑승을 받지 않고, 운행 중인 사이클만 마무리한다.
  */
 export function updateRide(world: World, b: Building, def: BuildingDef): void {
-  const operational = world.network.isOperational(b);
+  // 정전 중에는 새 손님을 태우지 못한다(운행 중인 사이클은 마무리)
+  const operational = world.network.isOperational(b) && world.event?.kind !== 'blackout';
   if (b.broken) b.brokenTicks++;
 
   if (b.phase === 'idle' && operational && b.queue.length > 0) {

@@ -13,7 +13,7 @@ import { shade } from './color';
 import { guestDisplayPos, staffDisplayPos } from './guestpos';
 import { BUBBLE_FONT, POSITIVE, THOUGHT_TEXT } from './thoughts';
 import { GroundCache, occludingTiles, paintTerrainTile } from './ground';
-import { drawRideSprite, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
+import { drawMascot, drawRideSprite, drawVendorTray, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, terrainPx, tileToWorld, type Vec2 } from './iso';
 import { cornerLevels, surfaceLevel } from './relief';
 
@@ -188,6 +188,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
 
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
   drawWeather(ctx, cam, world.weather.kind, time);
+  if (world.fireworks) drawFireworks(ctx, cam, world, time);
 
   // 3.5) 트랙 편집 중: 역 지붕·나무·건물에 가린 트랙을 반투명 선으로 덧그린다
   const editing = view.editingId != null ? world.buildings.get(view.editingId) : undefined;
@@ -266,6 +267,82 @@ function drawWeather(ctx: CanvasRenderingContext2D, cam: Camera, kind: WeatherKi
     ctx.lineTo(x - len * RAIN_SLOPE, y + len);
   }
   ctx.stroke();
+}
+
+/** 불꽃놀이: 하늘을 어둡게 하고, 발사 지점에서 일정 간격으로 쏘아 올린 불꽃이 터진다. 틱으로만 정해진다. */
+const SHELL_EVERY = 4;
+const SHELL_RISE = 12;
+const SHELL_LIFE = 40;
+/** 터지는 지점의 최소 화면 y(HUD·쪽지 아래) */
+const FW_SKY_TOP = 150;
+const FW_COLORS = ['#ffd84a', '#ff6b8a', '#6be3ff', '#9dff7a', '#ff9f43', '#d38bff', '#ffffff'];
+function drawFireworks(ctx: CanvasRenderingContext2D, cam: Camera, world: World, time: number): void {
+  const fw = world.fireworks!;
+  const z = cam.zoom;
+  const age = time - fw.start;
+  const total = fw.end - fw.start;
+  // 밤하늘: 시작과 끝 15틱 동안 서서히
+  const dark = Math.max(0, Math.min(1, age / 15, (total - age) / 15));
+  ctx.fillStyle = `rgba(8,12,40,${(0.38 * dark).toFixed(3)})`;
+  ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+
+  const base = screenAt(cam, fw.x, fw.y, world.map.heightAt(Math.floor(fw.x), Math.floor(fw.y)));
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  const shells = Math.floor((total - SHELL_LIFE) / SHELL_EVERY);
+  for (let i = 0; i <= shells; i++) {
+    const a = age - i * SHELL_EVERY;
+    if (a < 0 || a > SHELL_LIFE) continue;
+    const seed = fw.start * 31 + i;
+    const color = FW_COLORS[Math.floor(tileHash(seed, 3, 7) * FW_COLORS.length)];
+    const top = {
+      x: base.x + (tileHash(seed, 1, 7) - 0.5) * 340 * z,
+      y: base.y - (160 + tileHash(seed, 2, 7) * 140) * z,
+    };
+    // 발사 지점이 화면 위쪽이면 HUD 뒤로 숨지 않게 화면 안쪽에서 터뜨린다
+    top.y = Math.max(top.y, FW_SKY_TOP + tileHash(seed, 6, 7) * 120);
+    if (a < SHELL_RISE) {
+      // 꼬리를 끌며 올라가는 불씨
+      const k = a / SHELL_RISE;
+      const p = { x: base.x + (top.x - base.x) * k, y: base.y + (top.y - base.y) * k };
+      const q = { x: base.x + (top.x - base.x) * Math.max(0, k - 0.15), y: base.y + (top.y - base.y) * Math.max(0, k - 0.15) };
+      ctx.strokeStyle = 'rgba(255,230,170,0.9)';
+      ctx.lineWidth = Math.max(1, 1.6 * z);
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      continue;
+    }
+    // 터짐: 별똥 조각이 퍼지며 떨어지고 사라진다
+    const b = (a - SHELL_RISE) / (SHELL_LIFE - SHELL_RISE);
+    const r = (1 - (1 - b) * (1 - b)) * (55 + tileHash(seed, 4, 7) * 40) * z;
+    const drop = b * b * 18 * z;
+    const n = 22;
+    ctx.globalAlpha = Math.max(0, 1 - b);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = Math.max(1.5, 2.2 * z);
+    ctx.beginPath();
+    for (let j = 0; j < n; j++) {
+      const ang = (j / n) * Math.PI * 2 + tileHash(seed, 5, 7);
+      const x = top.x + Math.cos(ang) * r;
+      const y = top.y + Math.sin(ang) * r + drop;
+      const x0 = top.x + Math.cos(ang) * r * 0.6;
+      const y0 = top.y + Math.sin(ang) * r * 0.6 + drop * 0.8;
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    if (b < 0.25) {
+      ctx.globalAlpha = 1 - b * 4;
+      ctx.beginPath();
+      ctx.arc(top.x, top.y, (6 + b * 30) * z, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 
 /** 건물 풋프린트(평평한 터) — 터의 지형 높이만큼 올라간 위치 */
@@ -765,12 +842,15 @@ function drawWrench(ctx: CanvasRenderingContext2D, x: number, y: number, z: numb
   ctx.restore();
 }
 
+/** 직원 조끼·모자 색 */
+const STAFF_VEST: Record<Staff['kind'], string> = { janitor: '#f08a24', mechanic: '#2f78d0', entertainer: '#f2c230', vendor: '#d94848' };
+
 /** 직원: 눈에 띄는 작업복(청소부 = 주황 조끼 + 모자). 작업 중이면 빗자루를 쓴다. */
 function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: number, ty: number, lv: number, time: number): void {
   const s = screenAt(cam, tx, ty, lv);
   const z = cam.zoom;
   if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -40 || s.y > cam.viewH + 30) return;
-  const vest = st.kind === 'janitor' ? '#f08a24' : '#2f78d0';
+  const vest = STAFF_VEST[st.kind];
 
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
@@ -778,6 +858,10 @@ function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: nu
   ctx.fill();
 
   const swing = st.state === 'walking' ? Math.sin((tx + ty) * 14) * 1.6 * z : 0;
+  if (st.kind === 'entertainer') {
+    drawMascot(ctx, s.x, s.y, z, time + st.id * 7, st.state === 'working', swing);
+    return;
+  }
   ctx.strokeStyle = '#2a3342';
   ctx.lineWidth = Math.max(1, 1.8 * z);
   ctx.beginPath();
@@ -827,6 +911,7 @@ function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: nu
   ctx.arc(s.x, s.y - 14.2 * z, 2.8 * z, Math.PI, 0);
   ctx.fill();
   ctx.fillRect(s.x - 3.6 * z, s.y - 14.4 * z, 7.2 * z, 1.1 * z);
+  if (st.kind === 'vendor') drawVendorTray(ctx, s.x, s.y, z);
 }
 
 function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, b: Building): void {

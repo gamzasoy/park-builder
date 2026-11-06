@@ -5,7 +5,8 @@
 import { getDef } from '../data';
 import type { SceneryDef } from '../data/scenery';
 import { tileToWorld, type Vec2 } from '../render/iso';
-import { drawRideSprite, drawScenery, poly, type Quad } from '../render/sprites';
+import { drawMascot, drawRideSprite, drawScenery, drawVendorTray, poly, type Quad } from '../render/sprites';
+import type { StaffKind } from '../sim/staff';
 
 const W = 44;
 const H = 40;
@@ -83,10 +84,18 @@ export function sceneryIcon(def: SceneryDef): string {
   });
 }
 
-export function staffIcon(kind: 'janitor' | 'mechanic'): string {
+export function staffIcon(kind: StaffKind): string {
   return render(`staff:${kind}`, (ctx) => {
-    const vest = kind === 'janitor' ? '#f08a24' : '#2f78d0';
     const cx = W / 2;
+    if (kind === 'entertainer') {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawMascot(ctx, cx, H - 4, 1.55, Math.PI, true);
+      return;
+    }
+    const vest = { janitor: '#f08a24', mechanic: '#2f78d0', vendor: '#d94848' }[kind];
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
@@ -124,7 +133,36 @@ export function staffIcon(kind: 'janitor' | 'mechanic'): string {
       ctx.beginPath();
       ctx.moveTo(cx + 12, H - 6); ctx.lineTo(cx + 19, H - 6);
       ctx.stroke();
+    } else if (kind === 'vendor') {
+      drawVendorTray(ctx, cx, H - 5.6, 2.14);
     }
+  });
+}
+
+export function fireworksIcon(): string {
+  return render('fireworks', (ctx) => {
+    ctx.fillStyle = '#1d2547';
+    ctx.beginPath();
+    ctx.roundRect(4, 3, W - 8, H - 6, 6);
+    ctx.fill();
+    const bursts: [number, number, number, string][] = [[16, 15, 9, '#f2c230'], [30, 12, 7, '#ef8fb4'], [27, 26, 6, '#4ac9c0']];
+    ctx.lineCap = 'round';
+    for (const [x, y, r, c] of bursts) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        ctx.moveTo(x + Math.cos(a) * r * 0.35, y + Math.sin(a) * r * 0.35);
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,230,160,0.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(16, H - 5); ctx.lineTo(16, 25);
+    ctx.stroke();
   });
 }
 
