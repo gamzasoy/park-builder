@@ -27,7 +27,11 @@ export const THOUGHT_TEXT: Record<Thought, string> = {
   vipHappy: '최고의 공원이야!',
   vipSad: '실망이야…',
   rainbow: '무지개다!',
+  lost: '엄마 어딨어? 😭',
+  lostKid: '우리 애 어디 갔지?!',
+  reunited: '찾았다!',
+  kidFun: '또 탈래!',
 };
 
 /** 긍정적인 생각은 초록 말풍선 */
-export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery', 'show', 'fireworks', 'fountain', 'vipHappy', 'rainbow']);
+export const POSITIVE: ReadonlySet<Thought> = new Set<Thought>(['fun', 'scenery', 'show', 'fireworks', 'fountain', 'vipHappy', 'rainbow', 'reunited', 'kidFun']);

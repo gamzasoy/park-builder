@@ -208,6 +208,17 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     drawWrench(ctx, s.x, s.y - roof - 14 * cam.zoom, cam.zoom, time);
   }
 
+  // 길 잃은 아이: 확대 배율과 상관없이 머리 위에 깜빡이는 물음표(눌러서 보호자에게 데려다준다)
+  for (const w of walkers) {
+    if (w.g?.lostUntil === undefined) continue;
+    const s = screenAt(cam, w.x, w.y, w.h);
+    if (!visible(s)) continue;
+    // 확대해 말풍선("엄마 어딨어?")이 보일 때는 그 위에, 아니면 머리 위에 띄운다
+    const z = cam.zoom;
+    const top = z >= 0.7 ? s.y - 20 * z - (Math.max(9, 10 * z) + 5 * z) - Math.max(9, 10 * z) - 4 : s.y - 16 * z - 12;
+    drawLostMarker(ctx, s.x, top, z, time);
+  }
+
   // 업그레이드한 놀이기구: 지붕 위에 단계만큼 금색 별
   for (const b of buildings) {
     const lv = b.level ?? 1;
@@ -914,9 +925,12 @@ const PANTS = ['#3a4a6b', '#4a3a2e', '#2e2e34', '#5a6e8a'];
 /** 우산 색: 비 오는 날 어두운 화면에서도 눈에 띄는 밝은 색 */
 const UMBRELLA = ['#ffd23f', '#ff5d73', '#4cc9f0', '#7bd66b', '#ff9f43'];
 
+/** 아이 손님은 어른보다 작게 그린다 */
+const KID_SCALE = 0.68;
+
 function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number, lv: number, raining: boolean): void {
   const s = screenAt(cam, tx, ty, lv);
-  const z = cam.zoom;
+  const z = cam.zoom * (g.kid ? KID_SCALE : 1);
   if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -40 || s.y > cam.viewH + 30) return;
 
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -1026,6 +1040,27 @@ function drawLitter(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, vi
 }
 
 /** 고장 표시: 붉은 원 안의 렌치(살짝 흔들린다) */
+/** 미아 표시: 통통 튀는 주황 원 안의 물음표 */
+function drawLostMarker(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number): void {
+  const r = Math.max(9, 10 * z);
+  const bob = Math.abs(Math.sin(time * 0.25)) * 4;
+  ctx.save();
+  ctx.translate(x, y - bob);
+  ctx.fillStyle = 'rgba(255,140,30,0.97)';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${Math.round(r * 1.4)}px ${BUBBLE_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('?', 0, r * 0.08);
+  ctx.restore();
+}
+
 function drawWrench(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number): void {
   const r = Math.max(9, 10 * z);
   ctx.save();

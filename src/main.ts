@@ -9,7 +9,7 @@ import { pickTile } from './input/pick';
 import type { Tile } from './sim/map';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { dateOf, DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
-import { createGuest, VIP_REWARD, VIP_TICKS } from './sim/guest';
+import { createGuest, REUNITE_TIP, VIP_REWARD, VIP_TICKS, type Guest } from './sim/guest';
 import { getDef } from './data';
 import { stepWorld } from './sim/sim';
 import { hireStaff, STAFF_NAME } from './sim/staff';
@@ -24,11 +24,12 @@ import { TutorialPanel } from './ui/tutorial';
 import { Toasts, type ToastTone } from './ui/toast';
 import { BUBBLE_FONT } from './render/thoughts';
 import { isNight } from './sim/daynight';
-import { withObj, withRo } from './ui/josa';
+import { withObj, withRo, withSubj } from './ui/josa';
 import { cleanParkName, MAX_PARK_NAME } from './sim/park';
 import { rainbowAt } from './sim/weather';
 import { MissionPanel } from './ui/missions';
 import { ReviewPanel } from './ui/reviews';
+import { guestName } from './sim/reviews';
 import { seasonOf, SEASON_VIEW, type Season } from './sim/season';
 import { MISSIONS } from './sim/missions';
 import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
@@ -86,6 +87,7 @@ function newGame(): void {
   seenReports = world.reports.length;
   seenMissions = world.missions.completed.length;
   seenVips = world.stats.vips;
+  seenLost = { ...lostStats() };
   shownSeason = seasonOf(world.tick);
   loop.speed = 1;
   modal.hide();
@@ -165,6 +167,28 @@ function watchVips(): void {
     sound.play('win');
   }
   seenVips = world.stats.vips;
+}
+
+/** 미아 발생 / 찾아 줌 / 끝내 못 찾음 알림 */
+const lostStats = (): { lost: number; reunited: number; gone: number } => ({ lost: world.stats.lost ?? 0, reunited: world.stats.reunited ?? 0, gone: world.stats.lostGone ?? 0 });
+let seenLost = lostStats();
+function watchLostKids(): void {
+  const now = lostStats();
+  if (now.lost > seenLost.lost) {
+    // 가장 최근에 길을 잃은 아이(기한이 가장 늦은)
+    let k: Guest | undefined;
+    for (const g of world.guests) if (g.lostUntil !== undefined && (!k || g.lostUntil > k.lostUntil!)) k = g;
+    toasts.show('🧒', '미아가 생겼어요!', `${k ? withSubj(guestName(k.id)) : '아이가'} 보호자를 놓쳤어요. 머리 위에 ? 가 뜬 아이를 눌러 찾아 주세요`, 'event');
+    sound.play('chime');
+  }
+  if (now.reunited > seenLost.reunited) {
+    toasts.show('🤗', '아이가 보호자를 다시 만났어요!', `가족이 고마워하며 사례금 +${won(REUNITE_TIP)}을 줬어요`, 'good');
+  }
+  if (now.gone > seenLost.gone) {
+    toasts.show('😢', '아이를 끝내 찾지 못했어요', '실망한 가족이 공원을 떠났습니다. 인형탈 연기자가 근처에 있으면 미아를 데려다줘요', 'bad');
+    sound.play('error');
+  }
+  seenLost = now;
 }
 
 function watchMissions(): void {
@@ -259,6 +283,7 @@ const loop = new GameLoop(
     watchMissions();
     watchEvent();
     watchVips();
+    watchLostKids();
     watchRainbow();
     watchSeason();
     watchStatus();
