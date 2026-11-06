@@ -5,6 +5,7 @@ import { claimLoadedTracks } from '../sim/trackedit';
 import type { Guest } from '../sim/guest';
 import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
+import { MISSION_IDS, type MissionState } from '../sim/missions';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
 import {
@@ -73,6 +74,7 @@ export interface SaveData {
   guests: GuestSave[];
   /** v2에서 추가. 없으면(이전 저장본) 안내를 이미 끝낸 것으로 본다 */
   tutorial?: TutorialState;
+  missions?: MissionState;
   /** v4에서 추가. 없으면 직원 없음 */
   staff?: StaffSave[];
   nextStaffId?: number;
@@ -119,6 +121,7 @@ export function serializeWorld(world: World): SaveData {
     goalHold: world.goalHold,
     debtDays: world.debtDays,
     tutorial: { completed: [...world.tutorial.completed] },
+    missions: { completed: [...world.missions.completed] },
     buildings: [...world.buildings.values()].map(({ track, ...b }): BuildingSave => (
       track ? { ...b, track: { pieces: [...track.pieces], spent: track.spent } } : b
     )),
@@ -274,6 +277,11 @@ export function deserializeWorld(data: SaveData): World {
     completed: Array.isArray(data.tutorial?.completed)
       ? data.tutorial.completed.filter((id): id is string => STEP_IDS.includes(id))
       : [...STEP_IDS],
+  };
+  w.missions = {
+    completed: Array.isArray(data.missions?.completed)
+      ? data.missions.completed.filter((id): id is string => MISSION_IDS.includes(id))
+      : [],
   };
   return w;
 }

@@ -20,6 +20,8 @@ import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
+import { MissionPanel } from './ui/missions';
+import { MISSIONS } from './sim/missions';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -70,6 +72,7 @@ function newGame(): void {
   financePanel.sync();
   tutorialPanel.reset();
   seenReports = world.reports.length;
+  seenMissions = world.missions.completed.length;
   loop.speed = 1;
   modal.hide();
   saveNow();
@@ -89,6 +92,18 @@ function confirmNewGame(): void {
 
 // ---- 월간 보고서 알림음 ----
 let seenReports = 0;
+// ---- 미션 달성 알림 ----
+let seenMissions = world.missions.completed.length;
+function watchMissions(): void {
+  const done = world.missions.completed;
+  if (done.length > seenMissions) {
+    const m = MISSIONS.find((x) => x.id === done[done.length - 1]);
+    if (m) tools.notify(`🎉 미션 달성: ${m.title} (상금 +${won(m.reward)})`);
+    sound.play('chime');
+  }
+  seenMissions = done.length;
+}
+
 function watchReports(): void {
   if (world.reports.length > seenReports) sound.play('chime');
   seenReports = world.reports.length;
@@ -161,15 +176,25 @@ const loop = new GameLoop(
     trackEditor.update();
     tutorialPanel.update();
     financePanel.update();
+    missionPanel.update();
     watchReports();
+    watchMissions();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
 );
 
 const financePanel = new FinancePanel(world);
+const missionPanel = new MissionPanel(world);
 const hud = new Hud(world, tools, loop, {
-  onFinance: () => financePanel.toggle(),
+  onFinance: () => {
+    financePanel.toggle();
+    missionPanel.toggle(false);
+  },
+  onMissions: () => {
+    missionPanel.toggle();
+    if (missionPanel.open) financePanel.toggle(false);
+  },
   onSave: () => tools.notify(saveNow() ? '저장했습니다' : '저장할 수 없습니다 (브라우저 저장소 사용 불가)'),
   onNewGame: confirmNewGame,
 });

@@ -7,6 +7,7 @@ import { DAY_TICKS, START_FEE } from './economy';
 import { PathNetwork } from './pathfinding';
 import { DEFAULT_WEATHER_SEED, type Weather } from './weather';
 import { newTutorial, type TutorialState } from './tutorial';
+import { newMissions, type MissionState } from './missions';
 
 export const START_MONEY = 10000;
 
@@ -49,7 +50,7 @@ export interface Building {
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */
 export type GameStatus = 'playing' | 'won' | 'lost' | 'sandbox';
 
-export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'construction' | 'upkeep' | 'wages';
+export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'missions' | 'construction' | 'upkeep' | 'wages';
 export type Ledger = Record<LedgerKey, number>;
 
 export interface MonthReport {
@@ -75,7 +76,7 @@ export interface RatingParts {
   cleanliness: number;
 }
 
-export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, construction: 0, upkeep: 0, wages: 0 });
+export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, missions: 0, construction: 0, upkeep: 0, wages: 0 });
 
 export class World {
   readonly map = new TileMap();
@@ -116,6 +117,8 @@ export class World {
   monthStartEntered = 0;
   /** 초반 안내 진행 상황 */
   tutorial: TutorialState = newTutorial();
+  /** 보너스 미션 진행 상황 */
+  missions: MissionState = newMissions();
   /** 공원 평점(0~1000, 천천히 변동) */
   rating = 400;
   ratingParts: RatingParts = { base: 0, satisfaction: 0, variety: 0, flow: 0, complaints: 0, cleanliness: 100 };
@@ -166,5 +169,6 @@ export class World {
     this.goalHold = src.goalHold;
     this.debtDays = src.debtDays;
     this.tutorial = src.tutorial;
+    this.missions = src.missions;
   }
 }

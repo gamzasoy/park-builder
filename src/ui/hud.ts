@@ -7,6 +7,7 @@ import { Stepper } from './stepper';
 
 export interface HudActions {
   onFinance: () => void;
+  onMissions: () => void;
   onSave: () => void;
   onNewGame: () => void;
 }
@@ -68,6 +69,7 @@ export class Hud {
       });
     };
     wire('finance-btn', actions.onFinance);
+    wire('missions-btn', actions.onMissions);
     wire('save-btn', actions.onSave);
     wire('new-btn', actions.onNewGame);
   }
