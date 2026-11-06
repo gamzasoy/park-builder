@@ -38,7 +38,7 @@ export class TrackEditor {
     this.action(row, '시운전', '', () => {
       const b = this.tools.trackBuilding;
       if (b && this.testRun.start(b)) this.tools.notify(this.testRun.result);
-      else this.tools.notify('시운전할 트랙이 없습니다');
+      else this.tools.fail('시운전할 트랙이 없습니다');
     });
     const done = this.action(row, '편집 종료', 'Enter/Esc', () => this.tools.endTrackEdit());
     done.classList.add('primary');

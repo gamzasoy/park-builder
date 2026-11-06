@@ -58,3 +58,33 @@ export class Toasts {
     setTimeout(() => el.remove(), LEAVE_MS);
   }
 }
+
+// ---------------------------------------------------------------- 실패 말풍선
+
+/** 마지막으로 누르거나 움직인 포인터 위치(화면 좌표). 실패 말풍선을 그 자리에 띄운다 */
+let pointer: { x: number; y: number } | null = null;
+if (typeof window !== 'undefined') {
+  const track = (e: PointerEvent): void => { pointer = { x: e.clientX, y: e.clientY }; };
+  window.addEventListener('pointerdown', track, { capture: true, passive: true });
+  window.addEventListener('pointermove', track, { capture: true, passive: true });
+}
+
+const FLOAT_MS = 1600;
+
+/** 방금 누른 자리(포인터 위치)에서 빨간 말풍선이 떠올랐다 사라진다. 포인터 위치를 모르면 화면 가운데 */
+export function floatError(text: string): void {
+  const el = document.createElement('div');
+  el.className = 'float-err';
+  el.textContent = (text.includes('돈') ? '💸 ' : '⛔ ') + text;
+  const x = pointer?.x ?? window.innerWidth / 2;
+  const y = pointer?.y ?? window.innerHeight / 2;
+  el.style.left = `${Math.round(x)}px`;
+  el.style.top = `${Math.round(y)}px`;
+  document.body.append(el);
+  // 화면 밖으로 나가지 않게 가로 위치를 보정
+  const r = el.getBoundingClientRect();
+  const over = r.right - (window.innerWidth - 8);
+  if (over > 0) el.style.left = `${Math.round(x - over)}px`;
+  else if (r.left < 8) el.style.left = `${Math.round(x + (8 - r.left))}px`;
+  setTimeout(() => el.remove(), FLOAT_MS);
+}

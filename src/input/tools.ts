@@ -82,6 +82,7 @@ export class ToolController {
   onGate?: () => void;
   message = '';
   messageUntil = 0;
+  messageTone: 'info' | 'error' = 'info';
   private dragStart: Tile | null = null;
 
   constructor(private world: World) {}
@@ -175,14 +176,12 @@ export class ToolController {
     if (!b) return;
     const r = appendPiece(this.world, b, type);
     if (!r.ok) {
-      this.notify(TRACK_FAIL_TEXT[r.reason]);
-      this.onEvent?.('error');
+      this.fail(TRACK_FAIL_TEXT[r.reason]);
       return;
     }
     const t = b.track!;
     if (t.closed && t.error) {
-      this.notify(`코스가 이어졌지만 ${t.error}`);
-      this.onEvent?.('error');
+      this.fail(`코스가 이어졌지만 ${t.error}`);
     } else if (t.ok) {
       this.notify('롤러코스터 완성! 입구에 길을 이으면 운행을 시작합니다');
       this.onEvent?.('chime');
@@ -196,7 +195,7 @@ export class ToolController {
     const b = this.trackBuilding;
     if (!b) return;
     if (undoPiece(this.world, b)) this.onEvent?.('demolish');
-    else this.notify('지울 조각이 없습니다');
+    else this.fail('지울 조각이 없습니다');
   }
 
   clearTrackPieces(): void {
@@ -204,9 +203,16 @@ export class ToolController {
     if (b && clearTrack(this.world, b) > 0) this.onEvent?.('demolish');
   }
 
-  notify(msg: string): void {
+  notify(msg: string, tone: 'info' | 'error' = 'info'): void {
     this.message = msg;
-    this.messageUntil = performance.now() + 2500;
+    this.messageTone = tone;
+    this.messageUntil = performance.now() + (tone === 'error' ? 3000 : 2500);
+  }
+
+  /** 실패 알림: 빨간 메시지(마우스 위치에 떠오르는 말풍선 포함) + 오류음 */
+  fail(msg: string): void {
+    this.notify(msg, 'error');
+    this.onEvent?.('error');
   }
 
   /** 손님은 건물 앞에 그려지므로 클릭 반경 안에 있으면 건물보다 우선한다. 시설 안(숨김)의 손님은 제외. */
@@ -268,13 +274,11 @@ export class ToolController {
           this.notify('트랙을 이어 붙여 역의 시작 칸으로 돌아오세요');
         }
       } else {
-        this.notify(FAIL_TEXT[check.reason]);
-        this.onEvent?.('error');
+        this.fail(FAIL_TEXT[check.reason]);
       }
     } else if (tool.kind === 'demolish') {
       if (demolishAt(this.world, t.x, t.y) === null) {
-        this.notify('철거할 대상이 없습니다');
-        this.onEvent?.('error');
+        this.fail('철거할 대상이 없습니다');
       } else {
         this.onEvent?.('demolish');
       }
@@ -300,15 +304,15 @@ export class ToolController {
     const line = lineTiles(start, t);
     if (tool.kind === 'terrain') {
       const { changed, short, firstFail } = paintTerrain(this.world, line, tool.mode);
-      if (short) this.notify('돈이 부족합니다');
-      else if (changed === 0) this.notify(firstFail ? TERRAIN_FAIL_TEXT[firstFail] : '지형을 바꿀 수 없습니다');
-      this.onEvent?.(short || changed === 0 ? 'error' : 'build');
+      if (short) this.fail(changed > 0 ? `돈이 부족해 ${changed}칸만 바꿨습니다` : '돈이 부족합니다');
+      else if (changed === 0) this.fail(firstFail ? TERRAIN_FAIL_TEXT[firstFail] : '지형을 바꿀 수 없습니다');
+      else this.onEvent?.('build');
       return;
     }
     const { placed, short } = tool.kind === 'path' ? placePaths(this.world, line) : placeScenery(this.world, line, tool.def);
-    if (short) this.notify('돈이 부족합니다');
-    else if (placed === 0) this.notify(tool.kind === 'path' ? '길을 깔 수 없는 위치입니다' : '빈 잔디에만 심을 수 있습니다');
-    this.onEvent?.(short || placed === 0 ? 'error' : tool.kind === 'path' ? 'path' : 'build');
+    if (short) this.fail(placed > 0 ? `돈이 부족해 ${placed}칸만 놓았습니다` : '돈이 부족합니다');
+    else if (placed === 0) this.fail(tool.kind === 'path' ? '길을 깔 수 없는 위치입니다' : '빈 잔디에만 심을 수 있습니다');
+    else this.onEvent?.(tool.kind === 'path' ? 'path' : 'build');
   }
 
   preview(hover: Tile | null): Preview | null {

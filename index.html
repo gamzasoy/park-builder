@@ -114,6 +114,25 @@
       #hint.msg { font-weight: 700; color: #3a1c00; background: #ffd27a; border-color: #b8661a; animation: hint-pop 0.35s ease-out; }
       @keyframes hint-pop { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
+      /* 실패 메시지: 쪽지는 빨갛게, 돈 표시는 흔들리고, 누른 자리에서 말풍선이 떠오른다 */
+      #hint.msg.err { color: #fff; background: #d63c2f; border-color: #7a1810; animation: hint-shake 0.4s ease-out; }
+      @keyframes hint-shake { 0%, 100% { transform: none; } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+      #money.shake { animation: money-shake 0.5s ease-out; color: #ff6b5e !important; border-color: #d63c2f !important; background: rgba(214,60,47,0.35) !important; }
+      @keyframes money-shake { 0%, 100% { transform: none; } 15% { transform: translateX(-7px) scale(1.08); } 35% { transform: translateX(7px) scale(1.08); } 55% { transform: translateX(-5px); } 75% { transform: translateX(4px); } }
+      .float-err {
+        position: fixed; z-index: 20; transform: translate(-50%, -130%); pointer-events: none; white-space: nowrap;
+        padding: 6px 12px; font-size: 15px; font-weight: 700; color: #fff; background: #d63c2f; border: 2px solid #fff; border-radius: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.45); text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+        animation: float-err 1.6s ease-out forwards;
+      }
+      @keyframes float-err {
+        0% { opacity: 0; transform: translate(-50%, -100%) scale(0.6); }
+        12% { opacity: 1; transform: translate(-50%, -140%) scale(1.1); }
+        22% { transform: translate(-50%, -140%) scale(1); }
+        75% { opacity: 1; transform: translate(-50%, -190%); }
+        100% { opacity: 0; transform: translate(-50%, -230%); }
+      }
+
       /* 큰 알림(토스트): 화면 위쪽 가운데 */
       #toasts {
         position: fixed; z-index: 6; top: calc(var(--hud-h, 36px) + 46px); left: 50%; transform: translateX(-50%);
@@ -145,7 +164,7 @@
       @keyframes toast-out { to { opacity: 0; transform: translateY(-12px) scale(0.95); } }
       @keyframes toast-icon { 0% { transform: scale(0.3) rotate(-20deg); } 60% { transform: scale(1.3) rotate(8deg); } 100% { transform: none; } }
       @keyframes toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-      @media (prefers-reduced-motion: reduce) { .toast, .toast .t-icon, #hint.msg { animation: none; } .toast .t-bar { display: none; } }
+      @media (prefers-reduced-motion: reduce) { .toast, .toast .t-icon, #hint.msg, #money.shake { animation: none; } .toast .t-bar { display: none; } .float-err { animation-name: float-err-still; } @keyframes float-err-still { 0%, 80% { opacity: 1; } 100% { opacity: 0; } } }
       #goal { right: 16px; }
 
       #toolbar {

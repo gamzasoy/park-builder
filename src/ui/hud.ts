@@ -5,6 +5,7 @@ import { GOAL, goalProgress } from '../sim/goals';
 import { BUS_GUESTS } from '../sim/events';
 import { clockOf, isNight } from '../sim/daynight';
 import { rainbowAt } from '../sim/weather';
+import { floatError } from './toast';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
 
@@ -142,11 +143,22 @@ export class Hud {
     // 새 메시지가 오면 쪽지를 강조하고 튀어 오르게 한다(같은 메시지가 다시 와도 다시 튄다)
     if (showing && this.tools.messageUntil !== this.shownMsgAt) {
       this.shownMsgAt = this.tools.messageUntil;
-      this.hint.classList.remove('msg');
+      const err = this.tools.messageTone === 'error';
+      this.hint.classList.remove('msg', 'err');
       void this.hint.offsetWidth; // 애니메이션 다시 시작
       this.hint.classList.add('msg');
+      if (err) {
+        this.hint.classList.add('err');
+        floatError(this.tools.message);
+        if (this.tools.message.includes('돈')) {
+          this.money.classList.remove('shake');
+          void this.money.offsetWidth;
+          this.money.classList.add('shake');
+          setTimeout(() => this.money.classList.remove('shake'), 600);
+        }
+      }
     } else if (!showing && this.hint.classList.contains('msg')) {
-      this.hint.classList.remove('msg');
+      this.hint.classList.remove('msg', 'err');
     }
     setText(this.hint, text);
   }

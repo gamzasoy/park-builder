@@ -255,7 +255,7 @@ const hud = new Hud(world, tools, loop, {
     missionPanel.toggle();
     if (missionPanel.open) financePanel.toggle(false);
   },
-  onSave: () => tools.notify(saveNow() ? '저장했습니다' : '저장할 수 없습니다 (브라우저 저장소 사용 불가)'),
+  onSave: () => (saveNow() ? tools.notify('저장했습니다') : tools.fail('저장할 수 없습니다 (브라우저 저장소 사용 불가)')),
   onNewGame: confirmNewGame,
 });
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
@@ -264,14 +264,12 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     tools.notify(`${withObj(STAFF_NAME[kind])} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
     sound.play('build');
   } else {
-    tools.notify('더 이상 고용할 수 없습니다');
-    sound.play('error');
+    tools.fail('더 이상 고용할 수 없습니다');
   }
 }, () => {
   const err = launchFireworks(world);
   if (err) {
-    tools.notify(err);
-    sound.play('error');
+    tools.fail(err);
   } else {
     toasts.show('🎆', '불꽃놀이 시작!', isNight(world.tick) ? '밤하늘이라 효과가 두 배예요' : `손님들이 하늘을 올려다봐요 (${won(FIREWORKS_COST)})`, 'event');
     sound.play('win');
