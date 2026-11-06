@@ -57,6 +57,19 @@ try {
   check(Math.abs((await tbTop()) - openTop) < 2, '펼치기 버튼으로 도구 막대가 다시 나타남');
 
 
+  // 그룹 탭: 한 그룹만 펼쳐 보이고, 탭을 누르면 그 그룹으로 바뀐다
+  const visibleTools = () => game(() => [...document.querySelectorAll('#toolbar .group button')].filter((b) => b.offsetParent !== null).map((b) => b.dataset.tool));
+  const tab = (name) => page.locator('#toolbar .tb-tab', { hasText: name }).tap();
+  check(await game(() => document.querySelectorAll('#toolbar .tb-tab').length >= 8), '휴대폰에서는 그룹 탭이 보임');
+  check((await visibleTools()).join() === 'path,demolish', `처음엔 기본 그룹만 펼쳐짐 (${(await visibleTools()).join()})`);
+  await tab('놀이기구');
+  const rideTools = await visibleTools();
+  check(rideTools.length >= 10 && rideTools.every((k) => k.startsWith('build:')), `탭을 누르면 놀이기구만 보임 (${rideTools.length}개)`);
+  check(await game(() => { const g = document.querySelector('#toolbar .group.open'); return g.scrollWidth <= window.innerWidth; }), '놀이기구 그룹이 옆으로 넘기지 않아도 한 화면에 들어감');
+  check(await game(() => document.querySelector('#toolbar .tb-tab.active').textContent.includes('놀이기구')), '선택한 탭이 강조됨');
+  await shot('01c-tabs');
+  await tab('기본');
+
   // 시작 위치에서는 길 아래쪽이 툴바에 가리므로 카메라를 작업 지점으로 옮긴다
   await game(() => { window.__game.setZoom(0.8); window.__game.focus(24, 39); });
 
@@ -74,6 +87,7 @@ try {
   await shot('02-path');
 
   // 건물: 손가락을 대고 있는 동안은 설치되지 않고, 떼면 설치
+  await tab('놀이기구');
   await page.locator('[data-tool="build:carousel"]').tap();
   const c = await at(24, 32);
   await touch('touchStart', [c]);
@@ -84,6 +98,7 @@ try {
   await shot('03-built');
 
   // 두 번째 손가락이 닿으면 진행 중이던 길 깔기가 취소된다
+  await tab('기본');
   await page.locator('[data-tool="path"]').tap();
   const p1 = await at(20, 40), p2 = await at(20, 36);
   await touch('touchStart', [p1]);

@@ -16,8 +16,24 @@ import { won } from './hud';
 import { buildingIcon, demolishIcon, fireworksIcon, paradeIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
 import { TERRAIN_COST } from '../sim/terrain';
 
+/** 휴대폰 화면의 그룹 탭에 붙는 아이콘 */
+const GROUP_ICON: Record<string, string> = {
+  기본: '🛤️', 놀이기구: '🎡', '직원 고용': '👷', 공연: '🎆', 매점: '🍔', 장식: '🌳', 지형: '⛰️', 특별: '📷',
+};
+const OPEN_GROUP_KEY = 'park-builder:toolbar-group';
+
+/**
+ * 아래 도구 막대. PC에서는 그룹을 모두 펼쳐 보여 주고, 휴대폰 가로 화면(CSS)에서는 맨 위의 그룹 탭으로
+ * 한 그룹만 펼쳐 보여 준다(옆으로 길게 넘기지 않아도 되게).
+ */
 export class Toolbar {
   private buttons = new Map<string, HTMLButtonElement>();
+  /** 휴대폰 화면의 그룹 탭과 그룹(같은 순서), 그룹마다 담긴 버튼 키 */
+  private tabs: HTMLButtonElement[] = [];
+  private groups: HTMLElement[] = [];
+  private groupKeys: string[][] = [];
+  private tabBar = document.createElement('div');
+  private open = 0;
   private activeKey = '';
   private hintKey: string | null = null;
 
@@ -29,6 +45,9 @@ export class Toolbar {
     onPhoto: () => void,
     onParade: () => void,
   ) {
+    this.tabBar.className = 'tb-tabs';
+    this.root.append(this.tabBar);
+    try { this.open = Number(localStorage.getItem(OPEN_GROUP_KEY) ?? 0) || 0; } catch { /* 저장소 사용 불가 */ }
     this.group('기본', [
       this.button('path', '길', PATH_COST, { kind: 'path' }, pathIcon()),
       this.button('demolish', '철거', undefined, { kind: 'demolish' }, demolishIcon()),
@@ -51,6 +70,7 @@ export class Toolbar {
     this.group('특별', [
       this.actionButton('photo', '기념사진', '기념사진: 지금 공원 모습을 이미지로 저장 (P)', '무료', photoIcon(), onPhoto),
     ]);
+    this.openGroup(this.open);
   }
 
   /** 매 프레임 호출: 선택된 도구(Esc 해제 포함)에 맞춰 하이라이트 갱신 */
@@ -62,12 +82,32 @@ export class Toolbar {
     this.activeKey = key;
   }
 
-  /** 초반 안내: 누를 버튼을 깜빡여 알려 준다(null이면 해제) */
+  /** 초반 안내: 누를 버튼을 깜빡여 알려 준다(null이면 해제). 휴대폰에서 접힌 그룹이면 그 그룹 탭도 깜빡인다 */
   setHint(key: string | null): void {
     if (key === this.hintKey) return;
     if (this.hintKey) this.buttons.get(this.hintKey)?.classList.remove('hint');
     if (key) this.buttons.get(key)?.classList.add('hint');
     this.hintKey = key;
+    this.syncTabHint();
+  }
+
+  /** 휴대폰 화면에서 i번째 그룹만 펼친다(PC에서는 모든 그룹이 보여 겉보기 변화가 없다) */
+  openGroup(i: number): void {
+    this.open = Math.max(0, Math.min(this.groups.length - 1, i));
+    this.groups.forEach((g, j) => g.classList.toggle('open', j === this.open));
+    this.tabs.forEach((t, j) => {
+      t.classList.toggle('active', j === this.open);
+      t.setAttribute('aria-selected', String(j === this.open));
+    });
+    // 펼친 그룹은 처음부터 보이게
+    this.groups[this.open]?.scrollTo?.({ left: 0 });
+    try { localStorage.setItem(OPEN_GROUP_KEY, String(this.open)); } catch { /* 무시 */ }
+    this.syncTabHint();
+  }
+
+  private syncTabHint(): void {
+    const g = this.hintKey ? this.groupKeys.findIndex((keys) => keys.includes(this.hintKey!)) : -1;
+    this.tabs.forEach((t, j) => t.classList.toggle('hint', j === g && j !== this.open));
   }
 
   private defButton(d: BuildingDef): HTMLButtonElement {
@@ -125,8 +165,24 @@ export class Toolbar {
   }
 
   private group(title: string, items: HTMLButtonElement[]): void {
+    const i = this.groups.length;
+    const tab = document.createElement('button');
+    tab.className = 'tb-tab';
+    tab.dataset.group = String(i);
+    tab.setAttribute('role', 'tab');
+    tab.textContent = `${GROUP_ICON[title] ?? ''} ${title}`.trim();
+    tab.addEventListener('click', () => {
+      tab.blur();
+      this.openGroup(i);
+    });
+    this.tabBar.append(tab);
+    this.tabs.push(tab);
+    this.groupKeys.push(items.map((b) => b.dataset.tool ?? ''));
+
     const g = document.createElement('div');
     g.className = 'group';
+    g.dataset.group = String(i);
+    this.groups.push(g);
     const h = document.createElement('div');
     h.className = 'title';
     h.textContent = title;
