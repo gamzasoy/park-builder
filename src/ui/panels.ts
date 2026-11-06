@@ -129,7 +129,9 @@ export class BuildingPanel {
       b.track && !b.track.ok
         ? `조각 ${b.track.pieces.length}개 · 미완성`
         : def.kind === 'ride'
-        ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초`
+        ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초${def.coaster ? ` · 📸 사진 ${(b.photos ?? 0).toLocaleString('ko-KR')}장` : ''}`
+        : def.balloon
+        ? `풍선(기분 좋은 손님·아이) · 동시 ${def.capacity}명`
         : def.umbrella
         ? `우산 판매(비 올 때) · 동시 ${def.capacity}명`
         : def.rest
@@ -156,9 +158,11 @@ const ROWS: [LedgerKey, string][] = [
   ['entrance', '입장료'],
   ['rides', '놀이기구 수익'],
   ['shops', '매점 수익'],
+  ['photos', '탑승 사진'],
   ['missions', '미션 보상'],
   ['construction', '건설/철거'],
   ['fireworks', '불꽃놀이'],
+  ['parade', '퍼레이드'],
   ['upkeep', '유지비'],
   ['wages', '직원 급여'],
 ];
@@ -306,7 +310,8 @@ export class GuestPanel {
     const family = g.kid
       ? g.lostUntil !== undefined ? ' 😭 미아 · 눌러서 찾아 주세요' : ` 🧒 ${guestName(g.leader ?? 0)}네 아이`
       : kidsNow ? ` 👨‍👧 아이 ${kidsNow}명과 함께` : '';
-    setText(this.title, `${guestName(g.id)}${vip}${family}`);
+    const items = `${g.balloon !== undefined ? ' 🎈' : ''}${g.photo !== undefined ? ' 📸' : ''}`;
+    setText(this.title, `${guestName(g.id)}${vip}${family}${items}`);
     const target = g.target !== null ? this.world.buildings.get(g.target) : undefined;
     const targetName = target ? getDef(target.defId).name : '';
     setText(this.state, STATE_TEXT[g.state] + (targetName && g.state !== 'idle' && g.state !== 'leaving' ? ` · ${targetName}` : ''));

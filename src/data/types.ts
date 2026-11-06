@@ -33,6 +33,8 @@ export interface BuildingDef {
   rest?: boolean;
   /** 기념품 가게: 기분이 좋고 돈이 넉넉한 손님이 찾아와 산다 */
   souvenir?: boolean;
+  /** 풍선 가게: 기분 좋은 손님(특히 아이)이 풍선을 사서 들고 다닌다. 가끔 놓치면 하늘로 날아간다 */
+  balloon?: boolean;
   /** 매점 이용 후 추가로 오르는 행복(기본 효과 +6에 더함) */
   joy?: number;
   /** true면 플레이어가 트랙을 직접 이어 만드는 롤러코스터(역 정의) */

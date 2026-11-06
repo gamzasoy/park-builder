@@ -34,6 +34,7 @@ import { guestName } from './sim/reviews';
 import { seasonOf, SEASON_VIEW, type Season } from './sim/season';
 import { MISSIONS } from './sim/missions';
 import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
+import { PARADE_COST, startParade } from './sim/parade';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -351,7 +352,15 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     toasts.show('🎆', '불꽃놀이 시작!', isNight(world.tick) ? '밤하늘이라 효과가 두 배예요' : `손님들이 하늘을 올려다봐요 (${won(FIREWORKS_COST)})`, 'event');
     sound.play('win');
   }
-}, () => takePhoto());
+}, () => takePhoto(), () => {
+  const err = startParade(world);
+  if (err) {
+    tools.fail(err);
+  } else {
+    toasts.show('🎉', '퍼레이드 시작!', `인형탈과 꽃차가 공원 입구에서 출발해요 (${won(PARADE_COST)})`, 'event');
+    sound.play('win');
+  }
+});
 
 // ---- 기념사진: 지금 화면(공원)을 이미지로 저장 ----
 function takePhoto(): void {

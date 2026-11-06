@@ -927,6 +927,114 @@ function souvenirShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): vo
   }
 }
 
+/** 풍선 색(손님이 든 풍선·풍선 가게·꽃차가 함께 쓴다) */
+export const BALLOON_PALETTE = ['#ff4f6d', '#ffc93c', '#4cc9f0', '#7bd66b', '#b583ff', '#ff9f43'];
+
+/** 줄에 매달린 풍선 하나: (x, y)는 풍선 가운데 */
+export function drawBalloon(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, color: string): void {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = 'rgba(40,30,30,0.55)';
+  ctx.lineWidth = Math.max(0.6, 0.6 * z);
+  ctx.beginPath();
+  ctx.ellipse(x, y, 3.5 * z, 4.3 * z, 0, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  // 매듭
+  ctx.beginPath();
+  ctx.moveTo(x - 0.9 * z, y + 4.9 * z);
+  ctx.lineTo(x + 0.9 * z, y + 4.9 * z);
+  ctx.lineTo(x, y + 4.1 * z);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.arc(x - 1.2 * z, y - 1.5 * z, 1 * z, 0, TAU);
+  ctx.fill();
+}
+
+/** 풍선 가게: 키오스크 위로 알록달록한 풍선 다발이 흔들린다 */
+function balloonShop(ctx: CanvasRenderingContext2D, q: Quad, o: SpriteOpts): void {
+  kiosk(ctx, q, o, '#e0457b');
+  const z = o.z;
+  const anchor = up(center(q), 30 * z);
+  const spots: [number, number][] = [[-7, 14], [-2.5, 19], [2.5, 16], [7, 13], [0, 11]];
+  spots.forEach(([dx, dy], i) => {
+    const sway = Math.sin(o.time * 0.07 + i * 1.7) * 1.4 * z;
+    const p = { x: anchor.x + dx * z + sway, y: anchor.y - dy * z };
+    line(ctx, anchor, { x: p.x, y: p.y + 4.3 * z }, 'rgba(60,60,60,0.6)', Math.max(0.8, 0.6 * z));
+    drawBalloon(ctx, p.x, p.y, z, BALLOON_PALETTE[i % BALLOON_PALETTE.length]);
+  });
+}
+
+/**
+ * 퍼레이드 꽃차: 바퀴 달린 분홍 수레 위에 꽃과 풍선. (x, y)는 수레 바닥 가운데.
+ * 게임 화면과 툴바 아이콘이 함께 쓴다.
+ */
+export function drawParadeFloat(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number, variant = 0): void {
+  const bob = Math.sin(time * 0.3) * 0.6 * z;
+  const by = y - bob;
+  const body = variant % 2 ? '#4a8fe8' : '#ef6fa6';
+  // 그림자
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 9 * z, 3.5 * z, 0, 0, TAU);
+  ctx.fill();
+  // 바퀴
+  ctx.fillStyle = '#3a3030';
+  for (const dx of [-5.5, 5.5]) {
+    ctx.beginPath();
+    ctx.arc(x + dx * z, y - 1.6 * z, 1.8 * z, 0, TAU);
+    ctx.fill();
+  }
+  // 수레
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1, 0.8 * z);
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.roundRect(x - 8 * z, by - 8 * z, 16 * z, 6 * z, 2 * z);
+  ctx.fill();
+  ctx.stroke();
+  // 금색 띠
+  ctx.fillStyle = '#ffd23f';
+  ctx.fillRect(x - 8 * z, by - 5.6 * z, 16 * z, 1.2 * z);
+  // 꽃 장식
+  const flowers = ['#fff', '#ffd23f', '#ff4f6d', '#fff'];
+  flowers.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(x + (-5 + i * 3.4) * z, by - 9 * z, 1.7 * z, 0, TAU);
+    ctx.fill();
+  });
+  // 가운데 장식: 꽃차마다 별 또는 하트
+  ctx.fillStyle = variant % 2 ? '#ffd23f' : '#fff';
+  ctx.beginPath();
+  if (variant % 2) {
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const r = (i % 2 ? 2.2 : 5) * z;
+      const px = x + Math.cos(a) * r;
+      const py = by - 15 * z + Math.sin(a) * r;
+      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+  } else {
+    const hy = by - 15 * z;
+    ctx.moveTo(x, hy + 4 * z);
+    ctx.bezierCurveTo(x - 6 * z, hy - 1 * z, x - 3 * z, hy - 5.5 * z, x, hy - 2.2 * z);
+    ctx.bezierCurveTo(x + 3 * z, hy - 5.5 * z, x + 6 * z, hy - 1 * z, x, hy + 4 * z);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 풍선 두 개
+  for (const [dx, i] of [[-6, 0], [6, 1]] as const) {
+    const sway = Math.sin(time * 0.08 + i * 2) * 1.2 * z;
+    const bx = x + dx * z + sway;
+    const bTop = by - 22 * z;
+    line(ctx, { x: x + dx * 0.8 * z, y: by - 8 * z }, { x: bx, y: bTop + 4.3 * z }, 'rgba(60,60,60,0.6)', Math.max(0.8, 0.6 * z));
+    drawBalloon(ctx, bx, bTop, z, BALLOON_PALETTE[(variant * 2 + i) % BALLOON_PALETTE.length]);
+  }
+}
+
 /** def.id에 맞는 스프라이트를 그린다. 모르는 id면 false(호출한 쪽이 상자로 대체). */
 export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Quad, o: SpriteOpts, w: number, h: number): boolean {
   switch (id) {
@@ -943,6 +1051,7 @@ export function drawRideSprite(ctx: CanvasRenderingContext2D, id: string, q: Qua
     case 'burger': kiosk(ctx, q, o, '#c0392b'); return true;
     case 'drinks': kiosk(ctx, q, o, '#2a8f86'); return true;
     case 'umbrella': umbrellaShop(ctx, q, o); return true;
+    case 'balloon': balloonShop(ctx, q, o); return true;
     case 'pizza': pizzaShop(ctx, q, o, w >= h); return true;
     case 'icecream': iceCreamShop(ctx, q, o); return true;
     case 'cafe': cafeShop(ctx, q, o); return true;

@@ -5,7 +5,7 @@
 import { getDef } from '../data';
 import type { SceneryDef } from '../data/scenery';
 import { tileToWorld, type Vec2 } from '../render/iso';
-import { drawMascot, drawRideSprite, drawScenery, drawVendorTray, poly, setSeason, type Quad } from '../render/sprites';
+import { drawMascot, drawParadeFloat, drawRideSprite, drawScenery, drawVendorTray, poly, setSeason, type Quad } from '../render/sprites';
 import type { StaffKind } from '../sim/staff';
 
 const W = 44;
@@ -164,6 +164,13 @@ export function fireworksIcon(): string {
     ctx.beginPath();
     ctx.moveTo(16, H - 5); ctx.lineTo(16, 25);
     ctx.stroke();
+  });
+}
+
+export function paradeIcon(): string {
+  return render('parade', (ctx) => {
+    drawParadeFloat(ctx, 27, 34, 1.15, 0);
+    drawMascot(ctx, 12, 36, 1.1, 3, true);
   });
 }
 

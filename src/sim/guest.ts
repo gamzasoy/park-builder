@@ -24,6 +24,20 @@ export const REST_GAIN = 45;
 export const SOUVENIR_HAPPY = 70;
 export const SOUVENIR_SPARE = 20;
 
+/** 풍선 가게: 행복이 이 이상인 손님만 산다 / 아이와 함께 온 가족이 매기는 점수 / 혼자 온 손님의 기본 점수 */
+export const BALLOON_HAPPY = 50;
+export const BALLOON_FAMILY_SCORE = 60;
+export const BALLOON_SCORE = 28;
+/** 풍선 색 가짓수(렌더러가 같은 수의 색을 쓴다) */
+export const BALLOON_COLORS = 6;
+/** 풍선을 놓칠지 살피는 주기(틱)와 확률(%) — 아이는 더 자주 놓친다 */
+export const BALLOON_SLIP_EVERY = 50;
+export const BALLOON_SLIP = 2;
+export const BALLOON_SLIP_KID = 4;
+/** 놓친 풍선이 하늘로 날아가는 연출 시간(틱) / 동시에 보여 주는 최대 수 */
+export const FLOAT_TICKS = 90;
+export const MAX_FLOATERS = 24;
+
 /** 대기열 최대 길이: 이보다 길면 손님이 포기 */
 export const MAX_QUEUE = 15;
 /** 대기열에서 참는 최대 틱 */
@@ -33,7 +47,8 @@ export const PATIENCE = 400;
 export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
   | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks' | 'fountain' | 'vipHappy' | 'vipSad' | 'rainbow'
-  | 'lost' | 'lostKid' | 'reunited' | 'kidFun';
+  | 'lost' | 'lostKid' | 'reunited' | 'kidFun'
+  | 'balloon' | 'balloonLost' | 'photo' | 'parade';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
@@ -126,6 +141,10 @@ export interface Guest {
   trash: number;
   /** 우산을 샀는가 */
   umbrella: boolean;
+  /** 들고 있는 풍선의 색(0~BALLOON_COLORS-1). 없으면 풍선이 없다 */
+  balloon?: number;
+  /** 마지막으로 탑승 사진을 산 코스터(건물 id) */
+  photo?: number;
   /** 마지막으로 떠올린 불만(리뷰용) / 공원을 떠나기로 한 이유 */
   gripe?: Thought;
   leaveReason?: Thought;
@@ -253,6 +272,18 @@ function tickScenery(world: World, g: Guest): void {
   if (g.thought === null && (world.tick + g.id) % (SCENERY_EVERY * 8) === SCENERY_EVERY >> 1) think(g, fountain ? 'fountain' : 'scenery');
 }
 
+/** 풍선을 든 손님은 가끔(손님 id·틱으로 결정) 풍선을 놓친다. 놓친 풍선은 하늘로 날아간다 */
+function tickBalloon(world: World, g: Guest): void {
+  if (g.balloon === undefined || g.state === 'visiting' || g.state === 'gone') return;
+  if ((world.tick + g.id) % BALLOON_SLIP_EVERY !== 0) return;
+  if (hash32(g.id, world.tick, 93) % 100 >= (g.kid ? BALLOON_SLIP_KID : BALLOON_SLIP)) return;
+  if (world.floaters.length < MAX_FLOATERS) world.floaters.push({ x: g.x, y: g.y, color: g.balloon, tick: world.tick });
+  g.balloon = undefined;
+  g.needs.happiness = clamp(g.needs.happiness - (g.kid ? 6 : 3));
+  world.stats.balloonsLost = (world.stats.balloonsLost ?? 0) + 1;
+  think(g, 'balloonLost');
+}
+
 /** VIP가 기한 안에 소원을 이루지 못하면 실망하고 평범한 손님이 된다 */
 function tickVip(world: World, g: Guest): void {
   if (!g.vip || g.vip.done || world.tick < g.vip.until) return;
@@ -326,6 +357,7 @@ export function updateGuest(world: World, g: Guest): void {
   tickLitter(world, g);
   tickRain(world, g);
   tickVip(world, g);
+  tickBalloon(world, g);
   tickLost(world, g);
   tickLostParent(world, g);
 
@@ -417,6 +449,7 @@ export function pickTarget(world: World, g: Guest): { b: Building; path: readonl
   const energy = fam ? Math.min(...fam.map((m) => m.needs.energy)) : g.needs.energy;
   const tolerance = fam ? Math.min(...fam.map(thrillTolerance)) : thrillTolerance(g);
   const wantsUmbrella = fam ? fam.some((m) => !m.umbrella) : !g.umbrella;
+  const kidWantsBalloon = kids.some((k) => k.balloon === undefined);
 
   for (const b of world.buildings.values()) {
     if (!world.network.isOperational(b)) continue;
@@ -431,6 +464,12 @@ export function pickTarget(world: World, g: Guest): { b: Building; path: readonl
         // 비 올 때 우산이 없는 손님만 원한다
         if (!isRaining(world) || !wantsUmbrella) continue;
         score = UMBRELLA_SCORE;
+      } else if (def.balloon) {
+        // 풍선이 없는 아이가 있는 가족은 꼭 들르고, 혼자 온 손님은 기분이 좋을 때 가끔 산다
+        if (g.needs.happiness < BALLOON_HAPPY) continue;
+        if (kidWantsBalloon) score = BALLOON_FAMILY_SCORE;
+        else if (g.balloon === undefined && !fam) score = BALLOON_SCORE + (hash32(g.id, b.id, 91) % 16);
+        else continue;
       } else if (def.rest) {
         if (energy >= REST_BELOW) continue;
         score = (100 - energy) * 1.1;
@@ -627,6 +666,10 @@ export function applyEffects(g: Guest, def: BuildingDef): void {
   } else if (def.umbrella) {
     g.umbrella = true;
     n.happiness = clamp(n.happiness + 4);
+  } else if (def.balloon) {
+    if (g.balloon === undefined) g.balloon = (g.id * 7 + g.age) % BALLOON_COLORS;
+    n.happiness = clamp(n.happiness + (g.kid ? 10 : 6));
+    think(g, 'balloon');
   } else if (def.rest) {
     n.energy = clamp(n.energy + REST_GAIN);
     n.thirst = clamp(n.thirst - 20);
@@ -646,6 +689,7 @@ function kidCanUse(world: World, k: Guest, b: Building): boolean {
   if (def.kind === 'ride') return (def.intensity ?? 0) <= KID_MAX_INTENSITY;
   if (def.souvenir) return false; // 기념품은 보호자만 산다
   if (def.umbrella) return !k.umbrella;
+  if (def.balloon) return k.balloon === undefined;
   return true;
 }
 

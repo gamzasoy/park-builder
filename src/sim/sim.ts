@@ -1,6 +1,5 @@
 import { buildingDef } from './coaster';
 import { DAY_TICKS, settleDay } from './economy';
-import { updateGuest } from './guest';
 import { trackDebt, updateGoals } from './goals';
 import { RATING_EVERY, updateRating } from './rating';
 import { updateRide } from './ride';
@@ -11,6 +10,8 @@ import { MISSION_EVERY, updateMissions } from './missions';
 import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
 import { updateEvents } from './events';
+import { updateParade } from './parade';
+import { FLOAT_TICKS, updateGuest } from './guest';
 import { updateWeather } from './weather';
 import type { World } from './world';
 
@@ -26,6 +27,10 @@ export function stepGuests(world: World): void {
   }
   for (const g of world.guests) updateGuest(world, g);
   for (const s of world.staff) updateStaff(world, s);
+  // 놓친 풍선은 하늘로 다 날아가면 지운다
+  if (world.floaters.length && world.tick - world.floaters[0].tick >= FLOAT_TICKS) {
+    world.floaters = world.floaters.filter((f) => world.tick - f.tick < FLOAT_TICKS);
+  }
   if (world.guests.some((g) => g.state === 'gone')) {
     world.guests = world.guests.filter((g) => g.state !== 'gone');
   }
@@ -38,6 +43,7 @@ export function stepWorld(world: World): void {
 
   updateWeather(world);
   updateEvents(world);
+  updateParade(world);
   updateSpawner(world);
   stepGuests(world);
   if (world.guests.length > world.stats.peakGuests) world.stats.peakGuests = world.guests.length;

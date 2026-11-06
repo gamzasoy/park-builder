@@ -48,6 +48,7 @@ export const EVENT_VIEW = {
   vip: { icon: '👑', label: 'VIP 방문', tip: 'VIP 손님: 왕관을 쓴 손님이 타고 싶은 놀이기구를 태워 주면 상금을 받습니다' },
   rainbow: { icon: '🌈', label: '무지개', tip: '무지개: 비 온 다음 날 아침, 손님들의 기분이 조금씩 좋아집니다' },
   fireworks: { icon: '🎆', label: '불꽃놀이', tip: '불꽃놀이: 공원 모든 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
+  parade: { icon: '🎉', label: '퍼레이드', tip: '퍼레이드: 행렬 가까이 있는 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
 } as const;
 
 const SNOW_VIEW = { icon: '❄️', label: '눈', tip: '눈: 비와 같아요 · 손님 입장 −30% · 우산 없는 손님은 실외 놀이기구를 꺼리고 기분이 나빠집니다' } as const;
@@ -130,11 +131,12 @@ export class Hud {
     const ev = w.event ? EVENT_VIEW[w.event.kind] : null;
     const show = w.fireworks ? EVENT_VIEW.fireworks : null;
     const rb = rainbowAt(w.weatherSeed, w.tick) ? EVENT_VIEW.rainbow : null;
+    const pd = w.parade ? EVENT_VIEW.parade : null;
     // 이벤트가 하나면 이름까지, 여럿이면 아이콘만(설명은 툴팁) — HUD가 넘치지 않게
-    const extras = [ev, show, rb].filter((x) => x !== null);
+    const extras = [ev, show, pd, rb].filter((x) => x !== null);
     const extraText = extras.length === 1 ? ` · ${extras[0].icon} ${extras[0].label}` : extras.length ? ` ${extras.map((x) => x.icon).join('')}` : '';
     setText(this.weather, `${wv.icon} ${wv.label}${extraText}`);
-    const tip = [wv.tip, ev?.tip, show?.tip, rb?.tip].filter(Boolean).join('\n');
+    const tip = [wv.tip, ev?.tip, show?.tip, pd?.tip, rb?.tip].filter(Boolean).join('\n');
     // 노란 쪽지와 카드가 HUD 아래에 오도록 실제 높이를 CSS에 알린다
     const h = this.hudEl.offsetHeight;
     if (h !== this.hudH) {
