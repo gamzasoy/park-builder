@@ -15,6 +15,12 @@ const MAX_AGE = 9000; // 최대 체류 틱
 const MIN_SCORE = 20;
 /** 비 오는 날 우산이 없는 손님이 우산 가게에 매기는 점수 */
 export const UMBRELLA_SCORE = 70;
+/** 카페: 에너지가 이보다 낮은 손님만 찾는다 / 이용 후 회복량 */
+export const REST_BELOW = 50;
+export const REST_GAIN = 45;
+/** 기념품 가게: 행복이 이 이상이고, 요금 말고도 이만큼 돈이 남는 손님만 산다 */
+export const SOUVENIR_HAPPY = 70;
+export const SOUVENIR_SPARE = 20;
 
 /** 대기열 최대 길이: 이보다 길면 손님이 포기 */
 export const MAX_QUEUE = 15;
@@ -309,6 +315,13 @@ export function pickTarget(world: World, g: Guest): { b: Building; path: readonl
         // 비 올 때 우산이 없는 손님만 원한다
         if (!isRaining(world) || g.umbrella) continue;
         score = UMBRELLA_SCORE;
+      } else if (def.rest) {
+        if (g.needs.energy >= REST_BELOW) continue;
+        score = (100 - g.needs.energy) * 1.1;
+      } else if (def.souvenir) {
+        // 한 번 들른 가게는 다시 찾지 않고, 기분 좋은 손님이 여윳돈이 있을 때만
+        if (g.needs.happiness < SOUVENIR_HAPPY || g.money < b.price + SOUVENIR_SPARE || g.visited.includes(b.id)) continue;
+        score = 30 + (g.needs.happiness - SOUVENIR_HAPPY) + world.rng.next() * 20;
       } else {
         if (!def.serves) continue;
         const need = g.needs[def.serves];
@@ -485,8 +498,14 @@ export function applyEffects(g: Guest, def: BuildingDef): void {
   } else if (def.umbrella) {
     g.umbrella = true;
     n.happiness = clamp(n.happiness + 4);
+  } else if (def.rest) {
+    n.energy = clamp(n.energy + REST_GAIN);
+    n.thirst = clamp(n.thirst - 20);
+    n.happiness = clamp(n.happiness + 4);
+  } else if (def.souvenir) {
+    n.happiness = clamp(n.happiness + 10);
   } else if (def.serves) {
     n[def.serves] = clamp(n[def.serves] - 70);
-    n.happiness = clamp(n.happiness + 6);
+    n.happiness = clamp(n.happiness + 6 + (def.joy ?? 0));
   }
 }

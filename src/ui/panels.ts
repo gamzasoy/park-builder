@@ -104,7 +104,11 @@ export class BuildingPanel {
         ? `재미 ${def.fun ?? 0} · 정원 ${def.capacity}명 · ${def.duration / 10}초`
         : def.umbrella
         ? `우산 판매(비 올 때) · 동시 ${def.capacity}명`
-        : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소 · 동시 ${def.capacity}명`,
+        : def.rest
+        ? `에너지 회복 · 동시 ${def.capacity}명`
+        : def.souvenir
+        ? `기념품(기분 좋은 손님) · 동시 ${def.capacity}명`
+        : `${def.serves ? NEED_LABEL[def.serves] : ''} 해소${def.joy ? ' · 기분 UP' : ''} · 동시 ${def.capacity}명`,
     );
     // 대기 시간 추정: 놀이기구는 한 사이클에 정원만큼, 매점은 정원만큼 동시에 처리
     const seconds = Math.ceil(b.queue.length / def.capacity) * ((def.duration + (def.kind === 'ride' ? 5 : 0)) / 10);
