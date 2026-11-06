@@ -42,6 +42,14 @@ try {
   check(await game(() => document.getElementById('tool-actions').hidden), '도구가 없으면 회전/취소 버튼이 숨겨져 있음');
   check(await game(() => document.documentElement.scrollWidth <= window.innerWidth), '페이지에 가로 스크롤이 없음');
   await shot('01-start');
+  const hintBox = await game(() => {
+    const r = (id) => document.getElementById(id).getBoundingClientRect();
+    const h = r('hint'), t = r('tutorial'), tb = r('toolbar'), el = document.getElementById('hint');
+    const overlap = !(h.right <= t.left || h.left >= t.right || h.bottom <= t.top || h.top >= t.bottom);
+    return { overlap, clipped: el.scrollWidth > el.clientWidth + 1, aboveToolbar: h.bottom <= tb.top, inside: h.left >= 0 && h.right <= innerWidth };
+  });
+  check(!hintBox.overlap && !hintBox.clipped && hintBox.aboveToolbar && hintBox.inside, '안내 쪽지가 시작 가이드에 가리지 않고 잘리지 않음(툴바 바로 위)');
+  check(await game(() => { const g = document.getElementById('goal'); return g.scrollWidth <= g.clientWidth + 1 && g.getBoundingClientRect().right <= innerWidth; }), '목표 표시가 잘리지 않음');
 
   // 도구 막대 접기/펼치기
   const tbTop = () => game(() => { const t = document.getElementById('toolbar'); return getComputedStyle(t).display === 'none' ? Infinity : t.getBoundingClientRect().top; });

@@ -33,6 +33,20 @@ const HINTS: Record<string, string> = {
   scenery: '나무·꽃·쓰레기통: 빈 잔디를 클릭하거나 드래그해 놓기 · 길가의 나무는 손님 기분을 좋게 하고, 쓰레기통은 근처 3칸의 쓰레기를 받아 줍니다 (Esc 취소)',
 };
 
+/** 터치 화면에서는 '클릭' 대신 '누르기'로, 좁은 화면에 맞게 짧게 */
+const TOUCH_HINTS: Record<string, string> = {
+  none: '건물·손님·직원을 누르면 정보가 보여요 · 아래 툴바에서 도구를 고르세요',
+  path: '길: 손가락으로 끌어 직선으로 깔기',
+  build: '놓을 곳에서 손가락을 떼면 설치 · 입구(노란 칸)를 길에 이어야 운영돼요',
+  move: '옮길 곳을 누르세요 · 비용 없음',
+  demolish: '철거: 건물·길(환급 50%)이나 나무·꽃(무료)을 누르기',
+  terrain: '지형: 누르거나 끌어서 한 칸씩 올리기·내리기 (이웃 칸과 1단계 차이까지)',
+  scenery: '나무·꽃·쓰레기통: 빈 잔디를 누르거나 끌어서 놓기',
+};
+const isTouch = (): boolean => {
+  try { return matchMedia('(pointer: coarse)').matches; } catch { return false; }
+};
+
 const WEATHER_VIEW = {
   sunny: { icon: '☀️', label: '맑음', tip: '맑음: 손님이 평소처럼 찾아옵니다' },
   cloudy: { icon: '☁️', label: '흐림', tip: '흐림: 영향 없음' },
@@ -158,7 +172,8 @@ export class Hud {
     this.updateGoal();
 
     const showing = performance.now() < this.tools.messageUntil;
-    const text = showing ? this.tools.message : HINTS[this.tools.tool.kind];
+    const kind = this.tools.tool.kind;
+    const text = showing ? this.tools.message : (isTouch() ? TOUCH_HINTS[kind] : undefined) ?? HINTS[kind];
     // 새 메시지가 오면 쪽지를 강조하고 튀어 오르게 한다(같은 메시지가 다시 와도 다시 튄다)
     if (showing && this.tools.messageUntil !== this.shownMsgAt) {
       this.shownMsgAt = this.tools.messageUntil;
