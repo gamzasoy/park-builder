@@ -5,12 +5,15 @@ import type { Tool, ToolController } from '../input/tools';
 import { PATH_COST } from '../sim/building';
 import { WAGE } from '../sim/economy';
 import { FIREWORKS_COST } from '../sim/events';
+import { PARADE_COST } from '../sim/parade';
 import { STAFF_KINDS, STAFF_NAME, type StaffKind } from '../sim/staff';
 
 /** 툴바가 한 화면 폭에 들어가도록 버튼에는 짧은 이름을 쓴다(전체 이름은 툴팁) */
-const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원' };
+/** 이름이 긴 건물은 툴바에서 짧게 부른다(전체 이름은 툴팁) */
+const SHORT_LABEL: Record<string, string> = { slide: '미끄럼틀' };
+const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원', security: '경비원' };
 import { won } from './hud';
-import { buildingIcon, demolishIcon, fireworksIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
+import { buildingIcon, demolishIcon, fireworksIcon, paradeIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
 import { TERRAIN_COST } from '../sim/terrain';
 
 export class Toolbar {
@@ -24,6 +27,7 @@ export class Toolbar {
     onHire: (kind: StaffKind) => void,
     onFireworks: () => void,
     onPhoto: () => void,
+    onParade: () => void,
   ) {
     this.group('기본', [
       this.button('path', '길', PATH_COST, { kind: 'path' }, pathIcon()),
@@ -32,6 +36,11 @@ export class Toolbar {
     this.group('놀이기구', RIDES.map((d) => this.defButton(d)));
     // 직원은 놀이기구 줄의 남는 자리에 둬서 넓은 화면에서 툴바가 두 줄을 넘지 않게 한다
     this.group('직원 고용', STAFF_KINDS.map((k) => this.hireButton(k, STAFF_LABEL[k], onHire)));
+    // 공연도 첫째 줄 남는 자리에 둔다(넓은 화면에서 툴바가 두 줄을 넘지 않게)
+    this.group('공연', [
+      this.actionButton('fireworks', '불꽃놀이', `불꽃놀이 (${won(FIREWORKS_COST)}, 하루 한 번, 밤엔 효과 2배)`, won(FIREWORKS_COST), fireworksIcon(), onFireworks),
+      this.actionButton('parade', '퍼레이드', `퍼레이드 (${won(PARADE_COST)}, 하루 한 번): 인형탈과 꽃차가 길을 따라 행진하고, 지나가는 곳의 손님 기분이 오릅니다`, won(PARADE_COST), paradeIcon(), onParade),
+    ]);
     this.group('매점', SHOPS.map((d) => this.defButton(d)));
     this.group('장식', SCENERY.map((d) => this.sceneryButton(d)));
     this.group('지형', [
@@ -40,7 +49,6 @@ export class Toolbar {
     ]);
     // 둘째 줄 끝(지형 뒤)에 둬서 넓은 화면에서 툴바가 두 줄을 넘지 않게 한다
     this.group('특별', [
-      this.actionButton('fireworks', '불꽃놀이', `불꽃놀이 (${won(FIREWORKS_COST)}, 하루 한 번, 밤엔 효과 2배)`, won(FIREWORKS_COST), fireworksIcon(), onFireworks),
       this.actionButton('photo', '기념사진', '기념사진: 지금 공원 모습을 이미지로 저장 (P)', '무료', photoIcon(), onPhoto),
     ]);
   }
@@ -63,7 +71,9 @@ export class Toolbar {
   }
 
   private defButton(d: BuildingDef): HTMLButtonElement {
-    return this.button(`build:${d.id}`, d.name, d.cost, { kind: 'build', def: d }, buildingIcon(d.id));
+    const b = this.button(`build:${d.id}`, SHORT_LABEL[d.id] ?? d.name, d.cost, { kind: 'build', def: d }, buildingIcon(d.id));
+    b.title = `${d.name} (${won(d.cost)})`;
+    return b;
   }
 
   private sceneryButton(d: SceneryDef): HTMLButtonElement {

@@ -56,3 +56,31 @@ export function rainbowAt(seed: number, tick: number): boolean {
   if (day < 1 || tick - day * DAY_TICKS >= RAINBOW_TICKS) return false;
   return weatherKindOf(seed, day - 1) === 'rain' && weatherKindOf(seed, day) !== 'rain';
 }
+
+// ---------------------------------------------------------------- 폭풍
+
+/** 비 오는 날 폭풍이 몰아칠 확률(%) / 폭풍이 생기는 첫날 / 길이(틱) */
+export const STORM_CHANCE = 35;
+export const FIRST_STORM_DAY = 2;
+export const STORM_TICKS = 240;
+/** 폭풍 중 입장 확률 배수 */
+export const STORM_SPAWN_FACTOR = 0.3;
+
+export interface Storm {
+  start: number;
+  end: number;
+}
+
+/** day 번째 날의 폭풍(없으면 null). 비 오는 날에만, 날씨처럼 (시드, 날짜)로 정해진다 */
+export function stormOfDay(seed: number, day: number): Storm | null {
+  if (day < FIRST_STORM_DAY || weatherKindOf(seed, day) !== 'rain') return null;
+  if (hash32(seed, day, 211) % 100 >= STORM_CHANCE) return null;
+  const start = day * DAY_TICKS + 90 + (hash32(seed, day, 213) % 200);
+  return { start, end: start + STORM_TICKS };
+}
+
+/** 틱 시점에 몰아치는 폭풍 */
+export function stormAt(seed: number, tick: number): Storm | null {
+  const s = stormOfDay(seed, Math.floor(tick / DAY_TICKS));
+  return s && tick >= s.start && tick < s.end ? s : null;
+}

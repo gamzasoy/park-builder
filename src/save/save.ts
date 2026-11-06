@@ -2,7 +2,7 @@ import { getDef } from '../data';
 import { sceneryDef } from '../data/scenery';
 import { MAX_LEVEL, restoreTrack, type TrackType } from '../sim/coaster';
 import { claimLoadedTracks } from '../sim/trackedit';
-import type { Guest } from '../sim/guest';
+import { BALLOON_COLORS, type Guest } from '../sim/guest';
 import { DEFAULT_SCENARIO, scenarioById } from '../sim/scenarios';
 import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
@@ -10,8 +10,9 @@ import { MISSION_IDS, type MissionState } from '../sim/missions';
 import { cleanParkName } from '../sim/park';
 import { MAX_REVIEWS, type Review } from '../sim/reviews';
 import { eventAtTick, type Fireworks } from '../sim/events';
+import { paradeTicks } from '../sim/parade';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
-import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
+import { DEFAULT_WEATHER_SEED, stormAt, weatherAtTick, type Weather } from '../sim/weather';
 import {
   emptyLedger, type Building, type GameStatus, type Ledger, type MonthReport, type RatingParts, World,
 } from '../sim/world';
@@ -69,7 +70,7 @@ export interface SaveData {
   ledger: Ledger;
   reports: MonthReport[];
   monthStartEntered: number;
-  stats: { entered: number; left: number; peakGuests: number; vips?: number; lost?: number; reunited?: number; lostGone?: number; families?: number };
+  stats: { entered: number; left: number; peakGuests: number; vips?: number; lost?: number; reunited?: number; lostGone?: number; families?: number; balloonsLost?: number; photos?: number; parades?: number; storms?: number; thefts?: number; shoplifts?: number; caught?: number };
   status: GameStatus;
   endReason: string;
   goalHold: number;
@@ -86,6 +87,9 @@ export interface SaveData {
   reviews?: Review[];
   fireworks?: Fireworks | null;
   lastFireworksDay?: number;
+  /** 퍼레이드 경로는 [x0, y0, x1, y1, ...]로 납작하게 저장 */
+  parade?: { start: number; route: number[] } | null;
+  lastParadeDay?: number;
   /** v4에서 추가. 없으면 직원 없음 */
   staff?: StaffSave[];
   nextStaffId?: number;
@@ -139,6 +143,8 @@ export function serializeWorld(world: World): SaveData {
     missions: { completed: [...world.missions.completed] },
     fireworks: world.fireworks ? { ...world.fireworks } : null,
     lastFireworksDay: world.lastFireworksDay,
+    parade: world.parade ? { start: world.parade.start, route: flatten(world.parade.route) } : null,
+    lastParadeDay: world.lastParadeDay,
     buildings: [...world.buildings.values()].map(({ track, ...b }): BuildingSave => (
       track ? { ...b, track: { pieces: [...track.pieces], spent: track.spent } } : b
     )),
@@ -216,6 +222,7 @@ export function deserializeWorld(data: SaveData): World {
       broken: b.broken === true,
       brokenTicks: isNum(b.brokenTicks) ? b.brokenTicks : 0,
       cycles: isNum(b.cycles) ? b.cycles : 0,
+      photos: isNum(b.photos) ? b.photos : undefined,
       level: isNum(b.level) ? Math.max(1, Math.min(MAX_LEVEL, Math.round(b.level))) : undefined,
     };
     if (savedTrack) {
@@ -241,6 +248,13 @@ export function deserializeWorld(data: SaveData): World {
     thoughtTimer: g.thoughtTimer ?? 0,
     trash: g.trash ?? 0,
     umbrella: g.umbrella === true,
+    balloon: isNum(g.balloon) ? Math.abs(Math.round(g.balloon)) % BALLOON_COLORS : undefined,
+    photo: isNum(g.photo) ? g.photo : undefined,
+    thief: g.thief === true ? true : undefined,
+    loot: isNum(g.loot) ? g.loot : undefined,
+    thefts: isNum(g.thefts) ? g.thefts : undefined,
+    spotted: isNum(g.spotted) ? g.spotted : undefined,
+    shoplifted: isNum(g.shoplifted) ? g.shoplifted : undefined,
     gripe: typeof g.gripe === 'string' ? g.gripe : undefined,
     leaveReason: typeof g.leaveReason === 'string' ? g.leaveReason : undefined,
     vip: g.vip && typeof g.vip.wish === 'string' && isNum(g.vip.until) ? { wish: g.vip.wish, until: g.vip.until, done: g.vip.done === true } : undefined,
@@ -296,7 +310,7 @@ export function deserializeWorld(data: SaveData): World {
   w.ledger = { ...emptyLedger(), ...data.ledger };
   w.reports = data.reports.map((r) => ({ ...r, ledger: { ...emptyLedger(), ...r.ledger } }));
   w.monthStartEntered = data.monthStartEntered;
-  w.stats = { vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, ...data.stats };
+  w.stats = { vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, balloonsLost: 0, photos: 0, parades: 0, storms: 0, thefts: 0, shoplifts: 0, caught: 0, ...data.stats };
   w.status = data.status;
   w.scenario = typeof data.scenario === 'string' && scenarioById(data.scenario) ? data.scenario : DEFAULT_SCENARIO;
   w.stars = isNum(data.stars) ? Math.max(0, Math.min(3, Math.round(data.stars))) : 0;
@@ -312,7 +326,12 @@ export function deserializeWorld(data: SaveData): World {
   const fw = data.fireworks;
   w.fireworks = fw && isNum(fw.start) && isNum(fw.end) && isNum(fw.x) && isNum(fw.y) ? { ...fw } : null;
   w.lastFireworksDay = isNum(data.lastFireworksDay) ? data.lastFireworksDay : -1;
+  const pd = data.parade;
+  const route = pd && isNum(pd.start) && Array.isArray(pd.route) ? unflatten(pd.route.filter(isNum)) : [];
+  w.parade = route.length >= 2 ? { start: pd!.start, end: pd!.start + paradeTicks(route.length), route } : null;
+  w.lastParadeDay = isNum(data.lastParadeDay) ? data.lastParadeDay : -1;
   w.event = eventAtTick(w.weatherSeed, w.tick);
+  w.storm = stormAt(w.weatherSeed, w.tick);
   w.parkName = typeof data.parkName === 'string' ? cleanParkName(data.parkName) : '';
   w.reviews = Array.isArray(data.reviews)
     ? data.reviews

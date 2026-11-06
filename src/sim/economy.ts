@@ -12,7 +12,7 @@ export const MAX_FEE = 50;
 export const START_FEE = 10;
 const MAX_REPORTS = 24;
 /** 직원 종류별 하루 급여 */
-export const WAGE: Record<StaffKind, number> = { janitor: 60, mechanic: 60, entertainer: 70, vendor: 50 };
+export const WAGE: Record<StaffKind, number> = { janitor: 60, mechanic: 60, entertainer: 70, vendor: 50, security: 60 };
 
 export interface GameDate { year: number; month: number; day: number }
 

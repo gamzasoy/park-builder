@@ -13,6 +13,7 @@ import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { appendPiece, beginEdit, canAppendPiece, clearTrack, TRACK_FAIL_TEXT, undoPiece } from '../sim/trackedit';
 import type { Building, World } from '../sim/world';
 import { reuniteKid, type Guest } from '../sim/guest';
+import { catchThief, isSpotted } from '../sim/thief';
 
 export type Tool =
   | { kind: 'none' }
@@ -248,10 +249,19 @@ export class ToolController {
   /** 손님은 건물 앞에 그려지므로 클릭 반경 안에 있으면 건물보다 우선한다. 시설 안(숨김)의 손님은 제외. */
   /** 누른 곳 가까이의 길 잃은 아이(다른 손님 틈에서도 잡히게 반경을 넓게 본다) */
   private lostKidNear(pos: Vec2): Guest | undefined {
+    return this.markedNear(pos, (g) => g.lostUntil !== undefined);
+  }
+
+  /** 누른 곳 가까이의 들킨 도둑(머리 위에 ❗) */
+  private thiefNear(pos: Vec2): Guest | undefined {
+    return this.markedNear(pos, (g) => isSpotted(this.world, g));
+  }
+
+  private markedNear(pos: Vec2, marked: (g: Guest) => boolean): Guest | undefined {
     let best: Guest | undefined;
     let bestD = (GUEST_PICK_RADIUS * 1.5) ** 2;
     for (const g of this.world.guests) {
-      if (g.lostUntil === undefined) continue;
+      if (!marked(g)) continue;
       const p = guestDisplayPos(g, 1);
       const d = (p.x - pos.x) ** 2 + (p.y - pos.y) ** 2;
       if (d < bestD) {
@@ -302,6 +312,12 @@ export class ToolController {
       if (lost) {
         // 알림 카드는 main.ts가 world.stats.reunited를 보고 띄운다
         if (reuniteKid(this.world, lost)) this.onEvent?.('chime');
+        return;
+      }
+      // 들킨 도둑을 누르면 붙잡는다(알림은 main.ts가 world.stats.caught를 보고 띄운다)
+      const thief = pos && sid === null ? this.thiefNear(pos) : undefined;
+      if (thief) {
+        if (catchThief(this.world, thief)) this.onEvent?.('chime');
         return;
       }
       // 쓰레기가 있는 칸을 누르면 직접 줍는다(손님이 붐비는 길에서도 주울 수 있게 손님 선택보다 우선)

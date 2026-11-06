@@ -8,5 +8,6 @@ export const SHOPS: BuildingDef[] = [
   { id: 'icecream', kind: 'shop', name: '아이스크림', w: 1, h: 1, cost: 350, upkeep: 45, height: 26, color: '#f29bc0', price: 7, duration: 15, capacity: 1, serves: 'thirst', joy: 8 },
   { id: 'cafe', kind: 'shop', name: '카페', w: 1, h: 1, cost: 450, upkeep: 60, height: 28, color: '#8a5a3c', price: 8, duration: 40, capacity: 2, rest: true },
   { id: 'souvenir', kind: 'shop', name: '기념품 가게', w: 1, h: 1, cost: 500, upkeep: 50, height: 28, color: '#9b59d0', price: 15, duration: 20, capacity: 1, souvenir: true },
+  { id: 'balloon', kind: 'shop', name: '풍선 가게', w: 1, h: 1, cost: 300, upkeep: 35, height: 26, color: '#ff6fa8', price: 5, duration: 10, capacity: 1, balloon: true },
   { id: 'umbrella', kind: 'shop', name: '우산 가게', w: 1, h: 1, cost: 300, upkeep: 40, height: 26, color: '#3a6fd0', price: 8, duration: 15, capacity: 1, umbrella: true },
 ];

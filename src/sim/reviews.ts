@@ -30,7 +30,7 @@ export interface Review {
 export const MAX_REVIEWS = 40;
 
 /** 손님이 남긴 불만(말풍선으로 떠올린 것 중 마지막). 리뷰 내용에 쓰인다 */
-export const GRIPES: ReadonlySet<Thought> = new Set<Thought>(['waited', 'queueFull', 'expensive', 'litter', 'broken', 'rain', 'vipSad', 'tooIntense', 'lostKid']);
+export const GRIPES: ReadonlySet<Thought> = new Set<Thought>(['waited', 'queueFull', 'expensive', 'litter', 'broken', 'rain', 'vipSad', 'tooIntense', 'lostKid', 'balloonLost', 'robbed', 'storm']);
 
 export function starsFor(happiness: number): number {
   return happiness >= 85 ? 5 : happiness >= 68 ? 4 : happiness >= 50 ? 3 : happiness >= 30 ? 2 : 1;
@@ -47,6 +47,9 @@ const GRIPE_TEXT: Partial<Record<Thought, readonly string[]>> = {
   rain: ['비 맞아서 다 젖었어요', '우산 가게라도 있었으면…'],
   vipSad: ['VIP인데 원하던 기구를 못 탔어요', '실망이에요. 다시는 안 와요'],
   tooIntense: ['너무 무서웠어요 😱', '심장 떨어지는 줄 알았어요'],
+  robbed: ['소매치기를 당했어요 😡 경비원 좀 두세요', '지갑을 털렸어요. 다시는 안 와요'],
+  storm: ['폭풍 때문에 아무것도 못 탔어요', '비바람에 흠뻑 젖었어요 ⛈️'],
+  balloonLost: ['풍선을 놓쳐서 아이가 울었어요 🎈', '산 지 얼마 안 된 풍선이 날아갔어요'],
   lostKid: ['아이를 잃어버릴 뻔했어요… 미아 안내가 필요해요', '애를 찾느라 하루가 다 갔어요'],
 };
 
@@ -74,6 +77,9 @@ export function makeReview(world: World, g: Guest): Review {
     text = fav
       ? pick([`아이들이 ${fav}를 제일 좋아했어요!`, `가족 나들이로 최고예요. ${fav} 강추`, `아이가 ${fav} 또 타재요 👨‍👩‍👧`], g, 8)
       : pick(['아이들과 즐거운 하루였어요', '가족끼리 오기 좋은 공원이에요'], g, 9);
+  } else if (stars >= 4 && g.photo !== undefined && world.buildings.has(g.photo)) {
+    const coaster = buildingDef(world.buildings.get(g.photo)!).name;
+    text = pick([`${coaster} 탑승 사진 액자에 걸어 둘게요 📸`, `사진 속 제 표정 진짜 웃겨요 ㅋㅋ ${coaster} 최고`], g, 11);
   } else if (stars >= 4) {
     text = fav
       ? pick([`${fav} 또 타러 올게요!`, `${fav} 정말 재밌었어요`, `${park} 최고! 특히 ${fav}`, `하루 종일 신났어요. ${fav} 강추!`], g, 2)

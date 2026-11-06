@@ -10,8 +10,11 @@ import { newTutorial, type TutorialState } from './tutorial';
 import { newMissions, type MissionState } from './missions';
 import type { Fireworks, ParkEvent } from './events';
 import type { Review } from './reviews';
+import type { Parade } from './parade';
+import type { Storm } from './weather';
+import type { StormDamage } from './storm';
 
-export const START_MONEY = 10000;
+export const START_MONEY = 20000;
 
 export interface Building {
   id: number;
@@ -41,6 +44,8 @@ export interface Building {
   baseH?: number;
   /** 신뢰도(0~100, 놀이기구만). 운행할 때마다 줄고 정비로 회복된다 */
   reliability: number;
+  /** 롤러코스터: 지금까지 판 탑승 사진 수 */
+  photos?: number;
   /** 고장 여부(놀이기구만). 고장 나면 운영 불가 */
   broken: boolean;
   /** 고장 난 뒤 흐른 틱 */
@@ -54,7 +59,7 @@ export interface Building {
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */
 export type GameStatus = 'playing' | 'won' | 'lost' | 'sandbox';
 
-export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'missions' | 'fireworks' | 'construction' | 'upkeep' | 'wages';
+export type LedgerKey = 'entrance' | 'rides' | 'shops' | 'photos' | 'missions' | 'theft' | 'fireworks' | 'parade' | 'construction' | 'upkeep' | 'wages';
 export type Ledger = Record<LedgerKey, number>;
 
 export interface MonthReport {
@@ -80,7 +85,7 @@ export interface RatingParts {
   cleanliness: number;
 }
 
-export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, missions: 0, fireworks: 0, construction: 0, upkeep: 0, wages: 0 });
+export const emptyLedger = (): Ledger => ({ entrance: 0, rides: 0, shops: 0, photos: 0, missions: 0, theft: 0, fireworks: 0, parade: 0, construction: 0, upkeep: 0, wages: 0 });
 
 export class World {
   readonly map = new TileMap();
@@ -107,8 +112,18 @@ export class World {
   /** 진행 중인 불꽃놀이 / 마지막으로 쏜 날(하루 한 번) */
   fireworks: Fireworks | null = null;
   lastFireworksDay = -1;
+  /** 진행 중인 퍼레이드 / 마지막으로 연 날(하루 한 번) */
+  parade: Parade | null = null;
+  lastParadeDay = -1;
+  /** 손님이 놓쳐 하늘로 날아가는 풍선(화면 연출용, 저장하지 않는다) */
+  floaters: { x: number; y: number; color: number; tick: number }[] = [];
+  /** 지금 몰아치는 폭풍(날씨 시드와 틱으로 다시 계산하므로 저장하지 않는다) / 마지막 폭풍 피해(알림용) */
+  storm: Storm | null = null;
+  stormDamage: StormDamage | null = null;
+  /** 마지막으로 도둑을 잡은 때(알림용, 저장하지 않는다) */
+  lastCatch: { loot: number; tick: number } | null = null;
   /** lost: 길을 잃은 아이 수 / reunited: 보호자에게 데려다준 아이 수 / lostGone: 끝내 못 찾고 떠난 가족 수 / families: 입장한 가족 수 */
-  stats = { entered: 0, left: 0, peakGuests: 0, vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0 };
+  stats = { entered: 0, left: 0, peakGuests: 0, vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, balloonsLost: 0, photos: 0, parades: 0, storms: 0, thefts: 0, shoplifts: 0, caught: 0 };
 
   status: GameStatus = 'playing';
   /** 종료 사유(결과 화면에 표시) */
@@ -178,6 +193,12 @@ export class World {
     this.event = src.event;
     this.fireworks = src.fireworks;
     this.lastFireworksDay = src.lastFireworksDay;
+    this.parade = src.parade;
+    this.lastParadeDay = src.lastParadeDay;
+    this.floaters = [];
+    this.storm = src.storm;
+    this.stormDamage = null;
+    this.lastCatch = null;
     this.stats = src.stats;
     this.entranceFee = src.entranceFee;
     this.ledger = src.ledger;

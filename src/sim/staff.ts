@@ -5,13 +5,15 @@ import { buildingDef } from './coaster';
 import { connected } from './pathfinding';
 import { INSPECT_BELOW, MAX_RELIABILITY } from './ride';
 import type { Building, World } from './world';
+import { guardCatch, isSpotted } from './thief';
 
 /**
  * 직원 종류. janitor는 쓰레기를, mechanic은 놀이기구 고장·점검을 맡는다.
  * entertainer는 긴 줄 앞에서 공연해 손님 기분과 인내심을 살리고, vendor는 걸어 다니며 음료를 판다.
+ * security(경비원)는 순찰하며 곁의 소매치기를 잡고, 들킨 도둑을 쫓아간다(sim/thief.ts).
  */
-export type StaffKind = 'janitor' | 'mechanic' | 'entertainer' | 'vendor';
-export const STAFF_KINDS: readonly StaffKind[] = ['janitor', 'mechanic', 'entertainer', 'vendor'];
+export type StaffKind = 'janitor' | 'mechanic' | 'entertainer' | 'vendor' | 'security';
+export const STAFF_KINDS: readonly StaffKind[] = ['janitor', 'mechanic', 'entertainer', 'vendor', 'security'];
 /** idle 대기 / walking 이동 / working 작업 중(제자리) */
 export type StaffState = 'idle' | 'walking' | 'working';
 
@@ -41,7 +43,7 @@ export interface Staff extends Walker {
   job?: 'repair' | 'inspect';
 }
 
-export const STAFF_NAME: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈 연기자', vendor: '음료 판매원' };
+export const STAFF_NAME: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈 연기자', vendor: '음료 판매원', security: '경비원' };
 
 /** 연기자: 이 길이 이상인 줄을 찾아가 SHOW_TICKS 동안 공연한다 */
 export const SHOW_QUEUE = 3;
@@ -115,6 +117,7 @@ export function updateStaff(world: World, s: Staff): void {
 
   if (s.kind === 'entertainer' && s.state === 'working' && (world.tick + s.id) % CHEER_EVERY === 0) cheer(world, s);
   if (s.kind === 'vendor' && (world.tick + s.id) % THINK_EVERY === 0) sell(world, s);
+  if (s.kind === 'security') return patrol(world, s);
 
   if (s.state === 'working') {
     if (--s.timer <= 0) {
@@ -345,6 +348,49 @@ function nearestDirty(world: World, from: Tile, claimed: ReadonlySet<number>): T
     }
   }
   return null;
+}
+
+/** 경비원이 걷는 속도(도둑을 쫓을 때) / 쫓을 도둑을 다시 찾는 주기(틱) */
+export const GUARD_SPEED = 0.22;
+const GUARD_REPLAN = 10;
+
+/** 경비원: 곁의 도둑을 잡고, 들킨 도둑이 있으면 쫓아가고(경로는 주기적으로 다시 잡는다), 없으면 순찰한다 */
+function patrol(world: World, s: Staff): void {
+  if (guardCatch(world, s)) {
+    s.state = 'idle';
+    s.target = null;
+    return;
+  }
+  const replan = (world.tick + s.id) % GUARD_REPLAN === 0;
+  if (s.state === 'walking') {
+    if (s.pathVersion !== world.map.version) {
+      s.state = 'idle';
+      s.target = null;
+    } else if (advance(s, s.target ? GUARD_SPEED : STAFF_SPEED)) {
+      s.state = 'idle';
+      s.target = null;
+    }
+    // 순찰 중인 한 칸은 마저 걷고, 쫓는 중이면 주기마다 도둑 위치로 경로를 다시 잡는다
+    if (s.state === 'walking' && !(replan && s.target)) return;
+  } else if (!replan && (world.tick + s.id) % THINK_EVERY !== 0) {
+    return;
+  }
+  // 들킨 도둑 중 가장 가까운 곳으로
+  let best: readonly Tile[] | null = null;
+  for (const g of world.guests) {
+    if (!isSpotted(world, g) || g.state === 'gone') continue;
+    const path = world.network.findPath(s.tile, g.tile);
+    if (path && (!best || path.length < best.length)) best = path;
+  }
+  if (best && best.length >= 2) {
+    s.target = best[best.length - 1];
+    setPath(world, s, best);
+    s.state = 'walking';
+    return;
+  }
+  s.state = 'idle';
+  s.target = null;
+  wander(world, s);
 }
 
 /** 이웃한 길 한 칸으로 느긋하게 걷는다(RNG 대신 해시로 방향을 정한다) */

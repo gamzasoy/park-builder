@@ -34,6 +34,8 @@ import { guestName } from './sim/reviews';
 import { seasonOf, SEASON_VIEW, type Season } from './sim/season';
 import { MISSIONS } from './sim/missions';
 import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
+import { PARADE_COST, startParade } from './sim/parade';
+import { THIEF_BOUNTY } from './sim/thief';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -87,6 +89,9 @@ function newGame(id = DEFAULT_SCENARIO): void {
   seenMissions = world.missions.completed.length;
   seenVips = world.stats.vips;
   seenLost = { ...lostStats() };
+  seenTheft = theftStats();
+  seenStorm = world.storm?.start ?? -1;
+  seenDamage = null;
   shownSeason = seasonOf(world.tick);
   loop.speed = 1;
   modal.hide();
@@ -203,6 +208,44 @@ function watchLostKids(): void {
   seenLost = now;
 }
 
+/** 폭풍이 몰아칠 때 / 지나간 뒤 피해 알림 */
+let seenStorm = world.storm?.start ?? -1;
+let seenDamage = world.stormDamage;
+function watchStorm(): void {
+  const s = world.storm;
+  if (s && s.start !== seenStorm) {
+    seenStorm = s.start;
+    const snow = seasonOf(world.tick) === 'winter';
+    toasts.show(snow ? '🌨️' : '⛈️', snow ? '눈보라가 몰아쳐요!' : '폭풍이 몰아쳐요!', '실외 놀이기구가 멈추고 우산도 소용없어요. 유령의 집·드롭타워 같은 실내 기구는 운영합니다', 'bad');
+    sound.play('error');
+  }
+  const d = world.stormDamage;
+  if (d && d !== seenDamage) {
+    const parts = [d.trees ? `나무·꽃 ${d.trees}곳이 쓰러짐` : '', d.debris ? `길 ${d.debris}칸에 잔해` : '', d.rides ? `실외 기구 ${d.rides}대 신뢰도 하락` : ''].filter(Boolean);
+    toasts.show('🌤️', '폭풍이 지나갔어요', parts.length ? `${parts.join(' · ')} — 청소부·정비공을 보내세요` : '다행히 피해가 없어요', parts.length ? 'bad' : 'good');
+  }
+  seenDamage = d;
+}
+
+/** 도둑질 / 붙잡음 알림(도둑질 알림은 너무 잦지 않게 15초에 한 번) */
+const theftStats = (): { thefts: number; caught: number } => ({ thefts: world.stats.thefts ?? 0, caught: world.stats.caught ?? 0 });
+let seenTheft = theftStats();
+let theftToastAt = -Infinity;
+function watchThieves(): void {
+  const now = theftStats();
+  if (now.thefts > seenTheft.thefts && world.tick - theftToastAt >= 150) {
+    theftToastAt = world.tick;
+    const hasGuard = world.staff.some((s) => s.kind === 'security');
+    toasts.show('🦹', '도둑이야!', `머리 위에 ❗가 뜬 도둑을 눌러 잡으세요 (현상금 ${won(THIEF_BOUNTY)})${hasGuard ? ' · 경비원이 쫓아갑니다' : ' · 경비원을 고용하면 막을 수 있어요'}`, 'bad');
+    sound.play('error');
+  }
+  if (now.caught > seenTheft.caught) {
+    const loot = world.lastCatch?.loot ?? 0;
+    toasts.show('🚓', '도둑을 잡았어요!', `현상금 +${won(THIEF_BOUNTY)}${loot ? ` · 훔친 돈 ${won(loot)}` : ''}`, 'good');
+  }
+  seenTheft = now;
+}
+
 function watchMissions(): void {
   const done = world.missions.completed;
   if (done.length > seenMissions) {
@@ -301,6 +344,8 @@ const loop = new GameLoop(
     watchEvent();
     watchVips();
     watchLostKids();
+    watchStorm();
+    watchThieves();
     watchRainbow();
     watchSeason();
     watchStatus();
@@ -351,7 +396,15 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     toasts.show('🎆', '불꽃놀이 시작!', isNight(world.tick) ? '밤하늘이라 효과가 두 배예요' : `손님들이 하늘을 올려다봐요 (${won(FIREWORKS_COST)})`, 'event');
     sound.play('win');
   }
-}, () => takePhoto());
+}, () => takePhoto(), () => {
+  const err = startParade(world);
+  if (err) {
+    tools.fail(err);
+  } else {
+    toasts.show('🎉', '퍼레이드 시작!', `인형탈과 꽃차가 공원 입구에서 출발해요 (${won(PARADE_COST)})`, 'event');
+    sound.play('win');
+  }
+});
 
 // ---- 기념사진: 지금 화면(공원)을 이미지로 저장 ----
 function takePhoto(): void {
