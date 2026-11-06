@@ -110,6 +110,37 @@
         color: #2a2210; background: #f6e9a8; border: 1px solid #8a7a3a; box-shadow: 2px 2px 0 rgba(0,0,0,0.35);
       }
       #hint { left: 16px; }
+      /* 새 메시지가 오면 노란 쪽지가 잠깐 튀어 오르며 주황으로 강조된다 */
+      #hint.msg { font-weight: 700; color: #3a1c00; background: #ffd27a; border-color: #b8661a; animation: hint-pop 0.35s ease-out; }
+      @keyframes hint-pop { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+      /* 큰 알림(토스트): 화면 위쪽 가운데 */
+      #toasts {
+        position: fixed; z-index: 6; top: calc(var(--hud-h, 36px) + 46px); left: 50%; transform: translateX(-50%);
+        display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(520px, calc(100vw - 32px)); pointer-events: none;
+      }
+      .toast {
+        position: relative; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; overflow: hidden;
+        padding: 10px 16px 12px 12px; pointer-events: auto; cursor: pointer;
+        color: #fff; background: linear-gradient(#3b4a2a, #2a3620); border: 2px solid #f2c230; border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
+        animation: toast-in 0.45s cubic-bezier(.2,1.4,.4,1);
+      }
+      .toast.good { border-color: #6fdc7a; background: linear-gradient(#2f5a32, #1f3f22); }
+      .toast.bad { border-color: #ff7a6b; background: linear-gradient(#6a2a24, #4a1c18); }
+      .toast.info { border-color: #8fc8ff; background: linear-gradient(#2c4260, #1d2e45); }
+      .toast.leaving { animation: toast-out 0.3s ease-in forwards; }
+      .toast .t-icon { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); animation: toast-icon 0.6s ease-out; }
+      .toast .t-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .toast .t-body b { font-size: 16px; text-shadow: 0 1px 0 rgba(0,0,0,0.6); }
+      .toast .t-body span { font-size: 13px; color: #e8ecd8; }
+      .toast .t-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: 0.55; transform-origin: left; animation: toast-bar linear forwards; }
+      .toast.event .t-bar { color: #f2c230; } .toast.good .t-bar { color: #6fdc7a; } .toast.bad .t-bar { color: #ff7a6b; } .toast.info .t-bar { color: #8fc8ff; }
+      @keyframes toast-in { 0% { opacity: 0; transform: translateY(-24px) scale(0.9); } 100% { opacity: 1; transform: none; } }
+      @keyframes toast-out { to { opacity: 0; transform: translateY(-12px) scale(0.95); } }
+      @keyframes toast-icon { 0% { transform: scale(0.3) rotate(-20deg); } 60% { transform: scale(1.3) rotate(8deg); } 100% { transform: none; } }
+      @keyframes toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+      @media (prefers-reduced-motion: reduce) { .toast, .toast .t-icon, #hint.msg { animation: none; } .toast .t-bar { display: none; } }
       #goal { right: 16px; }
 
       #toolbar {
@@ -217,6 +248,11 @@
         .stepper button { min-width: 30px; min-height: 30px; }
         #hint, #goal { top: calc(36px + var(--sat)); font-size: 11px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #hint { left: calc(8px + var(--sal)); }
+        #toasts { top: calc(36px + var(--sat) + 30px); width: min(440px, 60vw); gap: 6px; }
+        .toast { padding: 6px 12px 8px 8px; gap: 8px; }
+        .toast .t-icon { font-size: 22px; }
+        .toast .t-body b { font-size: 13px; }
+        .toast .t-body span { font-size: 11px; }
         #goal { right: calc(8px + var(--sar)); }
         #toolbar {
           flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 10px; -webkit-overflow-scrolling: touch;

@@ -61,6 +61,7 @@ export class Hud {
   private goal = document.getElementById('goal')!;
   private hudEl = document.getElementById('hud')!;
   private hudH = -1;
+  private shownMsgAt = 0;
   private speedButtons = new Map<Speed, HTMLButtonElement>();
   private fee: Stepper;
   private shownSpeed: Speed | -1 = -1;
@@ -136,7 +137,17 @@ export class Hud {
 
     this.updateGoal();
 
-    const text = performance.now() < this.tools.messageUntil ? this.tools.message : HINTS[this.tools.tool.kind];
+    const showing = performance.now() < this.tools.messageUntil;
+    const text = showing ? this.tools.message : HINTS[this.tools.tool.kind];
+    // 새 메시지가 오면 쪽지를 강조하고 튀어 오르게 한다(같은 메시지가 다시 와도 다시 튄다)
+    if (showing && this.tools.messageUntil !== this.shownMsgAt) {
+      this.shownMsgAt = this.tools.messageUntil;
+      this.hint.classList.remove('msg');
+      void this.hint.offsetWidth; // 애니메이션 다시 시작
+      this.hint.classList.add('msg');
+    } else if (!showing && this.hint.classList.contains('msg')) {
+      this.hint.classList.remove('msg');
+    }
     setText(this.hint, text);
   }
 

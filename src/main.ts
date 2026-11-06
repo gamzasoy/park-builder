@@ -21,12 +21,14 @@ import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
+import { Toasts, type ToastTone } from './ui/toast';
+import { isNight } from './sim/daynight';
 import { withObj, withRo } from './ui/josa';
 import { cleanParkName, MAX_PARK_NAME } from './sim/park';
 import { rainbowAt } from './sim/weather';
 import { MissionPanel } from './ui/missions';
 import { MISSIONS } from './sim/missions';
-import { BUS_GUESTS, FIREWORKS_COST, launchFireworks } from './sim/events';
+import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -41,6 +43,7 @@ const input = new Input(canvas, cam);
 input.getMap = () => world.map;
 const modal = new Modal();
 modal.bindInput();
+const toasts = new Toasts();
 const sound = new Sound();
 tools.onEvent = (e) => sound.play(e);
 
@@ -64,9 +67,9 @@ function saveNow(): boolean {
 const loaded = loadFromStorage();
 if (loaded.ok) {
   world.adopt(loaded.world);
-  tools.notify('저장된 공원을 불러왔습니다');
+  toasts.show('📂', world.parkName ? `${world.parkName}에 다시 오신 걸 환영해요` : '저장된 공원을 불러왔습니다', '', 'info');
 } else if (loaded.reason === 'corrupt' || loaded.reason === 'version') {
-  tools.notify('저장 데이터를 읽을 수 없어 새로 시작합니다 (이전 데이터는 백업됨)');
+  toasts.show('⚠️', '저장 데이터를 읽을 수 없어 새로 시작합니다', '이전 데이터는 백업해 두었어요', 'bad');
 }
 
 function newGame(): void {
@@ -83,7 +86,7 @@ function newGame(): void {
   loop.speed = 1;
   modal.hide();
   saveNow();
-  tools.notify('새 게임을 시작했습니다');
+  toasts.show('🎡', '새 공원을 열었어요!', '입구에서 길을 깔아 시작해 보세요', 'info');
 }
 
 function confirmNewGame(): void {
@@ -98,16 +101,16 @@ function confirmNewGame(): void {
 }
 
 // ---- 월간 보고서 알림음 ----
-let seenReports = 0;
+let seenReports = world.reports.length; // 불러온 공원의 지난 보고서는 다시 알리지 않는다
 
 // ---- 랜덤 이벤트 시작 알림 ----
 let seenEvent = world.event?.start ?? -1;
-const EVENT_NOTICE = {
-  bus: `🚌 단체 관광버스 도착! 손님 ${BUS_GUESTS}명이 한꺼번에 들어옵니다`,
-  heatwave: '🔥 폭염 경보! 손님들이 금방 목말라져요. 음료를 준비하세요',
-  hype: '📸 인기 블로거가 공원을 소개했어요! 잠시 손님이 2배로 몰립니다',
-  blackout: '⚡ 정전! 잠시 놀이기구가 손님을 태우지 못합니다',
-} as const;
+const EVENT_NOTICE: Record<Exclude<EventKind, 'vip'>, [string, string, string, ToastTone]> = {
+  bus: ['🚌', '단체 관광버스 도착!', `손님 ${BUS_GUESTS}명이 한꺼번에 들어옵니다`, 'event'],
+  heatwave: ['🔥', '폭염 경보!', '손님들이 금방 목말라져요. 음료를 준비하세요', 'bad'],
+  hype: ['📸', '인기 블로거가 공원을 소개했어요!', '잠시 손님이 2배로 몰립니다', 'good'],
+  blackout: ['⚡', '정전!', '잠시 놀이기구가 손님을 태우지 못합니다', 'bad'],
+};
 function watchEvent(): void {
   const e = world.event;
   if (!e || e.start === seenEvent) return;
@@ -116,9 +119,9 @@ function watchEvent(): void {
     // VIP가 오지 못했으면(운영 중인 기구가 없거나 손님이 가득) 알리지 않는다
     const v = world.guests.find((g) => g.vip && !g.vip.done && g.vip.until === e.start + VIP_TICKS);
     if (!v?.vip) return;
-    tools.notify(`👑 VIP 손님 방문! ${withObj(getDef(v.vip.wish).name)} 타고 싶어 해요. 태워 주면 상금 ${won(VIP_REWARD)}`);
+    toasts.show('👑', 'VIP 손님 방문!', `${withObj(getDef(v.vip.wish).name)} 타고 싶어 해요. 태워 주면 상금 ${won(VIP_REWARD)}`, 'event');
   } else {
-    tools.notify(EVENT_NOTICE[e.kind]);
+    toasts.show(...EVENT_NOTICE[e.kind]);
   }
   sound.play(e.kind === 'blackout' ? 'error' : 'chime');
 }
@@ -129,7 +132,7 @@ let rainbowShown = rainbowAt(world.weatherSeed, world.tick);
 function watchRainbow(): void {
   const now = rainbowAt(world.weatherSeed, world.tick);
   if (now && !rainbowShown) {
-    tools.notify('🌈 비가 그치고 무지개가 떴어요! 손님들의 기분이 좋아집니다');
+    toasts.show('🌈', '무지개가 떴어요!', '비가 그친 하늘을 보며 손님들의 기분이 좋아집니다', 'good');
     sound.play('chime');
   }
   rainbowShown = now;
@@ -138,7 +141,7 @@ function watchRainbow(): void {
 let seenVips = world.stats.vips;
 function watchVips(): void {
   if (world.stats.vips > seenVips) {
-    tools.notify(`👑 VIP 손님이 아주 만족했어요! 상금 +${won(VIP_REWARD)}`);
+    toasts.show('👑', 'VIP 손님이 아주 만족했어요!', `상금 +${won(VIP_REWARD)}`, 'good');
     sound.play('win');
   }
   seenVips = world.stats.vips;
@@ -148,14 +151,18 @@ function watchMissions(): void {
   const done = world.missions.completed;
   if (done.length > seenMissions) {
     const m = MISSIONS.find((x) => x.id === done[done.length - 1]);
-    if (m) tools.notify(`🎉 미션 달성: ${m.title} (상금 +${won(m.reward)})`);
+    if (m) toasts.show('🎉', `미션 달성: ${m.title}`, `상금 +${won(m.reward)}`, 'good');
     sound.play('chime');
   }
   seenMissions = done.length;
 }
 
 function watchReports(): void {
-  if (world.reports.length > seenReports) sound.play('chime');
+  if (world.reports.length > seenReports) {
+    const r = world.reports[world.reports.length - 1];
+    toasts.show('📊', `${r.month}월 결산`, `순이익 ${r.net >= 0 ? '+' : ''}${won(r.net)} · 재무 창에서 자세히 볼 수 있어요`, r.net >= 0 ? 'good' : 'bad');
+    sound.play('chime');
+  }
   seenReports = world.reports.length;
 }
 
@@ -266,7 +273,7 @@ const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) =
     tools.notify(err);
     sound.play('error');
   } else {
-    tools.notify(`🎆 불꽃놀이를 시작했습니다! (${won(FIREWORKS_COST)})`);
+    toasts.show('🎆', '불꽃놀이 시작!', isNight(world.tick) ? '밤하늘이라 효과가 두 배예요' : `손님들이 하늘을 올려다봐요 (${won(FIREWORKS_COST)})`, 'event');
     sound.play('win');
   }
 });
@@ -300,7 +307,8 @@ function renamePark(): void {
   const save = (): void => {
     world.parkName = cleanParkName(modal.inputValue);
     modal.hide();
-    tools.notify(world.parkName ? `공원 이름을 '${world.parkName}'${withRo(world.parkName).slice(world.parkName.length)} 정했습니다` : '공원 이름을 지웠습니다');
+    if (world.parkName) toasts.show('🏷️', `'${world.parkName}' 개장!`, `공원 이름을 '${world.parkName}'${withRo(world.parkName).slice(world.parkName.length)} 정했습니다`, 'info');
+    else tools.notify('공원 이름을 지웠습니다');
     sound.play('chime');
     saveNow();
   };
