@@ -51,7 +51,8 @@ export type Thought =
   | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks' | 'fountain' | 'vipHappy' | 'vipSad' | 'rainbow'
   | 'lost' | 'lostKid' | 'reunited' | 'kidFun'
   | 'balloon' | 'balloonLost' | 'photo' | 'parade'
-  | 'storm' | 'robbed' | 'caught';
+  | 'storm' | 'robbed' | 'caught'
+  | 'blossom' | 'splash' | 'candy' | 'xmas';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;

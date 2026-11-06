@@ -11,6 +11,7 @@ import { renumberQueue } from './venue';
 import { updateSpawner } from './spawner';
 import { updateEvents } from './events';
 import { updateParade } from './parade';
+import { updateFestival } from './festival';
 import { FLOAT_TICKS, updateGuest } from './guest';
 import { updateWeather } from './weather';
 import { updateStorm } from './storm';
@@ -46,6 +47,7 @@ export function stepWorld(world: World): void {
   updateStorm(world);
   updateEvents(world);
   updateParade(world);
+  updateFestival(world);
   updateSpawner(world);
   stepGuests(world);
   if (world.guests.length > world.stats.peakGuests) world.stats.peakGuests = world.guests.length;

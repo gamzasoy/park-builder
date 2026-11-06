@@ -55,6 +55,7 @@ export const MISSIONS: readonly Mission[] = [
   { id: 'guests150', title: '손님 150명 모으기', target: 150, unit: '명', reward: 4000, progress: (w) => w.guests.length },
   { id: 'money30k', title: '잔고 ₩30,000 모으기', target: 30000, unit: '', reward: 3000, progress: (w) => Math.max(0, Math.floor(w.money)) },
   { id: 'entered1000', title: '누적 입장객 1,000명', target: 1000, unit: '명', reward: 5000, progress: (w) => w.stats.entered },
+  { id: 'festivals2', title: '계절 축제 2번 열기', target: 2, unit: '번', reward: 2500, progress: (w) => w.stats.festivals ?? 0 },
 ];
 
 export const MISSION_IDS: readonly string[] = MISSIONS.map((m) => m.id);

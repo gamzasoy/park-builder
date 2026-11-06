@@ -164,6 +164,7 @@ const ROWS: [LedgerKey, string][] = [
   ['construction', '건설/철거'],
   ['fireworks', '불꽃놀이'],
   ['parade', '퍼레이드'],
+  ['festival', '계절 축제'],
   ['upkeep', '유지비'],
   ['wages', '직원 급여'],
 ];

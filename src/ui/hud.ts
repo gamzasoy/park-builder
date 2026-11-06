@@ -1,6 +1,7 @@
 import type { Speed } from '../core/loop';
 import type { ToolController } from '../input/tools';
-import { dateOf, setEntranceFee } from '../sim/economy';
+import { dateOf, DAY_TICKS, setEntranceFee } from '../sim/economy';
+import { FESTIVALS } from '../sim/festival';
 import { goalOf, goalProgress } from '../sim/goals';
 import { scenarioOf } from '../sim/scenarios';
 import { BUS_GUESTS } from '../sim/events';
@@ -150,12 +151,18 @@ export class Hud {
     const show = w.fireworks ? EVENT_VIEW.fireworks : null;
     const rb = rainbowAt(w.weatherSeed, w.tick) ? EVENT_VIEW.rainbow : null;
     const pd = w.parade ? EVENT_VIEW.parade : null;
+    const fe = w.festival;
+    const fv = fe ? {
+      icon: FESTIVALS[fe.season].icon,
+      label: FESTIVALS[fe.season].name,
+      tip: `${FESTIVALS[fe.season].name} (남은 ${Math.max(1, Math.ceil((fe.end - w.tick) / DAY_TICKS))}일): 손님이 더 몰려오고 모두의 기분이 올라요 · ${FESTIVALS[fe.season].perk}`,
+    } : null;
     const st = w.storm ? (season === 'winter' ? EVENT_VIEW.blizzard : EVENT_VIEW.storm) : null;
     // 이벤트가 하나면 이름까지, 여럿이면 아이콘만(설명은 툴팁) — HUD가 넘치지 않게
-    const extras = [st, ev, show, pd, rb].filter((x) => x !== null);
+    const extras = [fv, st, ev, show, pd, rb].filter((x) => x !== null);
     const extraText = extras.length === 1 ? ` · ${extras[0].icon} ${extras[0].label}` : extras.length ? ` ${extras.map((x) => x.icon).join('')}` : '';
     setText(this.weather, `${wv.icon} ${wv.label}${extraText}`);
-    const tip = [wv.tip, st?.tip, ev?.tip, show?.tip, pd?.tip, rb?.tip].filter(Boolean).join('\n');
+    const tip = [wv.tip, fv?.tip, st?.tip, ev?.tip, show?.tip, pd?.tip, rb?.tip].filter(Boolean).join('\n');
     // 노란 쪽지와 카드가 HUD 아래에 오도록 실제 높이를 CSS에 알린다
     const h = this.hudEl.offsetHeight;
     if (h !== this.hudH) {

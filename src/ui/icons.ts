@@ -7,6 +7,8 @@ import type { SceneryDef } from '../data/scenery';
 import { tileToWorld, type Vec2 } from '../render/iso';
 import { drawMascot, drawParadeFloat, drawRideSprite, drawScenery, drawVendorTray, poly, setSeason, type Quad } from '../render/sprites';
 import type { StaffKind } from '../sim/staff';
+import type { Season } from '../sim/season';
+import { drawBunting, drawFestivalProp } from '../render/festival';
 
 const W = 44;
 const H = 40;
@@ -185,6 +187,14 @@ export function paradeIcon(): string {
   return render('parade', (ctx) => {
     drawParadeFloat(ctx, 27, 34, 1.15, 0);
     drawMascot(ctx, 12, 36, 1.1, 3, true);
+  });
+}
+
+/** 계절 축제: 그 계절의 길가 장식과 깃발 줄 */
+export function festivalIcon(season: Season): string {
+  return render(`festival:${season}`, (ctx) => {
+    drawBunting(ctx, { x: 3, y: 7 }, { x: W - 3, y: 7 }, season, 1, 0);
+    drawFestivalProp(ctx, season, W / 2, H - 4, 1.25, 12, 0.3);
   });
 }
 

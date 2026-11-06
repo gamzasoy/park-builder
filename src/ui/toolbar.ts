@@ -6,6 +6,8 @@ import { PATH_COST } from '../sim/building';
 import { WAGE } from '../sim/economy';
 import { FIREWORKS_COST } from '../sim/events';
 import { PARADE_COST } from '../sim/parade';
+import { FESTIVAL_COST, FESTIVAL_DAYS, FESTIVALS } from '../sim/festival';
+import type { Season } from '../sim/season';
 import { STAFF_KINDS, STAFF_NAME, type StaffKind } from '../sim/staff';
 
 /** 툴바가 한 화면 폭에 들어가도록 버튼에는 짧은 이름을 쓴다(전체 이름은 툴팁) */
@@ -13,7 +15,7 @@ import { STAFF_KINDS, STAFF_NAME, type StaffKind } from '../sim/staff';
 const SHORT_LABEL: Record<string, string> = { slide: '미끄럼틀' };
 const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원', security: '경비원' };
 import { won } from './hud';
-import { buildingIcon, demolishIcon, fireworksIcon, paradeIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
+import { buildingIcon, demolishIcon, festivalIcon, fireworksIcon, paradeIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
 import { TERRAIN_COST } from '../sim/terrain';
 
 /** 휴대폰 화면의 그룹 탭에 붙는 아이콘 */
@@ -44,6 +46,7 @@ export class Toolbar {
     onFireworks: () => void,
     onPhoto: () => void,
     onParade: () => void,
+    onFestival: () => void,
   ) {
     this.tabBar.className = 'tb-tabs';
     this.root.append(this.tabBar);
@@ -68,9 +71,26 @@ export class Toolbar {
     ]);
     // 둘째 줄 끝(지형 뒤)에 둬서 넓은 화면에서 툴바가 두 줄을 넘지 않게 한다
     this.group('특별', [
+      this.actionButton('festival', '축제', '', won(FESTIVAL_COST), festivalIcon('spring'), onFestival),
       this.actionButton('photo', '기념사진', '기념사진: 지금 공원 모습을 이미지로 저장 (P)', '무료', photoIcon(), onPhoto),
     ]);
     this.openGroup(this.open);
+  }
+
+  /** 축제 버튼을 지금 계절의 축제로 맞춘다(계절이 바뀔 때만 다시 그린다) */
+  private festivalSeason: Season | null = null;
+  setFestival(season: Season): void {
+    if (season === this.festivalSeason) return;
+    this.festivalSeason = season;
+    const b = this.buttons.get('festival');
+    if (!b) return;
+    const f = FESTIVALS[season];
+    b.title = `${f.icon} ${f.name} (${won(FESTIVAL_COST)}, 계절마다 한 번, ${FESTIVAL_DAYS}일 동안): 길가에 축제 장식이 서고 손님이 더 몰려오며 모두의 기분이 올라요 · ${f.perk}`;
+    const img = b.querySelector('img');
+    const icon = festivalIcon(season);
+    if (img && icon) img.src = icon;
+    const label = b.querySelector('span');
+    if (label) label.textContent = f.short;
   }
 
   /** 매 프레임 호출: 선택된 도구(Esc 해제 포함)에 맞춰 하이라이트 갱신 */
