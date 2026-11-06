@@ -24,7 +24,7 @@ export const won = (n: number): string => `₩${n.toLocaleString('ko-KR')}`;
 export const signedWon = (n: number): string => (n < 0 ? `−${won(-n)}` : `+${won(n)}`);
 
 const HINTS: Record<string, string> = {
-  none: '건물·손님·직원을 클릭하면 정보를 볼 수 있습니다 · 아래 툴바에서 도구를 고르세요',
+  none: '건물·손님·직원 클릭: 정보 보기 · 건물을 길게 눌러 끌기: 옮기기 · 쓰레기 클릭: 줍기 · 입구 클릭: 공원 이름 짓기',
   path: '길: 드래그로 직선 설치 (Esc 취소)',
   build: '클릭해 설치 · R 회전 · 입구(노란 칸)를 길에 이어야 운영됩니다 (Esc 취소)',
   move: '옮길 곳을 클릭 · R 회전 · 비용 없음 (Esc 취소)',
@@ -35,7 +35,7 @@ const HINTS: Record<string, string> = {
 
 /** 터치 화면에서는 '클릭' 대신 '누르기'로, 좁은 화면에 맞게 짧게 */
 const TOUCH_HINTS: Record<string, string> = {
-  none: '건물·손님·직원을 누르면 정보가 보여요 · 아래 툴바에서 도구를 고르세요',
+  none: '누르면 정보 보기 · 건물을 길게 눌러 끌면 옮기기 · 쓰레기를 누르면 줍기',
   path: '길: 손가락으로 끌어 직선으로 깔기',
   build: '놓을 곳에서 손가락을 떼면 설치 · 입구(노란 칸)를 길에 이어야 운영돼요',
   move: '옮길 곳을 누르세요 · 비용 없음',
