@@ -41,14 +41,15 @@ export function anchorFor(def: BuildingDef, rot: number, cursor: Tile): Tile {
   return { x: cursor.x - Math.floor(w / 2), y: cursor.y - Math.floor(h / 2) };
 }
 
-export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: number, rot: number): PlaceCheck {
+export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: number, rot: number, ignoreId = 0): PlaceCheck {
   const f = footprintAt(def, x, y, rot);
   const map = world.map;
   const occ = trackOccupancy(world);
   for (let ty = f.y; ty < f.y + f.h; ty++) {
     for (let tx = f.x; tx < f.x + f.w; tx++) {
       if (!map.inBounds(tx, ty)) return { ok: false, reason: 'bounds' };
-      if (map.occupant[map.index(tx, ty)] !== 0) return { ok: false, reason: 'occupied' };
+      const o = map.occupant[map.index(tx, ty)];
+      if (o !== 0 && o !== ignoreId) return { ok: false, reason: 'occupied' };
       if (map.path[map.index(tx, ty)] === 1) return { ok: false, reason: 'path' };
       // 머리 위로 지나가는 트랙 아래에도 지을 수 없다
       if (occ.has(map.index(tx, ty))) return { ok: false, reason: 'occupied' };
@@ -62,7 +63,7 @@ export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: n
   }
   const e = entranceOf(f, rot);
   if (map.inBounds(e.x, e.y) && map.heightAt(e.x, e.y) !== base) return { ok: false, reason: 'slope' };
-  if (world.money < def.cost) return { ok: false, reason: 'money' };
+  if (!ignoreId && world.money < def.cost) return { ok: false, reason: 'money' };
   return { ok: true };
 }
 
@@ -99,6 +100,42 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
   world.buildings.set(b.id, b);
   world.transact('construction', -def.cost);
   return b;
+}
+
+/** 트랙이 있는 롤러코스터는 트랙이 역 위치에 묶여 있어 옮길 수 없다 */
+export function canMove(b: Building): boolean {
+  return !b.track;
+}
+
+/** 이미 지은 건물을 새 자리·방향으로 옮긴다(무료). 이용 중·줄 선 손님은 내보낸다. */
+export function canMoveBuilding(world: World, b: Building, x: number, y: number, rot: number): PlaceCheck {
+  return canPlaceBuilding(world, buildingDef(b), x, y, rot, b.id);
+}
+
+export function moveBuilding(world: World, b: Building, x: number, y: number, rot: number): boolean {
+  if (!canMove(b) || !canMoveBuilding(world, b, x, y, rot).ok) return false;
+  const def = buildingDef(b);
+  const map = world.map;
+  evictAll(world, b);
+  for (let ty = b.y; ty < b.y + b.h; ty++) {
+    for (let tx = b.x; tx < b.x + b.w; tx++) if (map.occupant[map.index(tx, ty)] === b.id) map.occupant[map.index(tx, ty)] = 0;
+  }
+  const f = footprintAt(def, x, y, rot);
+  Object.assign(b, f);
+  b.rot = rot;
+  b.entrance = entranceOf(f, rot);
+  b.baseH = map.heightAt(f.x, f.y);
+  b.phase = 'idle';
+  b.timer = 0;
+  for (let ty = f.y; ty < f.y + f.h; ty++) {
+    for (let tx = f.x; tx < f.x + f.w; tx++) {
+      map.occupant[map.index(tx, ty)] = b.id;
+      map.scenery[map.index(tx, ty)] = 0;
+    }
+  }
+  // 이 건물로 걸어오던 손님·직원이 새 입구로 경로를 다시 찾게 한다
+  map.version++;
+  return true;
 }
 
 export function buildingAt(world: World, x: number, y: number): Building | null {

@@ -35,6 +35,7 @@ export class BuildingPanel {
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
   private editBtn = $<HTMLButtonElement>('p-edit');
   private upgradeBtn = $<HTMLButtonElement>('p-upgrade');
+  private moveBtn = $<HTMLButtonElement>('p-move');
   /** 업그레이드에 성공했을 때 — 효과음용(실패는 tools.fail이 오류음을 낸다) */
   onUpgrade?: (ok: boolean) => void;
   private testBtn = $<HTMLButtonElement>('p-test');
@@ -69,6 +70,10 @@ export class BuildingPanel {
       const b = this.current();
       if (b && this.testRun.start(b)) this.tools.notify(this.testRun.result);
       else this.tools.fail('시운전할 트랙이 없습니다');
+    });
+    this.moveBtn.addEventListener('click', () => {
+      const b = this.current();
+      if (b) this.tools.beginMove(b.id);
     });
     this.demolishBtn.addEventListener('click', () => {
       const b = this.current();
@@ -113,6 +118,7 @@ export class BuildingPanel {
     if (def.kind === 'ride') setText(this.rel, `${Math.round(b.reliability)} / 100${b.broken ? ' · 고장' : ''}`);
     this.thrillRow.hidden = def.kind !== 'ride' || (!b.track && def.intensity === undefined);
     this.editBtn.hidden = !b.track;
+    this.moveBtn.hidden = !!b.track;
     this.testBtn.hidden = !b.track;
     if (!this.thrillRow.hidden) {
       setText(this.thrill, def.intensity !== undefined ? `${def.intensity} / ${def.nausea ?? 0}` : '–');

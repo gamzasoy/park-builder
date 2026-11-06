@@ -226,7 +226,7 @@
       .p-row:nth-child(odd) { background: rgba(0,0,0,0.1); }
       .p-row > span:first-child { color: var(--muted); }
       #p-status[data-ok="0"] { color: #ffb0a8; }
-      #p-demolish, #p-edit, #p-test, #p-upgrade { width: 100%; margin-top: 8px; padding: 4px; }
+      #p-demolish, #p-edit, #p-test, #p-upgrade, #p-move { width: 100%; margin-top: 8px; padding: 4px; }
       #finance table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.12); }
       #finance th { text-align: left; font-weight: 400; color: var(--muted); padding: 3px 4px; }
       #finance td { text-align: right; padding: 3px 4px 3px 8px; font-variant-numeric: tabular-nums; }
@@ -326,7 +326,7 @@
         .card .head { position: sticky; top: 0; z-index: 1; }
         .card .head button, .card .head div button { min-width: 36px; height: 30px; font-size: 16px; }
         .p-row { padding: 4px; }
-        #p-demolish, #p-edit, #p-test, #p-upgrade, #s-fire { min-height: 36px; }
+        #p-demolish, #p-edit, #p-test, #p-upgrade, #p-move, #s-fire { min-height: 36px; }
         #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
         #m-buttons button { min-height: 38px; }
         #track-bar {
@@ -421,6 +421,7 @@
       <button id="p-upgrade" hidden></button>
       <button id="p-edit" hidden>트랙 편집</button>
       <button id="p-test" hidden>시운전</button>
+      <button id="p-move">위치 이동 (무료)</button>
       <button id="p-demolish"></button>
     </div>
     <div id="finance" class="card" hidden>
