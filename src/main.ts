@@ -470,6 +470,8 @@ tbToggle.addEventListener('click', () => {
   layoutToolbar();
 });
 window.addEventListener('resize', layoutToolbar);
+// 휴대폰에서 다른 그룹을 펼치면 도구 막대 높이가 바뀔 수 있다
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => layoutToolbar()).observe(tbEl);
 window.addEventListener('orientationchange', layoutToolbar);
 
 const buildingPanel = new BuildingPanel(world, tools, testRun);

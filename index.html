@@ -279,6 +279,8 @@
       #tool-actions button { min-width: 64px; min-height: 40px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
       #rotate-hint { display: none; }
       #tb-toggle { display: none; }
+      /* 그룹 탭은 휴대폰 가로 화면에서만 쓴다(PC는 모든 그룹을 펼쳐 둔다) */
+      .tb-tabs { display: none; }
       @media (pointer: fine) { #tool-actions { display: none; } } /* 마우스·키보드(R/Esc)가 있는 PC에서는 숨김 */
 
       /* ===== 휴대폰 가로 화면 (PC 화면은 바뀌지 않음) ===== */
@@ -311,6 +313,17 @@
         #toolbar::-webkit-scrollbar { display: none; }
         #toolbar .group { flex: none; }
         #toolbar .title { font-size: 10px; margin: 0 0 1px 2px; }
+        /* 그룹 탭: 맨 위 한 줄에 그룹 이름, 누른 그룹의 버튼만 그 아래에 펼친다 */
+        #toolbar { flex-direction: column; overflow: visible; gap: 2px; }
+        #toolbar .tb-tabs { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; flex: none; }
+        #toolbar .tb-tabs::-webkit-scrollbar { display: none; }
+        #toolbar .tb-tab { flex: none; min-width: 0; min-height: 26px; padding: 1px 9px; font-size: 12px; font-weight: 600; flex-direction: row; border-radius: 13px; }
+        #toolbar .tb-tab.active { background: var(--gold); color: #2a2208; border-color: #8a6a10; }
+        #toolbar .tb-tab.hint { border-color: var(--gold); animation: hint-pulse 1.3s ease-in-out infinite; }
+        #toolbar .group { display: none; }
+        #toolbar .group.open { display: block; overflow-x: auto; scrollbar-width: none; }
+        #toolbar .group.open::-webkit-scrollbar { display: none; }
+        #toolbar .group .title { display: none; }
         #toolbar button { min-width: 52px; padding: 1px 3px 2px; font-size: 11px; }
         #toolbar button img { width: 32px; height: 29px; }
         #toolbar button small { font-size: 9px; }
