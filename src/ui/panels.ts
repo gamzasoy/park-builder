@@ -301,7 +301,12 @@ export class GuestPanel {
     if (this.root.hidden) this.root.hidden = false;
 
     const vip = g.vip ? (g.vip.done ? ` 👑 VIP · 소원 성취!` : ` 👑 VIP · ${getDef(g.vip.wish).name} 원함`) : '';
-    setText(this.title, `${guestName(g.id)}${vip}`);
+    // 가족: 보호자는 아이 수, 아이는 보호자 이름(길을 잃었으면 그 사실)을 함께 보여 준다
+    const kidsNow = g.kids ? g.kids.filter((id) => this.world.guests.some((x) => x.id === id)).length : 0;
+    const family = g.kid
+      ? g.lostUntil !== undefined ? ' 😭 미아 · 눌러서 찾아 주세요' : ` 🧒 ${guestName(g.leader ?? 0)}네 아이`
+      : kidsNow ? ` 👨‍👧 아이 ${kidsNow}명과 함께` : '';
+    setText(this.title, `${guestName(g.id)}${vip}${family}`);
     const target = g.target !== null ? this.world.buildings.get(g.target) : undefined;
     const targetName = target ? getDef(target.defId).name : '';
     setText(this.state, STATE_TEXT[g.state] + (targetName && g.state !== 'idle' && g.state !== 'leaving' ? ` · ${targetName}` : ''));

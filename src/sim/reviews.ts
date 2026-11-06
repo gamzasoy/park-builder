@@ -30,7 +30,7 @@ export interface Review {
 export const MAX_REVIEWS = 40;
 
 /** 손님이 남긴 불만(말풍선으로 떠올린 것 중 마지막). 리뷰 내용에 쓰인다 */
-export const GRIPES: ReadonlySet<Thought> = new Set<Thought>(['waited', 'queueFull', 'expensive', 'litter', 'broken', 'rain', 'vipSad', 'tooIntense']);
+export const GRIPES: ReadonlySet<Thought> = new Set<Thought>(['waited', 'queueFull', 'expensive', 'litter', 'broken', 'rain', 'vipSad', 'tooIntense', 'lostKid']);
 
 export function starsFor(happiness: number): number {
   return happiness >= 85 ? 5 : happiness >= 68 ? 4 : happiness >= 50 ? 3 : happiness >= 30 ? 2 : 1;
@@ -47,6 +47,7 @@ const GRIPE_TEXT: Partial<Record<Thought, readonly string[]>> = {
   rain: ['비 맞아서 다 젖었어요', '우산 가게라도 있었으면…'],
   vipSad: ['VIP인데 원하던 기구를 못 탔어요', '실망이에요. 다시는 안 와요'],
   tooIntense: ['너무 무서웠어요 😱', '심장 떨어지는 줄 알았어요'],
+  lostKid: ['아이를 잃어버릴 뻔했어요… 미아 안내가 필요해요', '애를 찾느라 하루가 다 갔어요'],
 };
 
 /** 떠나는 손님의 리뷰를 만든다 */
@@ -69,6 +70,10 @@ export function makeReview(world: World, g: Guest): Review {
   let text: string;
   if (g.vip?.done) {
     text = pick([`VIP 대접 제대로 받았어요! ${fav ?? '놀이기구'} 최고`, `${park}, 친구들한테 자랑할게요 👑`], g, 1);
+  } else if (stars >= 4 && g.kids?.length) {
+    text = fav
+      ? pick([`아이들이 ${fav}를 제일 좋아했어요!`, `가족 나들이로 최고예요. ${fav} 강추`, `아이가 ${fav} 또 타재요 👨‍👩‍👧`], g, 8)
+      : pick(['아이들과 즐거운 하루였어요', '가족끼리 오기 좋은 공원이에요'], g, 9);
   } else if (stars >= 4) {
     text = fav
       ? pick([`${fav} 또 타러 올게요!`, `${fav} 정말 재밌었어요`, `${park} 최고! 특히 ${fav}`, `하루 종일 신났어요. ${fav} 강추!`], g, 2)
@@ -79,11 +84,12 @@ export function makeReview(world: World, g: Guest): Review {
       ? `${fav ? `${fav}는 좋았는데, ` : ''}${pick(gripe, g, 4)}`
       : pick(['그럭저럭 괜찮았어요', fav ? `${fav}는 괜찮았어요` : '탈 게 조금 더 있었으면', '나쁘지 않았어요'], g, 5);
   } else {
-    // 불만 순서: 떠난 이유 → 채우지 못한 욕구 → 마지막으로 떠올린 불만
+    // 불만 순서: 아이를 잃어버린 일 → 떠난 이유 → 채우지 못한 욕구 → 마지막으로 떠올린 불만
     const why = g.leaveReason;
     text =
-      why === 'broke' ? '돈이 금방 다 떨어졌어요'
-      : why === 'tired' ? '너무 지쳐서 쉴 곳이 필요했어요'
+      g.gripe === 'lostKid' ? pick(GRIPE_TEXT.lostKid!, g, 10)
+      : why === 'broke' ? '돈이 금방 다 떨어졌어요'
+      : why === 'tired' ? (g.kids?.length ? '아이가 너무 지쳐서 일찍 집에 왔어요' : '너무 지쳐서 쉴 곳이 필요했어요')
       : why === 'bored' ? '탈 게 별로 없어요'
       : why === 'expensive' ? '전부 너무 비싸요'
       : n.toilet > 70 ? '화장실 찾다가 집에 갔어요'

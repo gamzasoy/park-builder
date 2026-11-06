@@ -6,6 +6,7 @@ import {
   setEntranceFee, setPrice, settleDay,
 } from '../src/sim/economy';
 import { createGuest } from '../src/sim/guest';
+import { kidFee } from '../src/sim/spawner';
 import { computeRating, updateRating } from '../src/sim/rating';
 import { stepGuests, stepWorld } from '../src/sim/sim';
 import { START_MONEY, World } from '../src/sim/world';
@@ -116,18 +117,23 @@ describe('prices', () => {
 });
 
 describe('entrance fee', () => {
-  const run = (fee: number): { entered: number; income: number } => {
+  const run = (fee: number): { entered: number; kids: number; income: number } => {
     const { w } = makePark();
     setEntranceFee(w, fee);
     w.resetLedger();
-    for (let i = 0; i < 3000; i++) stepWorld(w);
-    return { entered: w.stats.entered, income: w.ledger.entrance };
+    const kids = new Set<number>();
+    for (let i = 0; i < 3000; i++) {
+      stepWorld(w);
+      for (const g of w.guests) if (g.kid) kids.add(g.id);
+    }
+    return { entered: w.stats.entered, kids: kids.size, income: w.ledger.entrance };
   };
 
-  it('is collected from each arriving guest', () => {
+  it('is collected from each arriving guest (children pay half)', () => {
     const r = run(10);
     expect(r.entered).toBeGreaterThan(0);
-    expect(r.income).toBe(r.entered * 10);
+    expect(r.kids).toBeGreaterThan(0);
+    expect(r.income).toBe((r.entered - r.kids) * 10 + r.kids * kidFee(10));
   });
 
   it('scales down arrivals as it rises, and is free at 0', () => {

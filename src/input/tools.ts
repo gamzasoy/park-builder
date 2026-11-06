@@ -12,6 +12,7 @@ import { buildingDef as getBuildingDef, buildingTiles, TRACK_TYPES, type Cursor,
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { appendPiece, beginEdit, canAppendPiece, clearTrack, TRACK_FAIL_TEXT, undoPiece } from '../sim/trackedit';
 import type { Building, World } from '../sim/world';
+import { reuniteKid, type Guest } from '../sim/guest';
 
 export type Tool =
   | { kind: 'none' }
@@ -245,6 +246,22 @@ export class ToolController {
   }
 
   /** 손님은 건물 앞에 그려지므로 클릭 반경 안에 있으면 건물보다 우선한다. 시설 안(숨김)의 손님은 제외. */
+  /** 누른 곳 가까이의 길 잃은 아이(다른 손님 틈에서도 잡히게 반경을 넓게 본다) */
+  private lostKidNear(pos: Vec2): Guest | undefined {
+    let best: Guest | undefined;
+    let bestD = (GUEST_PICK_RADIUS * 1.5) ** 2;
+    for (const g of this.world.guests) {
+      if (g.lostUntil === undefined) continue;
+      const p = guestDisplayPos(g, 1);
+      const d = (p.x - pos.x) ** 2 + (p.y - pos.y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = g;
+      }
+    }
+    return best;
+  }
+
   private guestNear(pos: Vec2): number | null {
     let best: number | null = null;
     let bestD = GUEST_PICK_RADIUS * GUEST_PICK_RADIUS;
@@ -280,6 +297,13 @@ export class ToolController {
     const tool = this.tool;
     if (tool.kind === 'none') {
       const sid = pos ? this.staffNear(pos) : null;
+      // 길 잃은 아이를 누르면 보호자에게 데려다준다(쓰레기 줍기·선택보다 우선)
+      const lost = pos && sid === null ? this.lostKidNear(pos) : undefined;
+      if (lost) {
+        // 알림 카드는 main.ts가 world.stats.reunited를 보고 띄운다
+        if (reuniteKid(this.world, lost)) this.onEvent?.('chime');
+        return;
+      }
       // 쓰레기가 있는 칸을 누르면 직접 줍는다(손님이 붐비는 길에서도 주울 수 있게 손님 선택보다 우선)
       if (sid === null && this.pickUpLitter(t)) return;
       const gid = pos && sid === null ? this.guestNear(pos) : null;

@@ -68,7 +68,7 @@ export interface SaveData {
   ledger: Ledger;
   reports: MonthReport[];
   monthStartEntered: number;
-  stats: { entered: number; left: number; peakGuests: number; vips?: number };
+  stats: { entered: number; left: number; peakGuests: number; vips?: number; lost?: number; reunited?: number; lostGone?: number; families?: number };
   status: GameStatus;
   endReason: string;
   goalHold: number;
@@ -238,6 +238,14 @@ export function deserializeWorld(data: SaveData): World {
     gripe: typeof g.gripe === 'string' ? g.gripe : undefined,
     leaveReason: typeof g.leaveReason === 'string' ? g.leaveReason : undefined,
     vip: g.vip && typeof g.vip.wish === 'string' && isNum(g.vip.until) ? { wish: g.vip.wish, until: g.vip.until, done: g.vip.done === true } : undefined,
+    // 가족 손님(이 필드가 없는 예전 저장본은 모두 혼자 온 손님)
+    kids: Array.isArray(g.kids) ? g.kids.filter(isNum) : undefined,
+    trip: isNum(g.trip) ? g.trip : undefined,
+    kid: g.kid === true ? true : undefined,
+    leader: isNum(g.leader) ? g.leader : undefined,
+    followed: isNum(g.followed) ? g.followed : undefined,
+    lostUntil: isNum(g.lostUntil) ? g.lostUntil : undefined,
+    goHome: g.goHome === true ? true : undefined,
   }));
 
   w.staff = (data.staff ?? []).map((s) => {
@@ -282,7 +290,7 @@ export function deserializeWorld(data: SaveData): World {
   w.ledger = { ...emptyLedger(), ...data.ledger };
   w.reports = data.reports.map((r) => ({ ...r, ledger: { ...emptyLedger(), ...r.ledger } }));
   w.monthStartEntered = data.monthStartEntered;
-  w.stats = { vips: 0, ...data.stats };
+  w.stats = { vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, ...data.stats };
   w.status = data.status;
   w.endReason = String(data.endReason ?? '');
   w.goalHold = data.goalHold;
