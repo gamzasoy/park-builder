@@ -90,7 +90,7 @@ try {
 
   // ---- 롤러코스터: 새 게임에서 UI로 역 설치 → 키보드로 트랙 잇기 → 운행 ----
   await page.click('#new-btn');
-  await page.click('#m-buttons button.primary');
+  await page.click('#m-choices .choice >> nth=0'); // 시나리오: 초원 공원
   check(await game(() => window.__game.world.buildings.size === 0), '새 게임으로 초기화');
 
   await page.click('[data-tool="path"]');
@@ -181,7 +181,7 @@ try {
 
   // ---- 지형: 지형 도구로 클릭 → 높이 변경, 높이 보정된 마우스 피킹, 규칙 위반은 거절 ----
   await page.click('#new-btn');
-  await page.click('#m-buttons button.primary');
+  await page.click('#m-choices .choice >> nth=0'); // 시나리오: 초원 공원
   await page.click('[data-tool="terrain:raise"]');
   const heightAt = (x, y) => game(([a, b]) => window.__game.world.map.heightAt(a, b), [x, y]);
   const money1 = await game(() => window.__game.world.money);

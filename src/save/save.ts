@@ -3,6 +3,7 @@ import { sceneryDef } from '../data/scenery';
 import { MAX_LEVEL, restoreTrack, type TrackType } from '../sim/coaster';
 import { claimLoadedTracks } from '../sim/trackedit';
 import type { Guest } from '../sim/guest';
+import { DEFAULT_SCENARIO, scenarioById } from '../sim/scenarios';
 import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import { MISSION_IDS, type MissionState } from '../sim/missions';
@@ -79,6 +80,9 @@ export interface SaveData {
   tutorial?: TutorialState;
   missions?: MissionState;
   parkName?: string;
+  /** 시나리오 id와 받은 별. 없으면(이전 저장본) 초원 공원 */
+  scenario?: string;
+  stars?: number;
   reviews?: Review[];
   fireworks?: Fireworks | null;
   lastFireworksDay?: number;
@@ -118,6 +122,8 @@ export function serializeWorld(world: World): SaveData {
     nextStaffId: world.nextStaffId,
     entranceFee: world.entranceFee,
     parkName: world.parkName,
+    scenario: world.scenario,
+    stars: world.stars,
     reviews: world.reviews.map((r) => ({ ...r })),
     rating: world.rating,
     ratingParts: world.ratingParts,
@@ -292,6 +298,8 @@ export function deserializeWorld(data: SaveData): World {
   w.monthStartEntered = data.monthStartEntered;
   w.stats = { vips: 0, lost: 0, reunited: 0, lostGone: 0, families: 0, ...data.stats };
   w.status = data.status;
+  w.scenario = typeof data.scenario === 'string' && scenarioById(data.scenario) ? data.scenario : DEFAULT_SCENARIO;
+  w.stars = isNum(data.stars) ? Math.max(0, Math.min(3, Math.round(data.stars))) : 0;
   w.endReason = String(data.endReason ?? '');
   w.goalHold = data.goalHold;
   w.debtDays = data.debtDays;
