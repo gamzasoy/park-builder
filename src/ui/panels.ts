@@ -118,7 +118,6 @@ export class BuildingPanel {
     if (def.kind === 'ride') setText(this.rel, `${Math.round(b.reliability)} / 100${b.broken ? ' · 고장' : ''}`);
     this.thrillRow.hidden = def.kind !== 'ride' || (!b.track && def.intensity === undefined);
     this.editBtn.hidden = !b.track;
-    this.moveBtn.hidden = !!b.track;
     this.testBtn.hidden = !b.track;
     if (!this.thrillRow.hidden) {
       setText(this.thrill, def.intensity !== undefined ? `${def.intensity} / ${def.nausea ?? 0}` : '–');

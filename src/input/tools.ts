@@ -3,9 +3,9 @@ import type { BuildingDef } from '../data/types';
 import { guestDisplayPos, staffDisplayPos } from '../render/guestpos';
 import type { Vec2 } from '../render/iso';
 import {
-  anchorFor, buildingAt, canMove, canMoveBuilding, canPlaceBuilding, demolishAt, entranceOf, footprintAt,
+  anchorFor, buildingAt, canMoveBuilding, canPlaceBuilding, demolishAt, entranceOf, footprintAt,
   isPathPlaceable, isSceneryPlaceable, lineTiles, moveBuilding, PATH_COST, placeBuilding, placePaths, placeScenery,
-  type PlaceFailure,
+  relocated, type MoveFailure, type PlaceFailure,
 } from '../sim/building';
 import { paintTerrain, canChangeTerrain, TERRAIN_COST, type TerrainFailure, type TerrainMode } from '../sim/terrain';
 import { buildingDef as getBuildingDef, buildingTiles, TRACK_TYPES, type Cursor, type TrackType } from '../sim/coaster';
@@ -58,6 +58,19 @@ const FAIL_TEXT: Record<PlaceFailure, string> = {
   path: '길 위에는 지을 수 없습니다',
   slope: '건물 자리와 입구 칸은 평평해야 합니다 (높이가 같아야 함)',
   money: '돈이 부족합니다',
+};
+
+/** 옮기기 실패: 건물 자리 이유 + (코스터) 트랙이 새 자리에 맞지 않는 이유 */
+const MOVE_FAIL_TEXT: Record<MoveFailure, string> = {
+  ...FAIL_TEXT,
+  bounds: '맵 밖으로 나갑니다',
+  occupied: '다른 건물·길·트랙과 겹칩니다',
+  notrack: '옮길 수 없습니다',
+  closed: '옮길 수 없습니다',
+  max: '옮길 수 없습니다',
+  height: '이 자리에서는 트랙이 너무 높거나 낮아집니다',
+  underground: '트랙이 지형 아래로 파고듭니다',
+  entrance: '트랙이 건물 입구를 막습니다',
 };
 
 const TERRAIN_FAIL_TEXT: Record<TerrainFailure, string> = {
@@ -155,10 +168,6 @@ export class ToolController {
   beginMove(id: number): void {
     const b = this.world.buildings.get(id);
     if (!b) return;
-    if (!canMove(b)) {
-      this.fail('트랙이 있는 롤러코스터는 옮길 수 없습니다');
-      return;
-    }
     this.setTool({ kind: 'move', buildingId: id });
     this.rot = b.rot;
     this.notify('옮길 곳을 누르세요 (R: 회전, Esc: 취소)');
@@ -308,7 +317,7 @@ export class ToolController {
         this.tool = { kind: 'none' };
         this.selectedId = b.id;
       } else {
-        this.fail(check.ok ? '옮길 수 없습니다' : FAIL_TEXT[check.reason]);
+        this.fail(check.ok ? '옮길 수 없습니다' : MOVE_FAIL_TEXT[check.reason]);
       }
     } else if (tool.kind === 'demolish') {
       if (demolishAt(this.world, t.x, t.y) === null) {
@@ -412,6 +421,12 @@ export class ToolController {
       const tiles: PreviewTile[] = [];
       for (let y = f.y; y < f.y + f.h; y++) {
         for (let x = f.x; x < f.x + f.w; x++) if (map.inBounds(x, y)) tiles.push({ x, y, ok });
+      }
+      // 코스터를 옮길 때는 트랙이 놓일 칸도 보여 준다
+      if (moving?.track) {
+        for (const p of relocated(this.world, moving, a.x, a.y, this.rot).track!.placed) {
+          if (map.inBounds(p.x, p.y)) tiles.push({ x: p.x, y: p.y, ok });
+        }
       }
       const entrance = entranceOf(f, this.rot);
       return {

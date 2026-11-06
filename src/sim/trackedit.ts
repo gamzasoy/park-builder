@@ -1,5 +1,5 @@
 import {
-  applyPiece, buildingDef, heightOk, MAX_PIECES, PIECE_COST, pieceRange, rebuild, trackTiles,
+  applyPiece, buildingDef, heightOk, MAX_HEIGHT, MAX_PIECES, PIECE_COST, pieceRange, rebuild, trackTiles,
   type PlacedPiece, type TrackType,
 } from './coaster';
 import { fairPrice, setPrice } from './economy';
@@ -200,6 +200,32 @@ export function beginEdit(world: World, b: Building): void {
   evictAll(world, b);
   b.phase = 'idle';
   b.timer = 0;
+}
+
+/**
+ * 코스터를 옮긴 뒤(moved: 새 역 위치로 다시 깐 트랙)의 트랙이 새 자리에 맞는가. 맞으면 null, 아니면 첫 실패 이유.
+ * 자기 자신의 옛 역·트랙은 장애물로 치지 않는다.
+ */
+export function trackFitsAfterMove(world: World, b: Building, moved: Building): TrackFailure | null {
+  const map = world.map;
+  const occ = trackOccupancy(world);
+  const inNew = (x: number, y: number): boolean => x >= moved.x && x < moved.x + moved.w && y >= moved.y && y < moved.y + moved.h;
+  for (const p of moved.track!.placed) {
+    if (!map.inBounds(p.x, p.y)) return 'bounds';
+    const r = pieceRange(p);
+    if (r.hMin < 0 || r.hMax > MAX_HEIGHT) return 'height';
+    if (belowTerrain(world, p)) return 'underground';
+    if (moved.entrance.x === p.x && moved.entrance.y === p.y) return 'entrance';
+    for (const o of world.buildings.values()) {
+      if (o.id !== b.id && o.entrance.x === p.x && o.entrance.y === p.y) return 'entrance';
+    }
+    const idx = map.index(p.x, p.y);
+    const id = map.occupant[idx];
+    if (inNew(p.x, p.y) || (id !== 0 && id !== b.id && inFootprint(world, p.x, p.y))) return 'occupied';
+    if (map.path[idx] === 1 && r.hMin < GROUND_LEVELS) return 'occupied';
+    for (const seg of occ.get(idx) ?? []) if (seg.buildingId !== b.id && !separated(r, seg)) return 'occupied';
+  }
+  return null;
 }
 
 /** 이 코스의 트랙 타일 수(테스트/표시용) */

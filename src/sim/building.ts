@@ -1,8 +1,8 @@
 import { sceneryDef, type SceneryDef } from '../data/scenery';
 import type { BuildingDef } from '../data/types';
-import { buildingDef, buildingTiles, MAX_LEVEL, newTrack, upgradeCost } from './coaster';
+import { buildingDef, buildingTiles, MAX_LEVEL, newTrack, rebuild, upgradeCost } from './coaster';
 import type { Tile } from './map';
-import { trackOccupancy } from './trackedit';
+import { isGrounded, trackFitsAfterMove, trackOccupancy, type TrackFailure } from './trackedit';
 import { evictAll } from './venue';
 import { MAX_RELIABILITY } from './ride';
 import { type Building, World } from './world';
@@ -52,7 +52,7 @@ export function canPlaceBuilding(world: World, def: BuildingDef, x: number, y: n
       if (o !== 0 && o !== ignoreId) return { ok: false, reason: 'occupied' };
       if (map.path[map.index(tx, ty)] === 1) return { ok: false, reason: 'path' };
       // 머리 위로 지나가는 트랙 아래에도 지을 수 없다
-      if (occ.has(map.index(tx, ty))) return { ok: false, reason: 'occupied' };
+      if (occ.get(map.index(tx, ty))?.some((seg) => seg.buildingId !== ignoreId)) return { ok: false, reason: 'occupied' };
     }
   }
   // 건물은 풋프린트와 입구 칸이 모두 같은 높이(평평한 땅)여야 한다.
@@ -102,36 +102,50 @@ export function placeBuilding(world: World, def: BuildingDef, x: number, y: numb
   return b;
 }
 
-/** 트랙이 있는 롤러코스터는 트랙이 역 위치에 묶여 있어 옮길 수 없다 */
-export function canMove(b: Building): boolean {
-  return !b.track;
+export type MoveFailure = PlaceFailure | TrackFailure;
+export type MoveCheck = { ok: true } | { ok: false; reason: MoveFailure };
+
+/** 옮긴 뒤의 모습(원본은 건드리지 않는다). 코스터는 트랙 조각을 새 역 기준으로 다시 깐다. */
+export function relocated(world: World, b: Building, x: number, y: number, rot: number): Building {
+  const f = footprintAt(buildingDef(b), x, y, rot);
+  const moved: Building = { ...b, ...f, rot, entrance: entranceOf(f, rot), baseH: world.map.heightAt(f.x, f.y) };
+  if (b.track) {
+    moved.track = { ...b.track };
+    rebuild(moved, moved.track);
+  }
+  return moved;
 }
 
-/** 이미 지은 건물을 새 자리·방향으로 옮긴다(무료). 이용 중·줄 선 손님은 내보낸다. */
-export function canMoveBuilding(world: World, b: Building, x: number, y: number, rot: number): PlaceCheck {
-  return canPlaceBuilding(world, buildingDef(b), x, y, rot, b.id);
+/** 이미 지은 건물을 새 자리·방향으로 옮길 수 있는가(무료). 코스터는 트랙 전체가 새 자리에 맞아야 한다. */
+export function canMoveBuilding(world: World, b: Building, x: number, y: number, rot: number): MoveCheck {
+  const place = canPlaceBuilding(world, buildingDef(b), x, y, rot, b.id);
+  if (!place.ok) return place;
+  if (!b.track) return { ok: true };
+  const fail = trackFitsAfterMove(world, b, relocated(world, b, x, y, rot));
+  return fail ? { ok: false, reason: fail } : { ok: true };
 }
 
+/** 건물을 옮긴다. 이용 중·줄 선 손님은 내보낸다. 성공하면 true */
 export function moveBuilding(world: World, b: Building, x: number, y: number, rot: number): boolean {
-  if (!canMove(b) || !canMoveBuilding(world, b, x, y, rot).ok) return false;
-  const def = buildingDef(b);
+  if (!canMoveBuilding(world, b, x, y, rot).ok) return false;
   const map = world.map;
   evictAll(world, b);
-  for (let ty = b.y; ty < b.y + b.h; ty++) {
-    for (let tx = b.x; tx < b.x + b.w; tx++) if (map.occupant[map.index(tx, ty)] === b.id) map.occupant[map.index(tx, ty)] = 0;
+  for (const t of buildingTiles(b)) {
+    const i = map.index(t.x, t.y);
+    if (map.occupant[i] === b.id) map.occupant[i] = 0;
   }
-  const f = footprintAt(def, x, y, rot);
-  Object.assign(b, f);
-  b.rot = rot;
-  b.entrance = entranceOf(f, rot);
-  b.baseH = map.heightAt(f.x, f.y);
+  const moved = relocated(world, b, x, y, rot);
+  Object.assign(b, { x: moved.x, y: moved.y, w: moved.w, h: moved.h, rot, entrance: moved.entrance, baseH: moved.baseH });
   b.phase = 'idle';
   b.timer = 0;
-  for (let ty = f.y; ty < f.y + f.h; ty++) {
-    for (let tx = f.x; tx < f.x + f.w; tx++) {
-      map.occupant[map.index(tx, ty)] = b.id;
-      map.scenery[map.index(tx, ty)] = 0;
-    }
+  const claim = (tx: number, ty: number): void => {
+    map.occupant[map.index(tx, ty)] = b.id;
+    map.scenery[map.index(tx, ty)] = 0;
+  };
+  for (let ty = b.y; ty < b.y + b.h; ty++) for (let tx = b.x; tx < b.x + b.w; tx++) claim(tx, ty);
+  if (b.track) {
+    rebuild(b, b.track);
+    for (const p of b.track.placed) if (isGrounded(p)) claim(p.x, p.y);
   }
   // 이 건물로 걸어오던 손님·직원이 새 입구로 경로를 다시 찾게 한다
   map.version++;
