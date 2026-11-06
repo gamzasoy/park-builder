@@ -5,7 +5,7 @@
 import { getDef } from '../data';
 import type { SceneryDef } from '../data/scenery';
 import { tileToWorld, type Vec2 } from '../render/iso';
-import { drawMascot, drawRideSprite, drawScenery, drawVendorTray, poly, type Quad } from '../render/sprites';
+import { drawMascot, drawRideSprite, drawScenery, drawVendorTray, poly, setSeason, type Quad } from '../render/sprites';
 import type { StaffKind } from '../sim/staff';
 
 const W = 44;
@@ -80,6 +80,7 @@ export function sceneryIcon(def: SceneryDef): string {
     const { q, z } = fit(1, 1, 30);
     poly(ctx, [q.top, q.right, q.bottom, q.left], '#3f8b3a', 'rgba(0,0,0,0.25)');
     const c = { x: (q.top.x + q.bottom.x) / 2, y: (q.top.y + q.bottom.y) / 2 };
+    setSeason('summer'); // 아이콘은 늘 여름 모습(화면은 프레임마다 계절을 다시 정한다)
     drawScenery(ctx, def.kind, c.x, c.y, z * 1.5, 0.5);
   });
 }
@@ -163,6 +164,33 @@ export function fireworksIcon(): string {
     ctx.beginPath();
     ctx.moveTo(16, H - 5); ctx.lineTo(16, 25);
     ctx.stroke();
+  });
+}
+
+export function photoIcon(): string {
+  return render('photo', (ctx) => {
+    const x = 7, y = 11, w = W - 14, h = H - 18;
+    ctx.fillStyle = '#2a2f3a';
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 4);
+    ctx.fill();
+    ctx.fillStyle = '#2a2f3a';
+    ctx.fillRect(x + 6, y - 4, 10, 5);
+    ctx.fillStyle = '#f2c230';
+    ctx.fillRect(x + w - 8, y + 3, 4, 3);
+    const cx = W / 2, cy = y + h / 2 + 1;
+    ctx.fillStyle = '#c9ced8';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3a6fd0';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    ctx.arc(cx - 2, cy - 2, 1.8, 0, Math.PI * 2);
+    ctx.fill();
   });
 }
 

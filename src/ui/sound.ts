@@ -1,6 +1,6 @@
 import { type KV, defaultStorage } from '../save/save';
 
-export type SoundName = 'build' | 'path' | 'demolish' | 'error' | 'chime' | 'win' | 'lose' | 'pickup';
+export type SoundName = 'build' | 'path' | 'demolish' | 'error' | 'chime' | 'win' | 'lose' | 'pickup' | 'shutter';
 
 const MUTE_KEY = 'park-builder-muted';
 
@@ -18,6 +18,7 @@ const C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.5;
 
 const SOUNDS: Record<SoundName, Note[]> = {
   build: [{ freq: 392, at: 0, dur: 0.07, type: 'square' }, { freq: 587, at: 0.07, dur: 0.1, type: 'square' }],
+  shutter: [{ freq: 1800, at: 0, dur: 0.03, type: 'square', gain: 0.5 }, { freq: 900, at: 0.05, dur: 0.05, type: 'square', gain: 0.5 }],
   pickup: [{ freq: 660, at: 0, dur: 0.05, type: 'triangle' }, { freq: 990, at: 0.05, dur: 0.08, type: 'triangle' }],
   path: [{ freq: 880, at: 0, dur: 0.03, type: 'sine', gain: 0.6 }],
   demolish: [{ freq: 220, at: 0, dur: 0.18, type: 'sawtooth', to: 70 }],

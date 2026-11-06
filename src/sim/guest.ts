@@ -5,6 +5,7 @@ import { buildingDef } from './coaster';
 import { fairPrice } from './economy';
 import type { Tile } from './map';
 import { HEAT_THIRST } from './events';
+import { addReview, GRIPES } from './reviews';
 import { isRaining, RAIN_DRAIN, RAIN_DRAIN_EVERY, RAIN_RIDE_PENALTY } from './weather';
 import type { Building, World } from './world';
 
@@ -104,6 +105,9 @@ export interface Guest {
   trash: number;
   /** 우산을 샀는가 */
   umbrella: boolean;
+  /** 마지막으로 떠올린 불만(리뷰용) / 공원을 떠나기로 한 이유 */
+  gripe?: Thought;
+  leaveReason?: Thought;
   /** VIP 손님: 타고 싶은 놀이기구(def id)와 기한. 이뤄 주면 done */
   vip?: { wish: string; until: number; done: boolean };
 }
@@ -149,6 +153,7 @@ export function thrillTolerance(g: Guest): number {
 }
 
 export function think(g: Guest, t: Thought): void {
+  if (GRIPES.has(t)) g.gripe = t;
   g.thought = t;
   g.thoughtTimer = THOUGHT_TICKS;
 }
@@ -397,6 +402,7 @@ export function setPath(world: World, g: Walker, path: readonly Tile[]): void {
 }
 
 function startLeaving(world: World, g: Guest): void {
+  g.leaveReason = g.thought ?? undefined;
   const path = world.network.findPath(g.tile, world.map.gate);
   g.target = null;
   if (!path) return despawn(world, g);
@@ -408,6 +414,7 @@ function despawn(world: World, g: Guest): void {
   leaveQueue(world, g);
   g.state = 'gone';
   world.stats.left++;
+  addReview(world, g);
 }
 
 export function goIdle(g: Guest): void {

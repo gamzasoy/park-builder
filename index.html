@@ -86,6 +86,10 @@
       #money { font-weight: 700; font-size: 17px; color: var(--gold); min-width: 110px; }
       #money::before { content: '💰 '; }
       #date::before { content: '📅 '; }
+      #date[data-season="spring"]::before { content: '🌸 '; }
+      #date[data-season="summer"]::before { content: '🌿 '; }
+      #date[data-season="autumn"]::before { content: '🍁 '; }
+      #date[data-season="winter"]::before { content: '❄️ '; }
       #guests::before { content: '👥 '; }
       #rating::before { content: '⭐ '; }
       #money.neg { color: #ff6b6b; }
@@ -133,9 +137,13 @@
         100% { opacity: 0; transform: translate(-50%, -230%); }
       }
 
+      .photo-flash { position: fixed; inset: 0; z-index: 30; pointer-events: none; background: #fff; animation: photo-flash 0.5s ease-out forwards; }
+      @keyframes photo-flash { from { opacity: 0.85; } to { opacity: 0; } }
+
       /* 큰 알림(토스트): 화면 위쪽 가운데 */
       #toasts {
-        position: fixed; z-index: 6; top: calc(var(--hud-h, 36px) + 46px); left: 50%; transform: translateX(-50%);
+        /* 플레이어가 연 카드(재무·미션·리뷰·건물 정보)는 알림보다 위에 둔다 */
+        position: fixed; z-index: 2; top: calc(var(--hud-h, 36px) + 46px); left: 50%; transform: translateX(-50%);
         display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(520px, calc(100vw - 32px)); pointer-events: none;
       }
       .toast {
@@ -178,11 +186,20 @@
       #toolbar button img { width: 44px; height: 40px; image-rendering: auto; filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.35)); }
       #toolbar button small { font-size: 10px; opacity: 0.85; color: var(--gold); }
 
-      .card { position: fixed; top: calc(var(--hud-h, 36px) + 48px); width: 270px; padding: 0 10px 10px; font-size: 13px; }
+      .card { position: fixed; z-index: 3; top: calc(var(--hud-h, 36px) + 48px); width: 270px; padding: 0 10px 10px; font-size: 13px; }
       .card .head { margin: 0 -10px 8px; padding: 3px 4px 3px 9px; font-size: 14px; }
       #panel { right: 12px; }
       #finance { left: 292px; width: 330px; }
       #missions { left: 292px; width: 290px; }
+      #reviews { left: 292px; width: 320px; }
+      #r-avg { margin: 0 0 6px; padding: 4px 6px; font-weight: 700; color: var(--gold); background: rgba(0,0,0,0.2); }
+      #r-list { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; }
+      #r-list li { padding: 5px 4px; font-size: 12px; }
+      #r-list li + li { border-top: 1px solid var(--line); }
+      #r-list .r-head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+      #r-list .r-stars { color: var(--gold); letter-spacing: 1px; }
+      #r-list li[data-stars="1"] .r-stars, #r-list li[data-stars="2"] .r-stars { color: #ff8a80; }
+      #rating { cursor: pointer; }
       #m-list { list-style: none; margin: 0; padding: 0; }
       #m-list li { padding: 5px 4px 6px; }
       #m-list li + li { border-top: 1px solid var(--line); }
@@ -304,6 +321,7 @@
         #panel, #gpanel, #spanel { right: calc(8px + var(--sar)); }
         #finance { left: calc(8px + var(--sal)); width: min(330px, 46vw); }
         #missions { left: calc(8px + var(--sal)); width: min(290px, 46vw); }
+        #reviews { left: calc(8px + var(--sal)); width: min(320px, 50vw); }
         #tutorial { left: calc(8px + var(--sal)); width: 220px; }
         .card .head { position: sticky; top: 0; z-index: 1; }
         .card .head button, .card .head div button { min-width: 36px; height: 30px; font-size: 16px; }
@@ -412,6 +430,11 @@
         <tbody id="f-body"></tbody>
       </table>
       <div id="f-extra"></div>
+    </div>
+    <div id="reviews" class="card" hidden>
+      <div class="head"><b>공원 리뷰</b><button id="r-close" title="닫기">×</button></div>
+      <div id="r-avg"></div>
+      <ul id="r-list"></ul>
     </div>
     <div id="missions" class="card" hidden>
       <div class="head"><b>보너스 미션 <span id="m-count"></span></b><button id="m-close" title="닫기">×</button></div>

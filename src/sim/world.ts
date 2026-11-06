@@ -9,6 +9,7 @@ import { DEFAULT_WEATHER_SEED, type Weather } from './weather';
 import { newTutorial, type TutorialState } from './tutorial';
 import { newMissions, type MissionState } from './missions';
 import type { Fireworks, ParkEvent } from './events';
+import type { Review } from './reviews';
 
 export const START_MONEY = 10000;
 
@@ -125,6 +126,8 @@ export class World {
   monthStartEntered = 0;
   /** 초반 안내 진행 상황 */
   tutorial: TutorialState = newTutorial();
+  /** 떠난 손님들이 남긴 최근 리뷰(오래된 것부터) */
+  reviews: Review[] = [];
   /** 공원 이름(입구 간판). 비어 있으면 'PARK' */
   parkName = '';
   /** 보너스 미션 진행 상황 */
@@ -184,5 +187,6 @@ export class World {
     this.tutorial = src.tutorial;
     this.missions = src.missions;
     this.parkName = src.parkName;
+    this.reviews = src.reviews;
   }
 }
