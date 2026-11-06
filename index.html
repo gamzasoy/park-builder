@@ -37,6 +37,10 @@
         /* 한글 글꼴을 맨 앞에: 숫자·영문·₩도 같은 글꼴로 그려 한 줄 안에서 글씨체가 섞이지 않게(캔버스 말풍선 BUBBLE_FONT와 같다) */
         --font: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
       }
+      /* 휴대폰 브라우저(iOS 사파리 가로 화면, 안드로이드 글자 키우기)가 칸마다 글자를 제멋대로 키우지 않게 */
+      html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+      /* 한글은 단어 단위로 줄을 바꾼다(글자 하나만 다음 줄로 넘어가지 않게) */
+      body { word-break: keep-all; overflow-wrap: break-word; }
       html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; background: #1f3a1c; font-family: var(--font); color: #fff; }
       canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; }
       button {
@@ -286,32 +290,34 @@
 
       /* ===== 휴대폰 가로 화면 (PC 화면은 바뀌지 않음) ===== */
       @media (pointer: coarse) and (max-height: 640px) {
+        /* 휴대폰 글자 크기는 세 단계만 쓴다: 작은 글씨(가격·보조) / 본문 / 제목 */
+        :root { --fs-s: 10px; --fs: 12px; --fs-l: 13px; }
         :root { --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px); --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px); }
         button { min-height: 32px; }
         #hud {
-          flex-wrap: nowrap; overflow-x: auto; gap: 4px 8px; font-size: 12px;
+          flex-wrap: nowrap; overflow-x: auto; gap: 4px 8px; font-size: var(--fs);
           padding: calc(2px + var(--sat)) calc(6px + var(--sar)) 2px calc(6px + var(--sal)); scrollbar-width: none;
         }
         #hud::-webkit-scrollbar { display: none; }
         #hud > * { flex: none; }
-        #money { font-size: 14px; min-width: 0; }
+        #money { font-size: var(--fs-l); min-width: 0; }
         #hud > span:not(.speed):not(.fee) { padding: 1px 6px; }
         .speed button { min-width: 34px; min-height: 30px; }
         #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn, #help-btn { padding: 2px 8px; min-height: 30px; }
         .stepper button { min-width: 30px; min-height: 30px; }
-        #hint, #goal { top: calc(36px + var(--sat)); font-size: 11px; line-height: 1.3; }
+        #hint, #goal { top: calc(36px + var(--sat)); font-size: var(--fs); line-height: 1.3; }
         /* 안내 쪽지: 왼쪽 위는 시작 가이드와 겹치므로 툴바 바로 위 가운데에 두고, 길면 줄을 바꾼다 */
         #hint {
           top: auto; bottom: calc(var(--tb-reserve, 90px) + 4px); left: 0; right: 0; margin: 0 auto; width: fit-content;
-          max-width: min(56vw, 480px); text-align: center; white-space: normal; z-index: 3;
+          max-width: min(66vw, 540px); text-align: center; white-space: normal; z-index: 3;
         }
         /* 목표: 잘리지 않게 오른쪽 위에서 두 줄까지 */
         #goal { max-width: 44vw; text-align: right; white-space: normal; }
         #toasts { top: calc(36px + var(--sat) + 30px); width: min(440px, 60vw); gap: 6px; }
         .toast { padding: 6px 12px 8px 8px; gap: 8px; }
         .toast .t-icon { font-size: 22px; }
-        .toast .t-body b { font-size: 13px; }
-        .toast .t-body span { font-size: 11px; }
+        .toast .t-body b { font-size: var(--fs-l); }
+        .toast .t-body span { font-size: var(--fs); }
         #goal { right: calc(8px + var(--sar)); }
         #toolbar {
           flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 10px; -webkit-overflow-scrolling: touch;
@@ -319,32 +325,32 @@
         }
         #toolbar::-webkit-scrollbar { display: none; }
         #toolbar .group { flex: none; }
-        #toolbar .title { font-size: 10px; margin: 0 0 1px 2px; }
+        #toolbar .title { font-size: var(--fs-s); margin: 0 0 1px 2px; }
         /* 그룹 탭: 맨 위 한 줄에 그룹 이름, 누른 그룹의 버튼만 그 아래에 펼친다 */
         #toolbar { flex-direction: column; overflow: visible; gap: 2px; }
         #toolbar .tb-tabs { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; flex: none; }
         #toolbar .tb-tabs::-webkit-scrollbar { display: none; }
-        #toolbar .tb-tab { flex: none; min-width: 0; min-height: 26px; padding: 1px 9px; font-size: 12px; font-weight: 600; flex-direction: row; border-radius: 13px; }
+        #toolbar .tb-tab { flex: none; min-width: 0; min-height: 26px; padding: 1px 9px; font-size: var(--fs); font-weight: 600; flex-direction: row; border-radius: 13px; }
         #toolbar .tb-tab.active { background: var(--gold); color: #2a2208; border-color: #8a6a10; }
         #toolbar .tb-tab.hint { border-color: var(--gold); animation: hint-pulse 1.3s ease-in-out infinite; }
         #toolbar .group { display: none; }
         #toolbar .group.open { display: block; overflow-x: auto; scrollbar-width: none; }
         #toolbar .group.open::-webkit-scrollbar { display: none; }
         #toolbar .group .title { display: none; }
-        #toolbar button { min-width: 52px; padding: 1px 3px 2px; font-size: 11px; }
+        #toolbar button { min-width: 52px; padding: 1px 3px 2px; font-size: var(--fs); }
         #toolbar button img { width: 32px; height: 29px; }
-        #toolbar button small { font-size: 9px; }
+        #toolbar button small { font-size: var(--fs-s); }
         #tool-actions { right: calc(10px + var(--sar)); bottom: calc(var(--tb-reserve, 90px) + var(--sab) * 0); }
         #tb-toggle {
           display: block; position: fixed; z-index: 4; left: calc(8px + var(--sal)); bottom: var(--tb-h, 86px);
-          min-width: 76px; min-height: 28px; padding: 2px 12px; font-size: 13px; font-weight: 700;
+          min-width: 76px; min-height: 28px; padding: 2px 12px; font-size: var(--fs-l); font-weight: 700;
           border-bottom: 0; border-radius: 6px 6px 0 0;
         }
         body.tb-folded #tb-toggle { bottom: var(--sab); border-bottom: 2px solid var(--btn-dark); border-radius: 6px; }
         body.tb-folded #toolbar { display: none; }
         /* 패널: HUD(약 36px)와 툴바(약 70px) 사이에서 스크롤 */
         .card {
-          top: calc(36px + var(--sat)); width: 230px; font-size: 12px;
+          top: calc(36px + var(--sat)); width: 230px; font-size: var(--fs);
           box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - var(--tb-reserve, 90px) - var(--sab)); overflow-y: auto; overscroll-behavior: contain;
         }
         #panel, #gpanel, #spanel { right: calc(8px + var(--sar)); }
@@ -356,11 +362,18 @@
         .card .head button, .card .head div button { min-width: 36px; height: 30px; font-size: 16px; }
         .p-row { padding: 4px; }
         #p-demolish, #p-edit, #p-test, #p-upgrade, #p-move, #s-fire { min-height: 36px; }
-        #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
+        #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; font-size: var(--fs); }
+        /* 창 제목은 제목 크기, 창 안 글은 본문 크기로(PC용 16px이 그대로 나오지 않게) */
+        .card .head, #modal h2 { font-size: var(--fs-l); }
+        #m-choices .choice { padding: 5px 8px; gap: 8px; }
+        #m-choices .c-icon { font-size: 22px; width: 28px; }
+        #m-choices .c-body b { font-size: var(--fs-l); }
+        #m-choices .c-body span { font-size: var(--fs); }
+        #m-choices .c-body small { font-size: var(--fs-s); }
         #m-buttons button { min-height: 38px; }
         #track-bar {
           bottom: calc(var(--tb-reserve, 90px) + var(--sab) * 0); width: min(620px, calc(100vw - 24px - var(--sal) - var(--sar)));
-          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - var(--tb-reserve, 90px) - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: 12px;
+          box-sizing: border-box; max-height: calc(100dvh - 40px - var(--sat) - var(--tb-reserve, 90px) - var(--sab)); overflow-y: auto; padding: 5px 8px; font-size: var(--fs);
         }
         #t-buttons { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
         #t-buttons button { flex: none; min-width: 60px; min-height: 40px; padding: 3px 6px; }
@@ -371,16 +384,16 @@
         /* 편집 바를 한 줄 정보 + 버튼 한 줄로 납작하게: 공원이 화면 대부분을 차지하도록 */
         #track-bar {
           left: calc(6px + var(--sal)); right: calc(6px + var(--sar)); transform: none; width: auto;
-          padding: 3px 6px 4px; font-size: 11px; line-height: 1.3;
+          padding: 3px 6px 4px; font-size: var(--fs); line-height: 1.3;
           background: linear-gradient(rgba(111,125,79,0.94), rgba(95,108,66,0.94));
         }
         #t-head { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; overflow: hidden; }
         #t-info { flex: none; }
-        #t-stats { margin: 0; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
-        #t-msg { margin: 0 0 3px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #t-stats { margin: 0; font-size: var(--fs-s); overflow: hidden; text-overflow: ellipsis; }
+        #t-msg { margin: 0 0 3px; font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #t-buttons { gap: 3px; }
-        #t-buttons button { min-width: 50px; min-height: 36px; padding: 2px 5px; font-size: 12px; }
-        #t-buttons button small { font-size: 9px; }
+        #t-buttons button { min-width: 50px; min-height: 36px; padding: 2px 5px; font-size: var(--fs); }
+        #t-buttons button small { font-size: var(--fs-s); }
         #t-buttons .key { display: none; }
         /* 편집하는 동안 시작 가이드·안내 쪽지는 숨긴다(트랙이 가려지지 않게) */
         body.track-editing #tutorial, body.track-editing #hint { display: none !important; }

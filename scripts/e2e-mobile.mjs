@@ -49,6 +49,17 @@ try {
     return { overlap, clipped: el.scrollWidth > el.clientWidth + 1, aboveToolbar: h.bottom <= tb.top, inside: h.left >= 0 && h.right <= innerWidth };
   });
   check(!hintBox.overlap && !hintBox.clipped && hintBox.aboveToolbar && hintBox.inside, '안내 쪽지가 시작 가이드에 가리지 않고 잘리지 않음(툴바 바로 위)');
+  const textSizes = await game(() => {
+    const set = new Set();
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.offsetParent === null) continue;
+      if (![...el.childNodes].some((n) => n.nodeType === 3 && /[가-힣0-9₩]/.test(n.textContent))) continue;
+      set.add(getComputedStyle(el).fontSize);
+    }
+    return [...set].sort();
+  });
+  check(textSizes.length <= 3, `화면 글자 크기가 세 단계 이하 (${textSizes.join(', ')})`);
+  check(await game(() => getComputedStyle(document.documentElement).webkitTextSizeAdjust === '100%' || getComputedStyle(document.documentElement).textSizeAdjust === '100%'), '브라우저 글자 자동 확대를 끔');
   check(await game(() => { const g = document.getElementById('goal'); return g.scrollWidth <= g.clientWidth + 1 && g.getBoundingClientRect().right <= innerWidth; }), '목표 표시가 잘리지 않음');
 
   // 도구 막대 접기/펼치기
