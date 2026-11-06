@@ -109,7 +109,7 @@
       .stepper button { padding: 0 6px; min-width: 22px; }
       .stepper b { min-width: 52px; text-align: center; }
       .stepper.over b { color: #ff8a80; }
-      #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn { padding: 2px 8px; }
+      #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn, #guide-btn { padding: 2px 8px; }
       #help-btn { padding: 2px 9px; font-weight: 700; }
 
       /* 상태 메시지: RCT의 노란 안내 쪽지 */
@@ -253,6 +253,10 @@
       #m-rows td { text-align: right; padding: 4px 6px; font-variant-numeric: tabular-nums; }
       #m-input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 6px 8px; font: inherit; font-size: 16px; }
       #m-input[hidden] { display: none; }
+      #modal.guide #m-rows th { vertical-align: top; white-space: nowrap; font-weight: 700; color: var(--gold); padding-right: 10px; }
+      #modal.guide #m-rows td { text-align: left; line-height: 1.45; font-variant-numeric: normal; }
+      #modal.guide #m-rows tr + tr { border-top: 1px solid rgba(255,255,255,0.08); }
+      #modal.guide #m-msg { white-space: pre-line; }
       #modal.wide .dialog { width: min(560px, calc(100vw - 32px)); }
       #m-choices { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
       #m-choices[hidden] { display: none; }
@@ -303,7 +307,7 @@
         #money { font-size: var(--fs-l); min-width: 0; }
         #hud > span:not(.speed):not(.fee) { padding: 1px 6px; }
         .speed button { min-width: 34px; min-height: 30px; }
-        #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn, #help-btn { padding: 2px 8px; min-height: 30px; }
+        #finance-btn, #missions-btn, #save-btn, #new-btn, #sound-btn, #help-btn, #guide-btn { padding: 2px 8px; min-height: 30px; }
         .stepper button { min-width: 30px; min-height: 30px; }
         #hint, #goal { top: calc(36px + var(--sat)); font-size: var(--fs); line-height: 1.3; }
         /* 안내 쪽지: 왼쪽 위는 시작 가이드와 겹치므로 툴바 바로 위 가운데에 두고, 길면 줄을 바꾼다 */
@@ -424,6 +428,7 @@
       <span id="guests"></span>
       <span id="rating"></span>
       <span id="weather" style="cursor: help"></span>
+      <button id="guide-btn" title="게임 설명 보기">📖 설명</button>
       <span class="speed">
         <button data-speed="0" title="일시정지 (Space)">⏸</button>
         <button data-speed="1" title="1배속 (1)">1×</button>

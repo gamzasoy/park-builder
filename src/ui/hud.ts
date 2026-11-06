@@ -17,6 +17,7 @@ export interface HudActions {
   onReviews: () => void;
   onSave: () => void;
   onNewGame: () => void;
+  onGuide: () => void;
 }
 
 export const won = (n: number): string => `₩${n.toLocaleString('ko-KR')}`;
@@ -114,6 +115,7 @@ export class Hud {
     this.rating.addEventListener('click', actions.onReviews);
     wire('save-btn', actions.onSave);
     wire('new-btn', actions.onNewGame);
+    wire('guide-btn', actions.onGuide);
   }
 
   update(): void {
