@@ -159,6 +159,26 @@ try {
   check(back.n === 21 && back.ok, '새로고침 후 롤러코스터 트랙 복원');
   await page.screenshot({ path: 'e2e-out/07-coaster-restored.png' });
 
+  // ---- 위치 이동: 역을 눌러 정보 패널 → 위치 이동 → 새 자리를 눌러 트랙째 옮긴다 ----
+  await click(21, 30);
+  await page.waitForSelector('#p-move', { state: 'visible', timeout: 3000 });
+  await page.click('#p-move');
+  check(await game(() => window.__game.world.buildings.size === 1), '위치 이동 도구 시작');
+  await game(() => window.__game.focus(30, 40));
+  const dest = await at(30, 40);
+  await page.mouse.move(dest.x, dest.y);
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: 'e2e-out/08-coaster-move-preview.png' });
+  const moneyBefore = await game(() => window.__game.world.money);
+  await page.mouse.click(dest.x, dest.y);
+  const moved = await game(() => {
+    const b = [...window.__game.world.buildings.values()][0];
+    return { x: b.x, y: b.y, ok: b.track.ok, money: window.__game.world.money, old: window.__game.world.map.occupant[window.__game.world.map.index(21, 30)] };
+  });
+  check(moved.x === 29 && moved.y === 40 && moved.ok && moved.old === 0, `롤러코스터를 트랙째 옮김 (${moved.x},${moved.y})`);
+  check(moved.money === moneyBefore, '옮기는 데 돈이 들지 않음');
+  await page.screenshot({ path: 'e2e-out/09-coaster-moved.png' });
+
   // ---- 지형: 지형 도구로 클릭 → 높이 변경, 높이 보정된 마우스 피킹, 규칙 위반은 거절 ----
   await page.click('#new-btn');
   await page.click('#m-buttons button.primary');

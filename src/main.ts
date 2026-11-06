@@ -411,7 +411,7 @@ input.onTouchCancel = () => tools.cancelDrag();
 // 한 손가락: 건설 도구가 켜져 있으면 건설 입력, 아니면 화면 이동/탭 선택
 input.buildMode = () => tools.isBuilding;
 // 건물·철거는 누르는 순간 실행되므로 터치에서는 손가락을 뗄 때 실행(위치를 맞춘 뒤 놓을 수 있게)
-input.deferOnTouch = () => tools.tool.kind === 'build' || tools.tool.kind === 'demolish';
+input.deferOnTouch = () => tools.tool.kind === 'build' || tools.tool.kind === 'move' || tools.tool.kind === 'demolish';
 
 // 도구가 켜져 있을 때만 보이는 화면 버튼(R / Esc 대응)
 const toolActions = document.getElementById('tool-actions')!;
@@ -422,7 +422,7 @@ function syncToolActions(): void {
   const show = k !== 'none' && k !== 'track';
   if (toolActions.hidden === show) toolActions.hidden = !show;
   const rot = document.getElementById('act-rotate')!;
-  const canRotate = k === 'build';
+  const canRotate = k === 'build' || k === 'move';
   if (rot.hidden === canRotate) rot.hidden = !canRotate;
 }
 
@@ -466,7 +466,7 @@ function openArea(): { top: number; bottom: number } {
  * 미리보기를 띄운다. 그래야 회전 버튼을 눌렀을 때 건물과 입구가 도는 모습이 보인다.
  */
 function buildFallbackTile(): Tile | null {
-  if (tools.tool.kind !== 'build') return null;
+  if (tools.tool.kind !== 'build' && tools.tool.kind !== 'move') return null;
   const { top, bottom } = openArea();
   const w = cam.screenToWorld(cam.viewW / 2, (top + bottom) / 2);
   const t = pickTile(world.map, w.x, w.y).tile;

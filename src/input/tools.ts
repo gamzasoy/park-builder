@@ -3,12 +3,12 @@ import type { BuildingDef } from '../data/types';
 import { guestDisplayPos, staffDisplayPos } from '../render/guestpos';
 import type { Vec2 } from '../render/iso';
 import {
-  anchorFor, buildingAt, canPlaceBuilding, demolishAt, entranceOf, footprintAt,
-  isPathPlaceable, isSceneryPlaceable, lineTiles, PATH_COST, placeBuilding, placePaths, placeScenery,
-  type PlaceFailure,
+  anchorFor, buildingAt, canMoveBuilding, canPlaceBuilding, demolishAt, entranceOf, footprintAt,
+  isPathPlaceable, isSceneryPlaceable, lineTiles, moveBuilding, PATH_COST, placeBuilding, placePaths, placeScenery,
+  relocated, type MoveFailure, type PlaceFailure,
 } from '../sim/building';
 import { paintTerrain, canChangeTerrain, TERRAIN_COST, type TerrainFailure, type TerrainMode } from '../sim/terrain';
-import { buildingTiles, TRACK_TYPES, type Cursor, type TrackType } from '../sim/coaster';
+import { buildingDef as getBuildingDef, buildingTiles, TRACK_TYPES, type Cursor, type TrackType } from '../sim/coaster';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { appendPiece, beginEdit, canAppendPiece, clearTrack, TRACK_FAIL_TEXT, undoPiece } from '../sim/trackedit';
 import type { Building, World } from '../sim/world';
@@ -18,6 +18,8 @@ export type Tool =
   | { kind: 'path' }
   | { kind: 'build'; def: BuildingDef }
   | { kind: 'demolish' }
+  /** 이미 지은 건물 옮기기: 미리보기를 따라 움직이다 누른 곳에 내려놓는다 */
+  | { kind: 'move'; buildingId: number }
   /** 나무·꽃: 길처럼 드래그로 한 줄을 칠한다 */
   | { kind: 'scenery'; def: SceneryDef }
   /** 롤러코스터 트랙 편집: 조각 팔레트/단축키로 다음 조각을 잇는다 */
@@ -56,6 +58,19 @@ const FAIL_TEXT: Record<PlaceFailure, string> = {
   path: '길 위에는 지을 수 없습니다',
   slope: '건물 자리와 입구 칸은 평평해야 합니다 (높이가 같아야 함)',
   money: '돈이 부족합니다',
+};
+
+/** 옮기기 실패: 건물 자리 이유 + (코스터) 트랙이 새 자리에 맞지 않는 이유 */
+const MOVE_FAIL_TEXT: Record<MoveFailure, string> = {
+  ...FAIL_TEXT,
+  bounds: '맵 밖으로 나갑니다',
+  occupied: '다른 건물·길·트랙과 겹칩니다',
+  notrack: '옮길 수 없습니다',
+  closed: '옮길 수 없습니다',
+  max: '옮길 수 없습니다',
+  height: '이 자리에서는 트랙이 너무 높거나 낮아집니다',
+  underground: '트랙이 지형 아래로 파고듭니다',
+  entrance: '트랙이 건물 입구를 막습니다',
 };
 
 const TERRAIN_FAIL_TEXT: Record<TerrainFailure, string> = {
@@ -124,7 +139,7 @@ export class ToolController {
   rotate(): void {
     this.rot = (this.rot + 1) % 4;
     this.rotatedAt = performance.now();
-    if (this.tool.kind === 'build') this.notify(`회전: 입구가 ${ENTRANCE_DIR_TEXT[this.rot]} 쪽`);
+    if (this.tool.kind === 'build' || this.tool.kind === 'move') this.notify(`회전: 입구가 ${ENTRANCE_DIR_TEXT[this.rot]} 쪽`);
   }
 
   /** Esc: 진행 중인 드래그 취소 → 도구 해제 → 선택 해제 */
@@ -147,6 +162,20 @@ export class ToolController {
   /** 건설 도구가 켜져 있나(터치에서 한 손가락이 화면 이동이 아니라 건설 입력이 되는 조건) */
   get isBuilding(): boolean {
     return this.tool.kind !== 'none' && this.tool.kind !== 'track';
+  }
+
+  /** 선택한 건물 옮기기 시작. 현재 방향을 그대로 쓰고 R로 돌릴 수 있다. */
+  beginMove(id: number): void {
+    const b = this.world.buildings.get(id);
+    if (!b) return;
+    this.setTool({ kind: 'move', buildingId: id });
+    this.rot = b.rot;
+    this.notify('옮길 곳을 누르세요 (R: 회전, Esc: 취소)');
+  }
+
+  /** 옮기는 중인 건물 */
+  get movingBuilding(): Building | null {
+    return this.tool.kind === 'move' ? (this.world.buildings.get(this.tool.buildingId) ?? null) : null;
   }
 
   /** 편집 중인 롤러코스터 */
@@ -276,6 +305,20 @@ export class ToolController {
       } else {
         this.fail(FAIL_TEXT[check.reason]);
       }
+    } else if (tool.kind === 'move') {
+      const b = this.movingBuilding;
+      if (!b) { this.tool = { kind: 'none' }; return; }
+      const def = getBuildingDef(b);
+      const a = anchorFor(def, this.rot, t);
+      const check = canMoveBuilding(this.world, b, a.x, a.y, this.rot);
+      if (check.ok && moveBuilding(this.world, b, a.x, a.y, this.rot)) {
+        this.onEvent?.('build');
+        this.notify('옮겼습니다');
+        this.tool = { kind: 'none' };
+        this.selectedId = b.id;
+      } else {
+        this.fail(check.ok ? '옮길 수 없습니다' : MOVE_FAIL_TEXT[check.reason]);
+      }
     } else if (tool.kind === 'demolish') {
       if (demolishAt(this.world, t.x, t.y) === null) {
         this.fail('철거할 대상이 없습니다');
@@ -366,18 +409,29 @@ export class ToolController {
       return { tiles };
     }
 
-    if (tool.kind === 'build') {
-      const a = anchorFor(tool.def, this.rot, hover);
-      const f = footprintAt(tool.def, a.x, a.y, this.rot);
-      const ok = canPlaceBuilding(this.world, tool.def, a.x, a.y, this.rot).ok;
+    if (tool.kind === 'build' || tool.kind === 'move') {
+      const moving = this.movingBuilding;
+      if (tool.kind === 'move' && !moving) return null;
+      const def = tool.kind === 'build' ? tool.def : getBuildingDef(moving!);
+      const a = anchorFor(def, this.rot, hover);
+      const f = footprintAt(def, a.x, a.y, this.rot);
+      const ok = moving
+        ? canMoveBuilding(this.world, moving, a.x, a.y, this.rot).ok
+        : canPlaceBuilding(this.world, def, a.x, a.y, this.rot).ok;
       const tiles: PreviewTile[] = [];
       for (let y = f.y; y < f.y + f.h; y++) {
         for (let x = f.x; x < f.x + f.w; x++) if (map.inBounds(x, y)) tiles.push({ x, y, ok });
       }
+      // 코스터를 옮길 때는 트랙이 놓일 칸도 보여 준다
+      if (moving?.track) {
+        for (const p of relocated(this.world, moving, a.x, a.y, this.rot).track!.placed) {
+          if (map.inBounds(p.x, p.y)) tiles.push({ x: p.x, y: p.y, ok });
+        }
+      }
       const entrance = entranceOf(f, this.rot);
       return {
         tiles, entrance,
-        ghost: { defId: tool.def.id, ...f, rot: this.rot },
+        ghost: { defId: def.id, ...f, rot: this.rot },
         entranceOnPath: map.inBounds(entrance.x, entrance.y) && map.isPath(entrance.x, entrance.y),
       };
     }
