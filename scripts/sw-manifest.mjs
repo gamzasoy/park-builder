@@ -13,7 +13,8 @@ const files = [];
   }
 })(dist);
 
-const list = files.filter((f) => f !== 'sw.js').sort();
+// og-image.jpg는 링크 미리보기용이라 게임 실행에는 필요 없다(오프라인 캐시에서 제외)
+const list = files.filter((f) => f !== 'sw.js' && f !== 'og-image.jpg').sort();
 const hash = createHash('sha1');
 for (const f of list) hash.update(f).update(readFileSync(join(dist, f)));
 const version = hash.digest('hex').slice(0, 10);
