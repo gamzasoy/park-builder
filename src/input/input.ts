@@ -5,6 +5,10 @@ import { TouchGesture, type GestureAction } from './gesture';
 import { pickTile } from './pick';
 
 const PAN_SPEED = 600; // 화면 px/초 (zoom 1 기준)
+/** 이만큼(ms) 움직이지 않고 누르고 있으면 길게 누르기 */
+export const LONG_PRESS_MS = 450;
+/** 길게 누르기 판정과 '끌었는가' 판정에 쓰는 허용 거리(px) */
+const PRESS_SLOP = 10;
 
 export class Input {
   hoverTile: Tile | null = null;
@@ -13,6 +17,8 @@ export class Input {
   onLeftDown?: (t: Tile | null, pos: Vec2 | null) => void;
   onLeftUp?: (t: Tile | null) => void;
   onKeyDown?: (key: string) => void;
+  /** 선택 모드에서 길게 눌렀을 때. 처리했으면(건물 옮기기 시작 등) true — 이후 끌어서 놓은 곳에 onLeftDown이 온다 */
+  onLongPress?: (t: Tile, pos: Vec2 | null) => boolean;
   /** 터치로 두 번째 손가락이 닿았을 때 진행 중이던 드래그(길 깔기 등)를 취소 */
   onTouchCancel?: () => void;
   /** 건설 도구(길·건물·장식·지형·철거 등)가 켜져 있으면 true — 한 손가락이 건설 입력이 된다 */
@@ -27,6 +33,10 @@ export class Input {
   private lastX = 0;
   private lastY = 0;
   private gesture = new TouchGesture(() => this.buildMode());
+  /** 길게 누르기 타이머와, 길게 눌러 시작한 끌기(시작 지점, 끌었는가) */
+  private pressTimer: ReturnType<typeof setTimeout> | null = null;
+  private pressStart: { x: number; y: number } | null = null;
+  private pressDrag: { x: number; y: number; moved: boolean } | null = null;
 
   /** 지형 높이를 고려해 칸을 고르는 데 쓰는 맵(월드가 새 게임·불러오기로 바뀔 수 있어 함수로 받는다) */
   getMap!: () => TileMap;
@@ -79,31 +89,96 @@ export class Input {
       const p = this.pos(e);
       try { this.canvas.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트 등 */ }
       this.applyTouch(this.gesture.down(e.pointerId, p.x, p.y));
+      if (this.gesture.holding) this.armLongPress(p, true);
+      else this.disarmLongPress();
       e.preventDefault();
       return;
     }
     this.onDown(e);
   };
 
+  /** 길게 누르기 대기 시작(선택 모드에서 누른 순간) */
+  private armLongPress(p: { x: number; y: number }, touch: boolean): void {
+    this.disarmLongPress();
+    if (this.buildMode() || !this.onLongPress) return;
+    this.pressStart = { ...p };
+    this.pressTimer = setTimeout(() => {
+      this.pressTimer = null;
+      const start = this.pressStart;
+      if (!start || (touch && !this.gesture.holding)) return;
+      const t = this.tileAt(start.x, start.y);
+      if (!this.onLongPress?.(t, this.hoverPos)) return;
+      if (touch) this.gesture.longPress();
+      this.hoverTile = t;
+      this.pressDrag = { ...start, moved: false };
+      try { navigator.vibrate?.(20); } catch { /* 진동 미지원 */ }
+    }, LONG_PRESS_MS);
+  }
+
+  private disarmLongPress(): void {
+    if (this.pressTimer) clearTimeout(this.pressTimer);
+    this.pressTimer = null;
+    this.pressStart = null;
+  }
+
+  /** 누른 채 움직이면 길게 누르기는 취소, 길게 눌러 시작한 끌기는 '끌었다'로 표시 */
+  private trackPress(x: number, y: number): void {
+    if (this.pressStart && Math.hypot(x - this.pressStart.x, y - this.pressStart.y) > PRESS_SLOP) this.disarmLongPress();
+    const d = this.pressDrag;
+    if (d && !d.moved && Math.hypot(x - d.x, y - d.y) > PRESS_SLOP) d.moved = true;
+  }
+
+  /**
+   * 길게 눌러 시작한 끌기를 끝낸다. 끌었으면 놓은 칸에 onLeftDown(옮기기 실행), 제자리에서 뗐으면
+   * 아무것도 하지 않아 옮기기 모드가 이어진다(탭으로 놓을 곳을 고를 수 있다). 처리했으면 true
+   */
+  private endPressDrag(t: Tile | null): boolean {
+    const d = this.pressDrag;
+    this.pressDrag = null;
+    if (!d) return false;
+    if (d.moved && t) {
+      this.onLeftDown?.(t, this.hoverPos);
+      this.onLeftUp?.(t);
+    }
+    return true;
+  }
+
   private onPointerMove = (e: PointerEvent): void => {
     if (e.pointerType === 'touch') {
       const p = this.pos(e);
+      this.trackPress(p.x, p.y);
       this.applyTouch(this.gesture.move(e.pointerId, p.x, p.y));
       return;
+    }
+    if (this.pressStart || this.pressDrag) {
+      const p = this.pos(e);
+      this.trackPress(p.x, p.y);
     }
     this.onMove(e);
   };
 
   private onPointerUp = (e: PointerEvent): void => {
+    this.disarmLongPress();
     if (e.pointerType === 'touch') {
       const p = this.pos(e);
+      if (this.pressDrag) {
+        // 길게 눌러 끌던 손가락: 제스처의 up 대신 끌기를 마무리한다
+        this.gesture.up(e.pointerId, p.x, p.y);
+        this.endPressDrag(this.tileAt(p.x, p.y));
+        this.hoverTile = null;
+        this.hoverPos = null;
+        return;
+      }
       this.applyTouch(this.gesture.up(e.pointerId, p.x, p.y));
       return;
     }
+    if (e.button === 0 && this.endPressDrag(this.hoverTile)) return;
     this.onUp(e);
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
+    this.disarmLongPress();
+    this.pressDrag = null;
     if (e.pointerType === 'touch') this.applyTouch(this.gesture.cancel(e.pointerId));
   };
 
@@ -152,7 +227,9 @@ export class Input {
     const p = this.pos(e);
     if (e.button === 0) {
       this.hoverTile = this.tileAt(p.x, p.y);
+      const building = this.buildMode();
       this.onLeftDown?.(this.hoverTile, this.hoverPos);
+      if (!building) this.armLongPress(p, false);
     } else if (e.button === 1 || e.button === 2) {
       // 가운데/오른쪽 버튼 드래그 = 카메라 팬
       this.dragging = true;

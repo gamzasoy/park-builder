@@ -70,4 +70,25 @@ describe('TouchGesture - 핀치', () => {
     g.down(3, 5, 5);
     expect(g.up(3, 5, 5)).toEqual([{ type: 'tap', x: 5, y: 5 }]);
   });
+
+  it('길게 누르면(움직이지 않은 한 손가락) 건설 입력으로 바뀌어 끌기와 떼기가 나온다', () => {
+    const g = mk(false);
+    g.down(1, 100, 100);
+    expect(g.holding).toBe(true);
+    expect(g.longPress()).toBe(true);
+    expect(g.move(1, 160, 120)).toEqual([{ type: 'move', x: 160, y: 120 }]); // 팬이 아니라 끌기
+    expect(g.up(1, 160, 120)).toEqual([{ type: 'up', x: 160, y: 120 }]);
+  });
+
+  it('움직이거나 두 손가락이면 길게 누르기가 안 된다', () => {
+    const g = mk(false);
+    g.down(1, 100, 100);
+    g.move(1, 150, 100); // 팬으로 넘어감
+    expect(g.holding).toBe(false);
+    expect(g.longPress()).toBe(false);
+    g.up(1, 150, 100);
+    g.down(2, 0, 0);
+    g.down(3, 50, 0);
+    expect(g.longPress()).toBe(false);
+  });
 });
