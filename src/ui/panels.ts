@@ -160,6 +160,7 @@ const ROWS: [LedgerKey, string][] = [
   ['shops', '매점 수익'],
   ['photos', '탑승 사진'],
   ['missions', '미션 보상'],
+  ['theft', '도난'],
   ['construction', '건설/철거'],
   ['fireworks', '불꽃놀이'],
   ['parade', '퍼레이드'],
@@ -339,6 +340,7 @@ const WORKING_TEXT: Record<Staff['kind'], string> = {
   mechanic: '수리·점검 중',
   entertainer: '공연 중',
   vendor: '판매 중',
+  security: '순찰 중',
 };
 
 /** 선택한 직원의 상태와 해고 */
@@ -395,7 +397,7 @@ export class StaffPanel {
     }
     if (this.root.hidden) this.root.hidden = false;
     setText(this.title, `${STAFF_NAME[s.kind]} #${s.id}`);
-    setText(this.state, s.state === 'working' ? WORKING_TEXT[s.kind] : STAFF_STATE_TEXT[s.state]);
+    setText(this.state, s.state === 'working' ? WORKING_TEXT[s.kind] : s.kind === 'security' && s.state === 'walking' && s.target ? '🚨 도둑 추격 중' : STAFF_STATE_TEXT[s.state]);
     setText(this.wage, `${won(WAGE[s.kind])} / 일`);
   }
 }

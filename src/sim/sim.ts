@@ -13,6 +13,7 @@ import { updateEvents } from './events';
 import { updateParade } from './parade';
 import { FLOAT_TICKS, updateGuest } from './guest';
 import { updateWeather } from './weather';
+import { updateStorm } from './storm';
 import type { World } from './world';
 
 /** 손님만 한 틱 진행(스포너 제외). 테스트에서 시나리오를 통제할 때 사용. */
@@ -42,6 +43,7 @@ export function stepWorld(world: World): void {
   if (world.status === 'won' || world.status === 'lost') return;
 
   updateWeather(world);
+  updateStorm(world);
   updateEvents(world);
   updateParade(world);
   updateSpawner(world);

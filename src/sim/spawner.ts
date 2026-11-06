@@ -3,7 +3,8 @@ import { PARADE_SPAWN_FACTOR } from './parade';
 import { feeFactor } from './economy';
 import { createGuest, type Guest } from './guest';
 import { eventActive, FIREWORKS_SPAWN_FACTOR, HYPE_SPAWN_FACTOR } from './events';
-import { isRaining, RAIN_SPAWN_FACTOR } from './weather';
+import { isRaining, RAIN_SPAWN_FACTOR, STORM_SPAWN_FACTOR } from './weather';
+import { maybeThief } from './thief';
 import type { World } from './world';
 
 export const MAX_GUESTS = 300;
@@ -28,12 +29,15 @@ export function updateSpawner(world: World): void {
 
   const base = Math.min(0.12, 0.02 + 0.015 * operational);
   const ratingFactor = 0.4 + (world.rating / 1000) * 1.2;
-  const weatherFactor = isRaining(world) ? RAIN_SPAWN_FACTOR : 1;
+  const weatherFactor = (isRaining(world) ? RAIN_SPAWN_FACTOR : 1) * (world.storm ? STORM_SPAWN_FACTOR : 1);
   const eventFactor = (eventActive(world, 'hype') ? HYPE_SPAWN_FACTOR : 1) * (world.fireworks ? FIREWORKS_SPAWN_FACTOR : 1) * (world.parade ? PARADE_SPAWN_FACTOR : 1);
   if (!world.rng.chance(base * ratingFactor * feeFactor(world.entranceFee) * weatherFactor * eventFactor)) return;
   // 가족인지는 다음 손님 id로 정한다(RNG 순서를 바꾸지 않는다)
   if (hash32(world.nextGuestId, 0, 89) % 100 < FAMILY_PCT) admitFamily(world);
-  else admitGuest(world);
+  else {
+    const g = admitGuest(world);
+    if (g) maybeThief(world, g);
+  }
 }
 
 /**

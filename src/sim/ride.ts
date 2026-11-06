@@ -25,7 +25,8 @@ export function breaksDown(b: Building): boolean {
  */
 export function updateRide(world: World, b: Building, def: BuildingDef): void {
   // 정전 중에는 새 손님을 태우지 못한다(운행 중인 사이클은 마무리)
-  const operational = world.network.isOperational(b) && world.event?.kind !== 'blackout';
+  // 폭풍 중에는 실외 놀이기구도 멈춘다
+  const operational = world.network.isOperational(b) && world.event?.kind !== 'blackout' && !(world.storm && def.outdoor);
   if (b.broken) b.brokenTicks++;
 
   if (b.phase === 'idle' && operational && b.queue.length > 0) {

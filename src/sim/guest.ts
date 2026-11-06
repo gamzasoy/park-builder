@@ -7,6 +7,8 @@ import type { Tile } from './map';
 import { HEAT_THIRST } from './events';
 import { addReview, GRIPES } from './reviews';
 import { isRaining, RAIN_DRAIN, RAIN_DRAIN_EVERY, RAIN_RIDE_PENALTY } from './weather';
+import { STORM_DRAIN } from './storm';
+import { updateThief } from './thief';
 import type { Building, World } from './world';
 
 /** 틱당 이동 거리(타일). 10틱/초 → 초당 2타일 */
@@ -48,7 +50,8 @@ export type Thought =
   | 'hungry' | 'thirsty' | 'toilet' | 'tired' | 'unhappy'
   | 'fun' | 'tooIntense' | 'queueFull' | 'waited' | 'broke' | 'tooOld' | 'bored' | 'expensive' | 'scenery' | 'litter' | 'broken' | 'rain' | 'show' | 'fireworks' | 'fountain' | 'vipHappy' | 'vipSad' | 'rainbow'
   | 'lost' | 'lostKid' | 'reunited' | 'kidFun'
-  | 'balloon' | 'balloonLost' | 'photo' | 'parade';
+  | 'balloon' | 'balloonLost' | 'photo' | 'parade'
+  | 'storm' | 'robbed' | 'caught';
 /** 생각이 머무는 시간(틱) */
 export const THOUGHT_TICKS = 60;
 const NEED_CHECK_EVERY = 30;
@@ -145,6 +148,12 @@ export interface Guest {
   balloon?: number;
   /** 마지막으로 탑승 사진을 산 코스터(건물 id) */
   photo?: number;
+  /** 소매치기(sim/thief.ts): 훔친 돈 / 훔친 횟수 / 들킨 채로 있는 마지막 틱 / 가게에서 훔친 물건 값 */
+  thief?: boolean;
+  loot?: number;
+  thefts?: number;
+  spotted?: number;
+  shoplifted?: number;
   /** 마지막으로 떠올린 불만(리뷰용) / 공원을 떠나기로 한 이유 */
   gripe?: Thought;
   leaveReason?: Thought;
@@ -328,12 +337,13 @@ function tickLitter(world: World, g: Guest): void {
   if (g.thought === null) think(g, 'litter');
 }
 
-/** 비를 맞으면(우산 없이 시설 밖) 기분이 조금씩 나빠진다(RNG를 쓰지 않는다) */
+/** 비를 맞으면(우산 없이 시설 밖) 기분이 조금씩 나빠진다. 폭풍 중엔 우산도 소용없고 두 배로 나빠진다(RNG를 쓰지 않는다) */
 function tickRain(world: World, g: Guest): void {
-  if (g.umbrella || g.state === 'visiting' || g.state === 'gone' || !isRaining(world)) return;
+  const storm = world.storm !== null;
+  if ((g.umbrella && !storm) || g.state === 'visiting' || g.state === 'gone' || !isRaining(world)) return;
   if ((world.tick + g.id) % RAIN_DRAIN_EVERY !== 13) return;
-  g.needs.happiness = clamp(g.needs.happiness - RAIN_DRAIN);
-  if (g.thought === null) think(g, 'rain');
+  g.needs.happiness = clamp(g.needs.happiness - RAIN_DRAIN * (storm ? STORM_DRAIN : 1));
+  if (g.thought === null) think(g, storm ? 'storm' : 'rain');
 }
 
 function tickThought(world: World, g: Guest): void {
@@ -348,6 +358,12 @@ export function updateGuest(world: World, g: Guest): void {
   g.px = g.x;
   g.py = g.y;
   g.age++;
+  if (g.thief) {
+    // 소매치기: 욕구 없이 돌아다니며 훔친다(떠날 때 걷기만 함께 쓴다)
+    if (g.thoughtTimer > 0 && --g.thoughtTimer === 0) g.thought = null;
+    if (g.state === 'leaving') return walk(world, g);
+    return updateThief(world, g);
+  }
   tickNeeds(g);
   if (g.kid) g.needs.energy = Math.max(0, g.needs.energy - 0.01); // 아이는 더 빨리 지친다
   if (world.event?.kind === 'heatwave') g.needs.thirst = Math.min(100, g.needs.thirst + HEAT_THIRST);
@@ -485,6 +501,8 @@ export function pickTarget(world: World, g: Guest): { b: Building; path: readonl
       }
     } else {
       if (energy < 20) continue;
+      // 폭풍 중엔 실외 놀이기구가 멈춘다
+      if (def.outdoor && world.storm) continue;
       // 아이와 함께 온 가족은 키 제한(강도)에 걸리는 기구를 타지 않고, 순한 기구를 더 좋아한다
       if (fam && (def.intensity ?? 0) > KID_MAX_INTENSITY) continue;
       score = (def.fun ?? 0) + world.rng.next() * 20 - (g.visited.includes(b.id) ? 35 : 0);
@@ -522,7 +540,7 @@ export function setPath(world: World, g: Walker, path: readonly Tile[]): void {
   g.pathVersion = world.map.version;
 }
 
-function startLeaving(world: World, g: Guest): void {
+export function startLeaving(world: World, g: Guest): void {
   g.leaveReason = g.thought ?? undefined;
   // 부모가 나가면 함께 온 아이도 하던 일을 멈추고 따라 나간다(시설 안의 아이는 나온 뒤 kidIdle이 내보낸다)
   for (const k of familyKids(world, g)) {
@@ -542,7 +560,7 @@ function despawn(world: World, g: Guest): void {
   leaveQueue(world, g);
   g.state = 'gone';
   world.stats.left++;
-  if (!g.kid) addReview(world, g); // 리뷰는 보호자가 가족을 대표해 남긴다
+  if (!g.kid && !g.thief) addReview(world, g); // 리뷰는 보호자가 가족을 대표해 남긴다(도둑은 남기지 않는다)
 }
 
 export function goIdle(g: Guest): void {

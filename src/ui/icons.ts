@@ -96,7 +96,7 @@ export function staffIcon(kind: StaffKind): string {
       drawMascot(ctx, cx, H - 4, 1.55, Math.PI, true);
       return;
     }
-    const vest = { janitor: '#f08a24', mechanic: '#2f78d0', vendor: '#d94848' }[kind];
+    const vest = { janitor: '#f08a24', mechanic: '#2f78d0', vendor: '#d94848', security: '#27365e' }[kind];
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(cx, H - 5, 11, 4, 0, 0, Math.PI * 2);
@@ -136,6 +136,20 @@ export function staffIcon(kind: StaffKind): string {
       ctx.stroke();
     } else if (kind === 'vendor') {
       drawVendorTray(ctx, cx, H - 5.6, 2.14);
+    } else if (kind === 'security') {
+      // 금색 별 배지와 모자 휘장, 손에 든 호루라기 줄
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const r = i % 2 ? 1.4 : 3.2;
+        const px = cx - 3.5 + Math.cos(a) * r;
+        const py = H - 25 + Math.sin(a) * r;
+        if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(cx - 1.5, H - 40.5, 3, 3);
     }
   });
 }

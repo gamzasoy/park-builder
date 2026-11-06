@@ -9,7 +9,9 @@ import { PARADE_COST } from '../sim/parade';
 import { STAFF_KINDS, STAFF_NAME, type StaffKind } from '../sim/staff';
 
 /** 툴바가 한 화면 폭에 들어가도록 버튼에는 짧은 이름을 쓴다(전체 이름은 툴팁) */
-const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원' };
+/** 이름이 긴 건물은 툴바에서 짧게 부른다(전체 이름은 툴팁) */
+const SHORT_LABEL: Record<string, string> = { slide: '미끄럼틀' };
+const STAFF_LABEL: Record<StaffKind, string> = { janitor: '청소부', mechanic: '정비공', entertainer: '인형탈', vendor: '판매원', security: '경비원' };
 import { won } from './hud';
 import { buildingIcon, demolishIcon, fireworksIcon, paradeIcon, pathIcon, photoIcon, sceneryIcon, staffIcon, terrainIcon } from './icons';
 import { TERRAIN_COST } from '../sim/terrain';
@@ -69,7 +71,9 @@ export class Toolbar {
   }
 
   private defButton(d: BuildingDef): HTMLButtonElement {
-    return this.button(`build:${d.id}`, d.name, d.cost, { kind: 'build', def: d }, buildingIcon(d.id));
+    const b = this.button(`build:${d.id}`, SHORT_LABEL[d.id] ?? d.name, d.cost, { kind: 'build', def: d }, buildingIcon(d.id));
+    b.title = `${d.name} (${won(d.cost)})`;
+    return b;
   }
 
   private sceneryButton(d: SceneryDef): HTMLButtonElement {

@@ -7,6 +7,7 @@ import { groundHeightAt, tileHash, type Tile, type TileMap } from '../sim/map';
 import { FLOAT_TICKS, MAX_QUEUE, type Guest } from '../sim/guest';
 import { paradeUnits, type ParadeUnit } from '../sim/parade';
 import { photoSpot } from '../sim/photo';
+import { isSpotted } from '../sim/thief';
 import type { WeatherKind } from '../sim/weather';
 import type { Staff } from '../sim/staff';
 import type { Building, World } from '../sim/world';
@@ -167,7 +168,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     }
     const g = w.g!;
     if (g.id === selectedGuestId) drawGuestRing(ctx, cam, w.x, w.y, w.h);
-    drawGuest(ctx, cam, g, w.x, w.y, w.h, raining);
+    drawGuest(ctx, cam, g, w.x, w.y, w.h, raining, isSpotted(world, g));
   }
   while (si < scenery.length) scenery[si++].draw();
 
@@ -223,7 +224,13 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   }
 
   // 길 잃은 아이: 확대 배율과 상관없이 머리 위에 깜빡이는 물음표(눌러서 보호자에게 데려다준다)
+  // 들킨 도둑: 빨간 느낌표(눌러서 붙잡는다)
   for (const w of walkers) {
+    if (w.g && isSpotted(world, w.g)) {
+      const s = screenAt(cam, w.x, w.y, w.h);
+      if (visible(s)) drawLostMarker(ctx, s.x, s.y - 16 * cam.zoom - 12, cam.zoom, time * 1.6, '!', 'rgba(220,40,40,0.97)');
+      continue;
+    }
     if (w.g?.lostUntil === undefined) continue;
     const s = screenAt(cam, w.x, w.y, w.h);
     if (!visible(s)) continue;
@@ -245,6 +252,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
 
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
   drawWeather(ctx, cam, world.weather.kind, time, season);
+  if (world.storm) drawStorm(ctx, cam, time, season, world.storm);
   if (rainbowAt(world.weatherSeed, Math.floor(time))) drawRainbow(ctx, cam, time);
   drawNight(ctx, cam, world, buildings, time);
   if (world.fireworks) drawFireworks(ctx, cam, world, time);
@@ -275,6 +283,57 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
   } else if (hover && map.inBounds(hover.x, hover.y)) {
     quadFill(ctx, tilePts(cam, map, hover.x, hover.y), 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.9)');
   }
+}
+
+/** 폭풍: 화면을 어둡게 하고, 바람에 비스듬히 퍼붓는 비(겨울엔 눈보라)와 가끔 번개 */
+function drawStorm(ctx: CanvasRenderingContext2D, cam: Camera, time: number, season: Season, storm: { start: number; end: number }): void {
+  const W = cam.viewW;
+  const H = cam.viewH;
+  // 시작·끝 20틱 동안 서서히 짙어지고 옅어진다
+  const k = Math.max(0, Math.min(1, (time - storm.start) / 20, (storm.end - time) / 20));
+  ctx.fillStyle = `rgba(10,14,30,${(0.28 * k).toFixed(3)})`;
+  ctx.fillRect(0, 0, W, H);
+  const snow = season === 'winter';
+  const n = Math.round(220 * k);
+  const slope = 0.9;
+  const len = snow ? 0 : 22;
+  ctx.strokeStyle = 'rgba(210,225,255,0.5)';
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const speed = (snow ? 6 : 16) + (i % 5) * 2;
+    const y = (tileHash(i, 7, 3) * (H + 30) + time * speed) % (H + 30) - 30;
+    const x = (((tileHash(i, 8, 5) * (W + 120) - y * slope - time * (snow ? 9 : 4)) % (W + 120)) + W + 120) % (W + 120) - 60;
+    if (snow) {
+      ctx.moveTo(x + 1.8, y);
+      ctx.arc(x, y, 1.8, 0, Math.PI * 2);
+    } else {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - len * slope, y + len);
+    }
+  }
+  if (snow) ctx.fill();
+  else ctx.stroke();
+  if (snow) return;
+  // 번개: 7초 남짓마다 한 번, 잠깐 번쩍(틱 해시로 정해 매 프레임 같은 모양)
+  const slot = Math.floor(time / 70);
+  const f = time / 70 - slot;
+  if (k < 1 || tileHash(slot, 9, 11) < 0.35 || f > 0.05) return;
+  ctx.fillStyle = `rgba(235,240,255,${(0.45 * (1 - f / 0.05)).toFixed(3)})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,230,0.95)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  let x = W * (0.15 + 0.7 * tileHash(slot, 10, 13));
+  let y = 0;
+  ctx.moveTo(x, y);
+  for (let i = 1; i <= 6; i++) {
+    x += (tileHash(slot, i, 17) - 0.5) * 60;
+    y = (H * 0.45 * i) / 6;
+    ctx.lineTo(x, y);
+  }
+  ctx.stroke();
 }
 
 /** 지형 도구 미리보기: 칸 가운데에 바뀐 뒤의 높이 숫자 */
@@ -983,7 +1042,7 @@ const UMBRELLA = ['#ffd23f', '#ff5d73', '#4cc9f0', '#7bd66b', '#ff9f43'];
 /** 아이 손님은 어른보다 작게 그린다 */
 const KID_SCALE = 0.68;
 
-function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number, lv: number, raining: boolean): void {
+function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: number, ty: number, lv: number, raining: boolean, spotted = false): void {
   const s = screenAt(cam, tx, ty, lv);
   const z = cam.zoom * (g.kid ? KID_SCALE : 1);
   if (s.x < -20 || s.x > cam.viewW + 20 || s.y < -40 || s.y > cam.viewH + 30) return;
@@ -1015,6 +1074,24 @@ function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: num
   ctx.beginPath();
   ctx.arc(s.x, s.y - 14.3 * z, 2.6 * z, Math.PI, 0);
   ctx.fill();
+
+  // 들킨 도둑: 눈가리개와 돈 자루
+  if (spotted) {
+    ctx.fillStyle = '#16161c';
+    ctx.fillRect(s.x - 2.9 * z, s.y - 14.4 * z, 5.8 * z, 1.5 * z);
+    ctx.fillStyle = '#c8a46a';
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = Math.max(0.7, 0.6 * z);
+    ctx.beginPath();
+    ctx.arc(s.x - 4.6 * z, s.y - 6 * z, 2.6 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#5a4020';
+    ctx.font = `bold ${Math.max(5, 3.4 * z)}px ${BUBBLE_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('₩', s.x - 4.6 * z, s.y - 4.8 * z);
+    ctx.textAlign = 'start';
+  }
 
   // VIP: 금색 왕관
   if (g.vip) {
@@ -1156,12 +1233,12 @@ function drawLitter(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, vi
 
 /** 고장 표시: 붉은 원 안의 렌치(살짝 흔들린다) */
 /** 미아 표시: 통통 튀는 주황 원 안의 물음표 */
-function drawLostMarker(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number): void {
+function drawLostMarker(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number, mark = '?', color = 'rgba(255,140,30,0.97)'): void {
   const r = Math.max(9, 10 * z);
   const bob = Math.abs(Math.sin(time * 0.25)) * 4;
   ctx.save();
   ctx.translate(x, y - bob);
-  ctx.fillStyle = 'rgba(255,140,30,0.97)';
+  ctx.fillStyle = color;
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -1172,7 +1249,7 @@ function drawLostMarker(ctx: CanvasRenderingContext2D, x: number, y: number, z: 
   ctx.font = `bold ${Math.round(r * 1.4)}px ${BUBBLE_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('?', 0, r * 0.08);
+  ctx.fillText(mark, 0, r * 0.08);
   ctx.restore();
 }
 
@@ -1202,7 +1279,7 @@ function drawWrench(ctx: CanvasRenderingContext2D, x: number, y: number, z: numb
 }
 
 /** 직원 조끼·모자 색 */
-const STAFF_VEST: Record<Staff['kind'], string> = { janitor: '#f08a24', mechanic: '#2f78d0', entertainer: '#f2c230', vendor: '#d94848' };
+const STAFF_VEST: Record<Staff['kind'], string> = { janitor: '#f08a24', mechanic: '#2f78d0', entertainer: '#f2c230', vendor: '#d94848', security: '#27365e' };
 
 /** 직원: 눈에 띄는 작업복(청소부 = 주황 조끼 + 모자). 작업 중이면 빗자루를 쓴다. */
 function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: number, ty: number, lv: number, time: number): void {
@@ -1271,6 +1348,17 @@ function drawStaff(ctx: CanvasRenderingContext2D, cam: Camera, st: Staff, tx: nu
   ctx.fill();
   ctx.fillRect(s.x - 3.6 * z, s.y - 14.4 * z, 7.2 * z, 1.1 * z);
   if (st.kind === 'vendor') drawVendorTray(ctx, s.x, s.y, z);
+  if (st.kind === 'security') {
+    // 금색 배지와 모자 챙
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath();
+    ctx.arc(s.x - 1.4 * z, s.y - 9.6 * z, 1.1 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#16203d';
+    ctx.fillRect(s.x - 3.6 * z, s.y - 14.4 * z, 7.2 * z, 1.1 * z);
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillRect(s.x - 0.7 * z, s.y - 16.4 * z, 1.4 * z, 1.4 * z);
+  }
 }
 
 function drawRing(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, b: Building): void {
