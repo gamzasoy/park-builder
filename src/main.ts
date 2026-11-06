@@ -105,12 +105,77 @@ function goalText(s: Scenario): string {
   return `${s.months}개월 안에 손님 ${s.guests}명 · 평점 ${s.rating}${s.goalMoney ? ` · 잔고 ${won(s.goalMoney)}` : ''}`;
 }
 
+// ---- 게임 설명 / 환영 화면 ----
+const isTouch = matchMedia('(pointer: coarse)').matches;
+const GUIDE_ROWS: [string, string][] = [
+  ['목표', '시나리오마다 정해진 기한 안에 손님 수·평점(·잔고) 목표를 채우면 성공이에요. 빨리 깰수록 별을 더 받습니다.'],
+  ['1. 길', '입구에서부터 길을 이어 깔아야 손님이 공원 안으로 들어와요.'],
+  ['2. 놀이기구', '놀이기구·매점은 입구(출입구)가 길에 닿게 지어야 손님이 이용해요. 롤러코스터는 트랙을 직접 이어 만들 수 있어요.'],
+  ['3. 매점', '손님은 배고프고 목마르고 화장실도 가요. 매점·화장실이 없으면 기분이 나빠져 일찍 떠납니다.'],
+  ['4. 직원', '청소부는 쓰레기를, 정비공은 고장 난 놀이기구를, 경비원은 소매치기를 맡아요. 인형탈 연기자는 긴 줄의 손님을 즐겁게 해요.'],
+  ['돈', '입장료와 이용 요금으로 벌고, 유지비와 직원 급여가 나가요. 요금이 적정가보다 비싸면 손님이 불만을 가져요. 「재무」에서 수입·지출을 볼 수 있어요.'],
+  ['평점', '손님의 기분·청결·놀거리로 정해져요. 평점을 누르면 손님 리뷰를 볼 수 있어요.'],
+  ['더 즐기기', '「미션」으로 보너스를 받고, 장식·지형으로 공원을 꾸며 보세요. 「특별」 탭에서 불꽃놀이·퍼레이드·사진 찍기도 할 수 있어요.'],
+  ['조작', isTouch
+    ? '한 손가락으로 끌어 화면 이동 · 두 손가락으로 확대/축소 · 누르면 정보 보기 · 건물을 길게 눌러 끌면 옮기기 · 쓰레기를 누르면 줍기'
+    : '드래그·WASD·방향키로 화면 이동 · 휠로 확대/축소 · 클릭으로 정보 보기 · R 회전 · Esc 취소 · Space 일시정지 · 1/2/3 배속 · P 사진'],
+  ['도움말', '「?」 버튼은 처음 할 일을 하나씩 알려 주는 시작 가이드예요. 이 설명은 언제든 「📖 설명」 버튼으로 다시 볼 수 있어요.'],
+];
+
+/** 게임 설명 창. 여는 동안은 게임을 멈추고, 닫으면 원래 속도로(또는 back 화면으로) 돌아간다 */
+function showGuide(back?: () => void): void {
+  const prevSpeed = loop.speed;
+  loop.speed = 0;
+  const close = (): void => {
+    loop.speed = prevSpeed;
+    if (back) back();
+    else modal.hide();
+  };
+  modal.show('guide', {
+    title: '📖 게임 설명',
+    message: '나만의 놀이공원을 짓고 운영하는 게임이에요. 손님이 즐겁게 놀다 가도록 공원을 키워 보세요!',
+    rows: GUIDE_ROWS,
+    guide: true,
+    buttons: [{ label: back ? '돌아가기' : '닫기', primary: true, onClick: close }],
+  });
+}
+
+/** 처음 실행했을 때 보여 주는 첫 화면 */
+function showWelcome(): void {
+  const s = scenarioOf(world);
+  const prevSpeed = loop.speed;
+  loop.speed = 0;
+  const start = (): void => { loop.speed = prevSpeed || 1; modal.hide(); };
+  modal.show('welcome', {
+    title: '🎡 Park Builder에 오신 걸 환영해요!',
+    message:
+      '빈 땅에 길을 깔고 놀이기구·매점을 지어 나만의 놀이공원을 만드는 경영 게임이에요.\n' +
+      '손님을 많이 모으고 평점을 올려 시나리오 목표를 달성해 보세요.\n\n' +
+      '처음이라면 왼쪽 위 「시작 가이드」를 따라 해 보세요. 공원은 자동으로 저장돼요.',
+    rows: [
+      ['첫 시나리오', `${s.icon} ${s.name}`],
+      ['목표', goalText(s)],
+      ['시작 자금', won(world.money)],
+    ],
+    guide: true,
+    buttons: [
+      { label: '게임 설명 보기', onClick: () => showGuide(showWelcome) },
+      { label: '다른 시나리오', onClick: () => confirmNewGame(showWelcome) },
+      { label: '시작하기', primary: true, onClick: start },
+    ],
+  });
+}
+
 /** 시나리오 고르기(새 게임). 지금 하던 공원은 사라진다 */
-function confirmNewGame(): void {
+function confirmNewGame(back?: () => void): void {
   const rec = loadRecords();
+  const reopen = (): void => confirmNewGame(back);
   modal.show('scenario', {
     title: '새 게임 — 시나리오 고르기',
-    message: '지금까지의 공원은 사라집니다. 빨리 깰수록 별을 더 받아요(기한이 절반 넘게 남으면 ★★★).',
+    message:
+      (back ? '' : '지금까지의 공원은 사라집니다. ') +
+      '시나리오마다 땅·자금·목표가 달라요. 기한 안에 목표(손님 수·평점 등)를 채우면 성공이고, ' +
+      '빨리 깰수록 별을 더 받아요(기한이 절반 넘게 남으면 ★★★). 목표를 이룬 뒤에도 자유 모드로 계속 키울 수 있어요.',
     choices: SCENARIOS.map((s) => ({
       icon: s.icon,
       title: s.name,
@@ -119,7 +184,10 @@ function confirmNewGame(): void {
       detail: `${goalText(s)} · 시작 자금 ${won(s.money)}`,
       onClick: () => newGame(s.id),
     })),
-    buttons: [{ label: '취소', onClick: () => modal.hide() }],
+    buttons: [
+      { label: '게임 설명', onClick: () => showGuide(reopen) },
+      { label: back ? '돌아가기' : '취소', onClick: () => (back ? back() : modal.hide()) },
+    ],
   });
 }
 
@@ -378,7 +446,8 @@ const hud = new Hud(world, tools, loop, {
     }
   },
   onSave: () => (saveNow() ? tools.notify('저장했습니다') : tools.fail('저장할 수 없습니다 (브라우저 저장소 사용 불가)')),
-  onNewGame: confirmNewGame,
+  onNewGame: () => confirmNewGame(),
+  onGuide: () => showGuide(),
 });
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
   const s = hireStaff(world, kind);
@@ -658,6 +727,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 seenReports = world.reports.length;
 financePanel.sync(); // 불러온 보고서 때문에 재무 패널이 저절로 열리지 않게
 loop.start();
+// 처음 온 사람(저장된 공원 없음)에게는 게임 소개 첫 화면을 보여 준다
+if (!loaded.ok && loaded.reason === 'empty') showWelcome();
 
 // 개발 모드 전용 디버그 훅: E2E 테스트에서 시간을 빨리감기 위해 사용 (프로덕션 빌드에서는 제거됨)
 if (import.meta.env.DEV) {
@@ -685,6 +756,7 @@ if (import.meta.env.DEV) {
       hover: null, preview: null, alpha: 0.5, selectedId: null, selectedGuestId: null,
     }),
     setSpeed: (s: 0 | 1 | 2 | 4) => { loop.speed = s; },
+    speed: () => loop.speed,
     setZoom: (z: number) => { cam.zoom = z; },
     camera: () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }),
     /** 마우스 아래로 판정된 칸(높이 보정 피킹 확인용) */

@@ -8,10 +8,20 @@ const shot = (name) => page.screenshot({ path: `e2e-out/${name}.png` });
 const game = (fn, arg) => page.evaluate(fn, arg);
 
 try {
+  // 페이지가 뜨기 전에 한 번만 저장을 비운다(reload 방식은 pagehide 자동 저장 때문에 '처음 온 사람'이 되지 않는다)
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('e2e-cleared')) { localStorage.clear(); sessionStorage.setItem('e2e-cleared', '1'); }
+  });
   await page.goto(server.url);
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
   await page.waitForFunction(() => window.__game);
+  // 처음 온 사람에게는 소개 첫 화면이 뜨고, 그동안 게임은 멈춰 있다
+  check(await game(() => window.__game.speed() === 0 && document.getElementById('m-title').textContent.includes('환영')), '첫 실행 시 환영 화면이 뜨고 게임이 멈춤');
+  await page.getByRole('button', { name: '게임 설명 보기' }).click();
+  check(await game(() => document.querySelectorAll('#m-rows tr').length >= 8), '게임 설명 창이 열림');
+  await shot('00-guide');
+  await page.getByRole('button', { name: '돌아가기' }).click();
+  await page.getByRole('button', { name: '시작하기' }).click();
+  check(await game(() => document.getElementById('modal').hidden && window.__game.speed() === 1), '시작하기를 누르면 창이 닫히고 1배속으로 진행');
   await page.waitForSelector('#tutorial', { state: 'visible', timeout: 3000 });
   const doneItems = () => page.evaluate(() => document.querySelectorAll('#tu-list li.done').length);
   check((await doneItems()) === 0, '새 게임에서 시작 가이드가 보이고 아직 완료한 단계가 없음');

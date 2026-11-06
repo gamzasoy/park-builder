@@ -34,6 +34,7 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => window.__game);
+  await page.evaluate(() => document.querySelector('#m-buttons button.primary')?.click()); // 환영 화면 닫기
   const vp = page.viewportSize();
   check(vp.width > vp.height, `가로 화면 (${vp.width}x${vp.height})`);
 

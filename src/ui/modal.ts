@@ -20,6 +20,8 @@ export interface ModalContent {
   title: string;
   message?: string;
   rows?: [string, string][];
+  /** true면 rows를 설명표(왼쪽 정렬, 여러 줄)로 보여 준다 */
+  guide?: boolean;
   choices?: ModalChoice[];
   /** 글자 입력칸(공원 이름 등). 버튼의 onClick에서 modal.inputValue로 읽는다 */
   input?: { value: string; maxLength: number; placeholder?: string; onEnter?: () => void };
@@ -93,7 +95,8 @@ export class Modal {
       }),
     );
     this.choices.hidden = !c.choices?.length;
-    this.root.classList.toggle('wide', !!c.choices?.length);
+    this.root.classList.toggle('wide', !!c.choices?.length || !!c.guide);
+    this.root.classList.toggle('guide', !!c.guide);
     this.buttons.replaceChildren(
       ...c.buttons.map((b) => {
         const el = document.createElement('button');
