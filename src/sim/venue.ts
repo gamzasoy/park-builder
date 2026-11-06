@@ -1,6 +1,6 @@
 import { hash32 } from '../core/hash';
 import type { BuildingDef } from '../data/types';
-import { applyEffects, goIdle, remember, think, TRASH_MAX, TRASH_MIN, type Guest, type Thought } from './guest';
+import { applyEffects, goIdle, remember, think, TRASH_MAX, TRASH_MIN, VIP_REWARD, type Guest, type Thought } from './guest';
 import type { Building, World } from './world';
 
 /** 대기열 맨 앞의 유효한 손님에게 요금을 받고 시설에 들인다. 들일 손님이 없으면 null. */
@@ -31,6 +31,14 @@ export function release(world: World, b: Building, def: BuildingDef, id: number)
   const g = world.guestById.get(id);
   if (!g) return;
   applyEffects(g, def);
+  // VIP의 소원을 이뤄 주면 상금
+  if (g.vip && !g.vip.done && def.id === g.vip.wish) {
+    g.vip.done = true;
+    world.transact('missions', VIP_REWARD);
+    world.stats.vips++;
+    g.needs.happiness = Math.min(100, g.needs.happiness + 20);
+    think(g, 'vipHappy');
+  }
   // 먹고 마신(커피 포함) 손님은 곧 쓰레기를 버린다(시점은 손님 id·틱으로 결정)
   if (def.serves === 'hunger' || def.serves === 'thirst' || def.rest) {
     g.trash = TRASH_MIN + (hash32(g.id, world.tick, 11) % (TRASH_MAX - TRASH_MIN + 1));

@@ -46,6 +46,8 @@ export interface Building {
   brokenTicks: number;
   /** 지금까지 마친 운행 횟수(고장 판정의 결정적 입력) */
   cycles: number;
+  /** 놀이기구 업그레이드 단계(1~MAX_LEVEL). 없으면 1 */
+  level?: number;
 }
 
 /** playing: 목표 진행 중 / won·lost: 종료(시뮬레이션 정지) / sandbox: 목표 없이 계속 */
@@ -104,7 +106,7 @@ export class World {
   /** 진행 중인 불꽃놀이 / 마지막으로 쏜 날(하루 한 번) */
   fireworks: Fireworks | null = null;
   lastFireworksDay = -1;
-  stats = { entered: 0, left: 0, peakGuests: 0 };
+  stats = { entered: 0, left: 0, peakGuests: 0, vips: 0 };
 
   status: GameStatus = 'playing';
   /** 종료 사유(결과 화면에 표시) */
@@ -123,6 +125,8 @@ export class World {
   monthStartEntered = 0;
   /** 초반 안내 진행 상황 */
   tutorial: TutorialState = newTutorial();
+  /** 공원 이름(입구 간판). 비어 있으면 'PARK' */
+  parkName = '';
   /** 보너스 미션 진행 상황 */
   missions: MissionState = newMissions();
   /** 공원 평점(0~1000, 천천히 변동) */
@@ -179,5 +183,6 @@ export class World {
     this.debtDays = src.debtDays;
     this.tutorial = src.tutorial;
     this.missions = src.missions;
+    this.parkName = src.parkName;
   }
 }

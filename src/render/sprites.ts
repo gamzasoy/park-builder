@@ -3,7 +3,7 @@
  * 모든 함수는 화면 좌표(이미 카메라 변환된 값)와 확대율 z를 받으므로
  * 게임 화면(renderer.ts)과 툴바 아이콘(ui/icons.ts)에서 함께 쓴다.
  */
-import { BIN, FLOWERS, OAK, PINE } from '../data/scenery';
+import { BIN, FLOWERS, FOUNTAIN, OAK, PINE } from '../data/scenery';
 import { shade } from './color';
 import type { Vec2 } from './iso';
 
@@ -1038,8 +1038,53 @@ export function drawVendorTray(ctx: CanvasRenderingContext2D, x: number, y: numb
 
 // ---------------------------------------------------------------- 장식
 
+/** 분수: 돌 수반, 가운데 기둥과 윗 접시, 사방으로 떨어지는 물줄기 */
+function fountain(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, time: number): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(x + 2 * z, y + 1.5 * z, 24 * z, 12 * z, 0, 0, TAU);
+  ctx.fill();
+  // 수반
+  disc(ctx, x, y, 22 * z, 11 * z, 6 * z, '#d8d2c2', '#a9a08a');
+  ctx.fillStyle = '#5fb4e0';
+  ctx.beginPath();
+  ctx.ellipse(x, y - 6 * z, 18 * z, 8.6 * z, 0, 0, TAU);
+  ctx.fill();
+  // 수면의 물결
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = Math.max(1, 0.8 * z);
+  for (let i = 0; i < 2; i++) {
+    const k = ((time * 0.04 + i * 0.5) % 1);
+    ctx.globalAlpha = 1 - k;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 6 * z, (5 + k * 12) * z, (2.4 + k * 5.6) * z, 0, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // 기둥과 윗 접시
+  ctx.fillStyle = '#c8c0aa';
+  ctx.fillRect(x - 2 * z, y - 20 * z, 4 * z, 14 * z);
+  disc(ctx, x, y - 20 * z, 7 * z, 3 * z, 2 * z, '#e4dfd2', '#b3aa94');
+  // 물줄기: 꼭대기에서 솟아 사방으로 떨어진다
+  const top = { x, y: y - 27 * z };
+  line(ctx, { x, y: y - 22 * z }, top, 'rgba(200,235,255,0.9)', Math.max(1, 1.6 * z));
+  ctx.fillStyle = 'rgba(210,240,255,0.95)';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    for (let j = 0; j < 3; j++) {
+      const k = ((time * 0.06 + j / 3 + i * 0.13) % 1);
+      const px = top.x + Math.cos(a) * 15 * z * k;
+      const py = top.y + Math.sin(a) * 6.5 * z * k - 5 * z * Math.sin(k * Math.PI) + 20 * z * k * k;
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(0.8, 1.1 * z), 0, TAU);
+      ctx.fill();
+    }
+  }
+}
+
 /** 나무·꽃. (x, y)는 타일 중앙의 지면 화면 좌표, seed는 0~1 고정값(모양 변주) */
-export function drawScenery(ctx: CanvasRenderingContext2D, kind: number, x: number, y: number, z: number, seed: number): void {
+export function drawScenery(ctx: CanvasRenderingContext2D, kind: number, x: number, y: number, z: number, seed: number, time = 0): void {
+  if (kind === FOUNTAIN) return fountain(ctx, x, y, z, time);
   const s = z * (0.85 + seed * 0.35);
   if (kind === FLOWERS) {
     ctx.fillStyle = '#2f7a34';

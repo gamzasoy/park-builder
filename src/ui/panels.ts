@@ -1,11 +1,12 @@
 import { getDef } from '../data';
-import { buildingDef } from '../sim/coaster';
+import { buildingDef, MAX_LEVEL, UPGRADE_FUN, upgradeCost } from '../sim/coaster';
 import type { ToolController } from '../input/tools';
 import type { TestRun } from '../render/testrun';
 import { THOUGHT_TEXT } from '../render/thoughts';
 import type { Guest } from '../sim/guest';
 import { fireStaff, STAFF_NAME, type Staff } from '../sim/staff';
-import { demolishAt, REFUND_RATE } from '../sim/building';
+import { demolishAt, REFUND_RATE, upgradeRide } from '../sim/building';
+import { withObj } from './josa';
 import { dailyUpkeep, dailyWages, fairPrice, setPrice, WAGE } from '../sim/economy';
 import type { Ledger, LedgerKey, World } from '../sim/world';
 import { signedWon, won } from './hud';
@@ -32,6 +33,9 @@ export class BuildingPanel {
   private price: Stepper;
   private demolishBtn = $<HTMLButtonElement>('p-demolish');
   private editBtn = $<HTMLButtonElement>('p-edit');
+  private upgradeBtn = $<HTMLButtonElement>('p-upgrade');
+  /** 업그레이드에 성공했을 때 — 효과음용(실패는 tools.fail이 오류음을 낸다) */
+  onUpgrade?: (ok: boolean) => void;
   private testBtn = $<HTMLButtonElement>('p-test');
   private relRow = $('p-rel-row');
   private rel = $('p-rel');
@@ -45,6 +49,17 @@ export class BuildingPanel {
     });
     $('p-price-ctl').append(this.price.el);
     $('p-close').addEventListener('click', () => { this.tools.selectedId = null; });
+    this.upgradeBtn.addEventListener('click', () => {
+      const b = this.current();
+      if (!b) return;
+      const err = upgradeRide(this.world, b);
+      if (err) {
+        this.tools.fail(err);
+        return;
+      }
+      this.tools.notify(`${withObj(getDef(b.defId).name)} Lv.${b.level}로 업그레이드했습니다 (재미 +${UPGRADE_FUN})`);
+      this.onUpgrade?.(true);
+    });
     this.editBtn.addEventListener('click', () => {
       const b = this.current();
       if (b) this.tools.beginTrackEdit(b.id);
@@ -52,7 +67,7 @@ export class BuildingPanel {
     this.testBtn.addEventListener('click', () => {
       const b = this.current();
       if (b && this.testRun.start(b)) this.tools.notify(this.testRun.result);
-      else this.tools.notify('시운전할 트랙이 없습니다');
+      else this.tools.fail('시운전할 트랙이 없습니다');
     });
     this.demolishBtn.addEventListener('click', () => {
       const b = this.current();
@@ -77,7 +92,14 @@ export class BuildingPanel {
     const def = buildingDef(b);
     const operational = this.world.network.isOperational(b);
     const trackPending = !!b.track && !b.track.ok;
-    setText(this.name, def.name);
+    const lv = b.level ?? 1;
+    setText(this.name, def.kind === 'ride' ? `${def.name} ${'★'.repeat(lv)}` : def.name);
+    const upCost = upgradeCost(b);
+    this.upgradeBtn.hidden = def.kind !== 'ride' || (upCost === null && lv < MAX_LEVEL);
+    if (!this.upgradeBtn.hidden) {
+      setText(this.upgradeBtn, upCost === null ? `최고 단계 (Lv.${lv})` : `업그레이드 → Lv.${lv + 1} (${won(upCost)} · 재미 +${UPGRADE_FUN})`);
+      this.upgradeBtn.disabled = upCost === null || this.world.money < upCost;
+    }
     setText(
       this.status,
       b.broken
@@ -272,7 +294,8 @@ export class GuestPanel {
     }
     if (this.root.hidden) this.root.hidden = false;
 
-    setText(this.title, `손님 #${g.id}`);
+    const vip = g.vip ? (g.vip.done ? ` 👑 VIP · 소원 성취!` : ` 👑 VIP · ${getDef(g.vip.wish).name} 원함`) : '';
+    setText(this.title, `손님 #${g.id}${vip}`);
     const target = g.target !== null ? this.world.buildings.get(g.target) : undefined;
     const targetName = target ? getDef(target.defId).name : '';
     setText(this.state, STATE_TEXT[g.state] + (targetName && g.state !== 'idle' && g.state !== 'leaving' ? ` · ${targetName}` : ''));

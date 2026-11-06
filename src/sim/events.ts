@@ -1,8 +1,10 @@
 import { hash32 } from '../core/hash';
 import { DAY_TICKS } from './economy';
-import { think } from './guest';
+import { think, VIP_TICKS, type Guest } from './guest';
+import { buildingDef } from './coaster';
+import { isNight } from './daynight';
 import { admitGuest, MAX_GUESTS } from './spawner';
-import { weatherKindOf } from './weather';
+import { rainbowAt, weatherKindOf } from './weather';
 import type { World } from './world';
 
 // ---------------------------------------------------------------- 랜덤 이벤트
@@ -13,9 +15,10 @@ import type { World } from './world';
  * - heatwave: 폭염, 손님이 빨리 목말라진다(맑은 날에만)
  * - hype: 인기 블로거가 다녀가 손님 입장이 2배
  * - blackout: 정전, 놀이기구가 새 손님을 태우지 못한다(운행 중인 것은 마저 돈다)
+ * - vip: VIP 손님이 와서 운영 중인 놀이기구 하나를 타고 싶어 한다. 기한 안에 태워 주면 상금
  */
-export type EventKind = 'bus' | 'heatwave' | 'hype' | 'blackout';
-export const EVENT_KINDS: readonly EventKind[] = ['bus', 'heatwave', 'hype', 'blackout'];
+export type EventKind = 'bus' | 'heatwave' | 'hype' | 'blackout' | 'vip';
+export const EVENT_KINDS: readonly EventKind[] = ['bus', 'heatwave', 'hype', 'blackout', 'vip'];
 
 export interface ParkEvent {
   kind: EventKind;
@@ -27,9 +30,13 @@ export interface ParkEvent {
 /** 이벤트가 생기는 첫날(0부터) / 하루에 이벤트가 생길 확률 */
 export const FIRST_EVENT_DAY = 2;
 export const EVENT_CHANCE = 0.4;
-export const EVENT_TICKS: Record<EventKind, number> = { bus: 60, heatwave: 300, hype: 240, blackout: 80 };
+export const EVENT_TICKS: Record<EventKind, number> = { bus: 60, heatwave: 300, hype: 240, blackout: 80, vip: 60 };
 /** 관광버스로 들어오는 손님 수 */
 export const BUS_GUESTS = 20;
+/** 무지개가 떠 있는 동안 손님 행복 +1 주기(틱) */
+export const RAINBOW_CHEER_EVERY = 20;
+/** VIP가 더 가지고 오는 돈 */
+export const VIP_MONEY = 150;
 /** 폭염 중 틱당 추가 갈증 */
 export const HEAT_THIRST = 0.06;
 /** 입소문 중 입장 확률 배수 */
@@ -58,6 +65,20 @@ export function eventAtTick(seed: number, tick: number): ParkEvent | null {
 }
 
 export const eventActive = (world: World, kind: EventKind): boolean => world.event?.kind === kind;
+
+/** VIP 손님을 입장시킨다. 운영 중인 놀이기구 중 하나(틱 해시로 고름)를 소원으로 갖는다. 기구가 없으면 오지 않는다 */
+export function spawnVip(world: World): Guest | null {
+  const rides = [...new Set(
+    [...world.buildings.values()].filter((b) => !b.broken && world.network.isOperational(b)).map((b) => buildingDef(b)).filter((d) => d.kind === 'ride').map((d) => d.id),
+  )].sort();
+  if (rides.length === 0 || world.guests.length >= MAX_GUESTS) return null;
+  const g = admitGuest(world, true);
+  if (!g) return null;
+  g.money += VIP_MONEY;
+  g.needs.happiness = Math.max(g.needs.happiness, 80);
+  g.vip = { wish: rides[hash32(world.tick, world.guests.length, 53) % rides.length], until: world.tick + VIP_TICKS, done: false };
+  return g;
+}
 
 // ---------------------------------------------------------------- 불꽃놀이
 
@@ -113,6 +134,15 @@ export function updateEvents(world: World): void {
   if (world.event?.kind === 'bus' && t === world.event.start) {
     for (let i = 0; i < BUS_GUESTS && world.guests.length < MAX_GUESTS; i++) admitGuest(world);
   }
+  if (world.event?.kind === 'vip' && t === world.event.start) spawnVip(world);
+  // 무지개: 비 온 다음 날 아침, 바라보는 손님의 기분이 오른다
+  if (t % RAINBOW_CHEER_EVERY === 0 && rainbowAt(world.weatherSeed, t)) {
+    for (const g of world.guests) {
+      if (g.state === 'visiting' || g.state === 'gone') continue;
+      g.needs.happiness = Math.min(100, g.needs.happiness + 1);
+      if (!g.thought && hash32(g.id, t, 43) % 6 === 0) think(g, 'rainbow');
+    }
+  }
 
   const fw = world.fireworks;
   if (!fw) return;
@@ -121,9 +151,11 @@ export function updateEvents(world: World): void {
     return;
   }
   if ((t - fw.start) % FIREWORKS_CHEER_EVERY !== 0) return;
+  // 밤하늘의 불꽃은 효과가 두 배
+  const cheer = isNight(t) ? 2 : 1;
   for (const g of world.guests) {
     if (g.state === 'visiting' || g.state === 'gone') continue;
-    g.needs.happiness = Math.min(100, g.needs.happiness + 1);
+    g.needs.happiness = Math.min(100, g.needs.happiness + cheer);
     if (!g.thought && hash32(g.id, t, 41) % 4 === 0) think(g, 'fireworks');
   }
 }

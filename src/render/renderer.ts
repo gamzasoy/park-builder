@@ -12,6 +12,9 @@ import type { Camera } from './camera';
 import { shade } from './color';
 import { guestDisplayPos, staffDisplayPos } from './guestpos';
 import { BUBBLE_FONT, POSITIVE, THOUGHT_TEXT } from './thoughts';
+import { darknessAt, MAX_DARK } from '../sim/daynight';
+import { rainbowAt, RAINBOW_TICKS } from '../sim/weather';
+import { DAY_TICKS } from '../sim/economy';
 import { GroundCache, occludingTiles, paintTerrainTile } from './ground';
 import { drawMascot, drawRideSprite, drawVendorTray, drawScenery, drawStationFloor, PALETTE, poly, tintBox, type Quad } from './sprites';
 import { TILE_H, TILE_W, terrainPx, tileToWorld, type Vec2 } from './iso';
@@ -108,9 +111,9 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     scenery.push({ key: b.x + b.y, draw: () => drawStationFloor(ctx, footprintQuad(cam, map, b), spriteOpts(cam, b, time), b.w >= b.h) });
     addTrackScenery(scenery, ctx, cam, b, alpha, trackOcc(), world, view.testRun);
   }
-  addSceneryTiles(scenery, ctx, cam, map, tileScreen, visible, hh);
+  addSceneryTiles(scenery, ctx, cam, map, tileScreen, visible, hh, time);
   const gs = tileScreen(map.gate.x, map.gate.y, map.heightAt(map.gate.x, map.gate.y));
-  if (visible(gs)) scenery.push({ key: map.gate.x + map.gate.y + 1.6, draw: () => drawGate(ctx, cam, map.gate, map.heightAt(map.gate.x, map.gate.y)) });
+  if (visible(gs)) scenery.push({ key: map.gate.x + map.gate.y + 1.6, draw: () => drawGate(ctx, cam, map.gate, map.heightAt(map.gate.x, map.gate.y), world.parkName) });
   // 언덕 뒤에 선 건물·손님이 언덕 앞면 위로 비치지 않게, 그것을 가리는 솟은 칸을 물체 뒤에 다시 그린다
   if (hasRaisedTerrain(map)) {
     const occ = new Map<number, { tx: number; ty: number }>();
@@ -186,8 +189,20 @@ export function drawFrame(ctx: CanvasRenderingContext2D, cam: Camera, world: Wor
     drawWrench(ctx, s.x, s.y - roof - 14 * cam.zoom, cam.zoom, time);
   }
 
+  // 업그레이드한 놀이기구: 지붕 위에 단계만큼 금색 별
+  for (const b of buildings) {
+    const lv = b.level ?? 1;
+    if (lv <= 1 || b.broken) continue;
+    const s = tileScreen(b.x + b.w / 2, b.y + b.h / 2, map.heightAt(b.x, b.y));
+    if (!visible(s)) continue;
+    const roof = Math.min(getDef(b.defId).height, 60) * cam.zoom;
+    for (let i = 0; i < lv; i++) drawStar(ctx, s.x + (i - (lv - 1) / 2) * 13 * cam.zoom, s.y - roof - 20 * cam.zoom, 6 * cam.zoom);
+  }
+
   // 날씨: 화면 공간 틴트와 빗줄기(편집 미리보기는 그 위에 또렷하게 그린다)
   drawWeather(ctx, cam, world.weather.kind, time);
+  if (rainbowAt(world.weatherSeed, Math.floor(time))) drawRainbow(ctx, cam, time);
+  drawNight(ctx, cam, world, buildings, time);
   if (world.fireworks) drawFireworks(ctx, cam, world, time);
 
   // 3.5) 트랙 편집 중: 역 지붕·나무·건물에 가린 트랙을 반투명 선으로 덧그린다
@@ -267,6 +282,85 @@ function drawWeather(ctx: CanvasRenderingContext2D, cam: Camera, kind: WeatherKi
     ctx.lineTo(x - len * RAIN_SLOPE, y + len);
   }
   ctx.stroke();
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.45 : r;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#ffd23f';
+  ctx.fill();
+  ctx.strokeStyle = '#8a6a10';
+  ctx.lineWidth = Math.max(0.8, 0.6 * r / 4);
+  ctx.stroke();
+}
+
+/** 무지개: 화면 하늘에 걸린 반투명 일곱 빛깔 띠. 아침의 처음과 끝에 서서히 나타나고 사라진다 */
+const RAINBOW = ['#ff4d4d', '#ff9f43', '#ffd23f', '#5fd068', '#4cc9f0', '#4a6cf0', '#9b59d0'];
+function drawRainbow(ctx: CanvasRenderingContext2D, cam: Camera, time: number): void {
+  const t = ((time % DAY_TICKS) + DAY_TICKS) % DAY_TICKS;
+  const fade = Math.max(0, Math.min(1, t / 30, (RAINBOW_TICKS - t) / 40));
+  if (fade <= 0) return;
+  const W = cam.viewW;
+  const R = Math.min(W * 0.36, cam.viewH * 0.6);
+  const cx = W * 0.6;
+  const cy = cam.viewH * 0.2 + R; // 꼭대기가 화면 위쪽 1/5쯤에 오도록
+  const band = Math.max(5, R * 0.022);
+  ctx.save();
+  ctx.globalAlpha = 0.32 * fade;
+  ctx.lineWidth = band;
+  RAINBOW.forEach((c, i) => {
+    ctx.strokeStyle = c;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R - i * band, Math.PI * 1.08, Math.PI * 1.92);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+/** 밤: 화면을 남색으로 어둡게 하고, 건물과 입구 문에 따뜻한 불빛을 켠다 */
+function drawNight(ctx: CanvasRenderingContext2D, cam: Camera, world: World, buildings: readonly Building[], time: number): void {
+  const dark = darknessAt(time);
+  if (dark <= 0) return;
+  ctx.fillStyle = `rgba(12,18,52,${dark.toFixed(3)})`;
+  ctx.fillRect(0, 0, cam.viewW, cam.viewH);
+  const glow = Math.min(1, dark / MAX_DARK);
+  if (glow < 0.2) return;
+  const z = cam.zoom;
+  const map = world.map;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const light = (x: number, y: number, r: number, color: string): void => {
+    if (x < -r || x > cam.viewW + r || y < -r || y > cam.viewH + r) return;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  const a = (0.75 * glow).toFixed(3);
+  for (const b of buildings) {
+    if (!world.network.isOperational(b)) continue;
+    const def = getDef(b.defId);
+    const lv = map.heightAt(b.x, b.y);
+    const c = screenAt(cam, b.x + b.w / 2, b.y + b.h / 2, lv);
+    const r = (34 + (b.w + b.h) * 14) * z;
+    // 운행 중인 놀이기구는 색깔 조명, 나머지는 따뜻한 불빛
+    const color = def.kind === 'ride' && b.phase === 'running' ? hexA(def.color, 0.8 * glow) : `rgba(255,190,110,${a})`;
+    light(c.x, c.y - Math.min(def.height, 60) * 0.5 * z, r, color);
+  }
+  const gate = screenAt(cam, map.gate.x + 0.5, map.gate.y + 0.5, map.heightAt(map.gate.x, map.gate.y));
+  light(gate.x, gate.y - 30 * z, 40 * z, `rgba(255,210,130,${a})`);
+  ctx.restore();
+}
+
+function hexA(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(3)})`;
 }
 
 /** 불꽃놀이: 하늘을 어둡게 하고, 발사 지점에서 일정 간격으로 쏘아 올린 불꽃이 터진다. 틱으로만 정해진다. */
@@ -371,7 +465,7 @@ function drawBuilding(ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap, 
 /** 나무·꽃(공원 안 장식 레이어 + 공원 밖 뒤쪽 숲)을 깊이 정렬 대상으로 추가 */
 function addSceneryTiles(
   list: Scenery[], ctx: CanvasRenderingContext2D, cam: Camera, map: TileMap,
-  tileScreen: (x: number, y: number, lv?: number) => Vec2, visible: (s: Vec2) => boolean, hh: number,
+  tileScreen: (x: number, y: number, lv?: number) => Vec2, visible: (s: Vec2) => boolean, hh: number, time: number,
 ): void {
   const z = cam.zoom;
   const add = (tx: number, ty: number, kind: number): void => {
@@ -379,7 +473,7 @@ function addSceneryTiles(
     // 나무는 타일 위로 솟으므로 화면 아래쪽 여유를 더 둔다
     if (!visible(s) && !visible({ x: s.x, y: s.y - 50 * z })) return;
     const seed = tileHash(tx, ty, 7);
-    list.push({ key: tx + ty + 1.5, draw: () => drawScenery(ctx, kind, s.x, s.y + hh, z, seed) });
+    list.push({ key: tx + ty + 1.5, draw: () => drawScenery(ctx, kind, s.x, s.y + hh, z, seed, time) });
   };
   for (let ty = 0; ty < map.height; ty++) {
     for (let tx = 0; tx < map.width; tx++) {
@@ -390,7 +484,7 @@ function addSceneryTiles(
 }
 
 /** 공원 입구: 길 양옆 기둥 두 개와 아치 간판 */
-function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: number): void {
+function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: number, name: string): void {
   const z = cam.zoom;
   const P = (x: number, y: number): Vec2 => screenAt(cam, x, y, lv);
   const a = P(g.x - 0.15, g.y + 0.5);
@@ -420,9 +514,18 @@ function drawGate(ctx: CanvasRenderingContext2D, cam: Camera, g: Tile, lv: numbe
   ctx.translate(c.x, c.y);
   ctx.transform(1, (b.y - a.y) / (b.x - a.x), 0, 1, 0, 0); // 간판 기울기에 맞춰 글자를 기울인다
   ctx.fillStyle = '#a3241a';
-  ctx.font = `bold ${Math.max(6, 8 * z)}px "Trebuchet MS", sans-serif`;
+  const label = name || 'PARK';
+  // 간판 폭에 맞게 글자 크기를 줄인다
+  const signW = Math.hypot(b.x - a.x, b.y - a.y) * 0.9;
+  let fontPx = Math.max(6, 8 * z);
+  ctx.font = `bold ${fontPx}px "Trebuchet MS", ${BUBBLE_FONT}`;
+  const tw = ctx.measureText(label).width;
+  if (tw > signW) {
+    fontPx = Math.max(4, fontPx * (signW / tw));
+    ctx.font = `bold ${fontPx}px "Trebuchet MS", ${BUBBLE_FONT}`;
+  }
   ctx.textAlign = 'center';
-  ctx.fillText('PARK', 0, 0);
+  ctx.fillText(label, 0, 0);
   ctx.restore();
 }
 
@@ -756,6 +859,25 @@ function drawGuest(ctx: CanvasRenderingContext2D, cam: Camera, g: Guest, tx: num
   ctx.beginPath();
   ctx.arc(s.x, s.y - 14.3 * z, 2.6 * z, Math.PI, 0);
   ctx.fill();
+
+  // VIP: 금색 왕관
+  if (g.vip) {
+    const cy = s.y - 16.4 * z;
+    ctx.fillStyle = '#ffcf33';
+    ctx.strokeStyle = '#8a6a10';
+    ctx.lineWidth = Math.max(0.8, 0.6 * z);
+    ctx.beginPath();
+    ctx.moveTo(s.x - 3 * z, cy);
+    ctx.lineTo(s.x - 3 * z, cy - 3.6 * z);
+    ctx.lineTo(s.x - 1.5 * z, cy - 1.8 * z);
+    ctx.lineTo(s.x, cy - 4.4 * z);
+    ctx.lineTo(s.x + 1.5 * z, cy - 1.8 * z);
+    ctx.lineTo(s.x + 3 * z, cy - 3.6 * z);
+    ctx.lineTo(s.x + 3 * z, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
 
   // 비 오는 날 우산을 쓴 손님(풍선 대신)
   if (g.umbrella && raining) {

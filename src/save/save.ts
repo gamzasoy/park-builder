@@ -1,11 +1,12 @@
 import { getDef } from '../data';
 import { sceneryDef } from '../data/scenery';
-import { restoreTrack, type TrackType } from '../sim/coaster';
+import { MAX_LEVEL, restoreTrack, type TrackType } from '../sim/coaster';
 import { claimLoadedTracks } from '../sim/trackedit';
 import type { Guest } from '../sim/guest';
 import { STAFF_KINDS, type Staff } from '../sim/staff';
 import { STEP_IDS, type TutorialState } from '../sim/tutorial';
 import { MISSION_IDS, type MissionState } from '../sim/missions';
+import { cleanParkName } from '../sim/park';
 import { eventAtTick, type Fireworks } from '../sim/events';
 import { MAX_TERRAIN, type Tile } from '../sim/map';
 import { DEFAULT_WEATHER_SEED, weatherAtTick, type Weather } from '../sim/weather';
@@ -66,7 +67,7 @@ export interface SaveData {
   ledger: Ledger;
   reports: MonthReport[];
   monthStartEntered: number;
-  stats: { entered: number; left: number; peakGuests: number };
+  stats: { entered: number; left: number; peakGuests: number; vips?: number };
   status: GameStatus;
   endReason: string;
   goalHold: number;
@@ -76,6 +77,7 @@ export interface SaveData {
   /** v2에서 추가. 없으면(이전 저장본) 안내를 이미 끝낸 것으로 본다 */
   tutorial?: TutorialState;
   missions?: MissionState;
+  parkName?: string;
   fireworks?: Fireworks | null;
   lastFireworksDay?: number;
   /** v4에서 추가. 없으면 직원 없음 */
@@ -113,6 +115,7 @@ export function serializeWorld(world: World): SaveData {
     nextGuestId: world.nextGuestId,
     nextStaffId: world.nextStaffId,
     entranceFee: world.entranceFee,
+    parkName: world.parkName,
     rating: world.rating,
     ratingParts: world.ratingParts,
     ledger: world.ledger,
@@ -204,6 +207,7 @@ export function deserializeWorld(data: SaveData): World {
       broken: b.broken === true,
       brokenTicks: isNum(b.brokenTicks) ? b.brokenTicks : 0,
       cycles: isNum(b.cycles) ? b.cycles : 0,
+      level: isNum(b.level) ? Math.max(1, Math.min(MAX_LEVEL, Math.round(b.level))) : undefined,
     };
     if (savedTrack) {
       // 트랙 상태를 다시 계산한다. 다른 건물과의 충돌 검사·지면 점유는 모든 건물을 읽은 뒤에 한다
@@ -228,6 +232,7 @@ export function deserializeWorld(data: SaveData): World {
     thoughtTimer: g.thoughtTimer ?? 0,
     trash: g.trash ?? 0,
     umbrella: g.umbrella === true,
+    vip: g.vip && typeof g.vip.wish === 'string' && isNum(g.vip.until) ? { wish: g.vip.wish, until: g.vip.until, done: g.vip.done === true } : undefined,
   }));
 
   w.staff = (data.staff ?? []).map((s) => {
@@ -272,7 +277,7 @@ export function deserializeWorld(data: SaveData): World {
   w.ledger = { ...emptyLedger(), ...data.ledger };
   w.reports = data.reports.map((r) => ({ ...r, ledger: { ...emptyLedger(), ...r.ledger } }));
   w.monthStartEntered = data.monthStartEntered;
-  w.stats = { ...data.stats };
+  w.stats = { vips: 0, ...data.stats };
   w.status = data.status;
   w.endReason = String(data.endReason ?? '');
   w.goalHold = data.goalHold;
@@ -287,6 +292,7 @@ export function deserializeWorld(data: SaveData): World {
   w.fireworks = fw && isNum(fw.start) && isNum(fw.end) && isNum(fw.x) && isNum(fw.y) ? { ...fw } : null;
   w.lastFireworksDay = isNum(data.lastFireworksDay) ? data.lastFireworksDay : -1;
   w.event = eventAtTick(w.weatherSeed, w.tick);
+  w.parkName = typeof data.parkName === 'string' ? cleanParkName(data.parkName) : '';
   w.missions = {
     completed: Array.isArray(data.missions?.completed)
       ? data.missions.completed.filter((id): id is string => MISSION_IDS.includes(id))

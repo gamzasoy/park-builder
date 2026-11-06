@@ -110,6 +110,61 @@
         color: #2a2210; background: #f6e9a8; border: 1px solid #8a7a3a; box-shadow: 2px 2px 0 rgba(0,0,0,0.35);
       }
       #hint { left: 16px; }
+      /* 새 메시지가 오면 노란 쪽지가 잠깐 튀어 오르며 주황으로 강조된다 */
+      #hint.msg { font-weight: 700; color: #3a1c00; background: #ffd27a; border-color: #b8661a; animation: hint-pop 0.35s ease-out; }
+      @keyframes hint-pop { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+      /* 실패 메시지: 쪽지는 빨갛게, 돈 표시는 흔들리고, 누른 자리에서 말풍선이 떠오른다 */
+      #hint.msg.err { color: #fff; background: #d63c2f; border-color: #7a1810; animation: hint-shake 0.4s ease-out; }
+      @keyframes hint-shake { 0%, 100% { transform: none; } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+      #money.shake { animation: money-shake 0.5s ease-out; color: #ff6b5e !important; border-color: #d63c2f !important; background: rgba(214,60,47,0.35) !important; }
+      @keyframes money-shake { 0%, 100% { transform: none; } 15% { transform: translateX(-7px) scale(1.08); } 35% { transform: translateX(7px) scale(1.08); } 55% { transform: translateX(-5px); } 75% { transform: translateX(4px); } }
+      .float-err {
+        position: fixed; z-index: 20; transform: translate(-50%, -130%); pointer-events: none; white-space: nowrap;
+        padding: 6px 12px; font-size: 15px; font-weight: 700; color: #fff; background: #d63c2f; border: 2px solid #fff; border-radius: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.45); text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+        animation: float-err 1.6s ease-out forwards;
+      }
+      @keyframes float-err {
+        0% { opacity: 0; transform: translate(-50%, -100%) scale(0.6); }
+        12% { opacity: 1; transform: translate(-50%, -140%) scale(1.1); }
+        22% { transform: translate(-50%, -140%) scale(1); }
+        75% { opacity: 1; transform: translate(-50%, -190%); }
+        100% { opacity: 0; transform: translate(-50%, -230%); }
+      }
+
+      /* 큰 알림(토스트): 화면 위쪽 가운데 */
+      #toasts {
+        position: fixed; z-index: 6; top: calc(var(--hud-h, 36px) + 46px); left: 50%; transform: translateX(-50%);
+        display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(520px, calc(100vw - 32px)); pointer-events: none;
+      }
+      .toast {
+        position: relative; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; overflow: hidden;
+        /* 카드는 클릭을 아래 공원으로 통과시킨다(× 버튼만 누를 수 있음) */
+        padding: 10px 34px 12px 12px; pointer-events: none;
+        color: #fff; background: linear-gradient(#3b4a2a, #2a3620); border: 2px solid #f2c230; border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
+        animation: toast-in 0.45s cubic-bezier(.2,1.4,.4,1);
+      }
+      .toast.good { border-color: #6fdc7a; background: linear-gradient(#2f5a32, #1f3f22); }
+      .toast.bad { border-color: #ff7a6b; background: linear-gradient(#6a2a24, #4a1c18); }
+      .toast.info { border-color: #8fc8ff; background: linear-gradient(#2c4260, #1d2e45); }
+      .toast.leaving { animation: toast-out 0.3s ease-in forwards; }
+      .toast .t-icon { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); animation: toast-icon 0.6s ease-out; }
+      .toast .t-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .toast .t-body b { font-size: 16px; text-shadow: 0 1px 0 rgba(0,0,0,0.6); }
+      .toast .t-body span { font-size: 13px; color: #e8ecd8; }
+      .toast .t-close {
+        position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0; pointer-events: auto;
+        font-size: 15px; line-height: 1; color: #fff; background: rgba(0,0,0,0.25); border: 0; border-radius: 4px; cursor: pointer;
+      }
+      .toast .t-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: 0.55; transform-origin: left; animation: toast-bar linear forwards; }
+      .toast.event .t-bar { color: #f2c230; } .toast.good .t-bar { color: #6fdc7a; } .toast.bad .t-bar { color: #ff7a6b; } .toast.info .t-bar { color: #8fc8ff; }
+      @keyframes toast-in { 0% { opacity: 0; transform: translateY(-24px) scale(0.9); } 100% { opacity: 1; transform: none; } }
+      @keyframes toast-out { to { opacity: 0; transform: translateY(-12px) scale(0.95); } }
+      @keyframes toast-icon { 0% { transform: scale(0.3) rotate(-20deg); } 60% { transform: scale(1.3) rotate(8deg); } 100% { transform: none; } }
+      @keyframes toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+      @media (prefers-reduced-motion: reduce) { .toast, .toast .t-icon, #hint.msg, #money.shake { animation: none; } .toast .t-bar { display: none; } .float-err { animation-name: float-err-still; } @keyframes float-err-still { 0%, 80% { opacity: 1; } 100% { opacity: 0; } } }
       #goal { right: 16px; }
 
       #toolbar {
@@ -154,7 +209,7 @@
       .p-row:nth-child(odd) { background: rgba(0,0,0,0.1); }
       .p-row > span:first-child { color: var(--muted); }
       #p-status[data-ok="0"] { color: #ffb0a8; }
-      #p-demolish, #p-edit, #p-test { width: 100%; margin-top: 8px; padding: 4px; }
+      #p-demolish, #p-edit, #p-test, #p-upgrade { width: 100%; margin-top: 8px; padding: 4px; }
       #finance table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.12); }
       #finance th { text-align: left; font-weight: 400; color: var(--muted); padding: 3px 4px; }
       #finance td { text-align: right; padding: 3px 4px 3px 8px; font-variant-numeric: tabular-nums; }
@@ -174,6 +229,8 @@
       #m-rows { width: 100%; border-collapse: collapse; margin-bottom: 14px; background: rgba(0,0,0,0.12); }
       #m-rows th { text-align: left; font-weight: 400; color: var(--muted); padding: 4px 6px; }
       #m-rows td { text-align: right; padding: 4px 6px; font-variant-numeric: tabular-nums; }
+      #m-input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 6px 8px; font: inherit; font-size: 16px; }
+      #m-input[hidden] { display: none; }
       #m-buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
       #m-buttons button { padding: 5px 14px; }
       #m-buttons button.primary, #t-buttons button.primary {
@@ -215,6 +272,11 @@
         .stepper button { min-width: 30px; min-height: 30px; }
         #hint, #goal { top: calc(36px + var(--sat)); font-size: 11px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #hint { left: calc(8px + var(--sal)); }
+        #toasts { top: calc(36px + var(--sat) + 30px); width: min(440px, 60vw); gap: 6px; }
+        .toast { padding: 6px 12px 8px 8px; gap: 8px; }
+        .toast .t-icon { font-size: 22px; }
+        .toast .t-body b { font-size: 13px; }
+        .toast .t-body span { font-size: 11px; }
         #goal { right: calc(8px + var(--sar)); }
         #toolbar {
           flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 10px; -webkit-overflow-scrolling: touch;
@@ -246,7 +308,7 @@
         .card .head { position: sticky; top: 0; z-index: 1; }
         .card .head button, .card .head div button { min-width: 36px; height: 30px; font-size: 16px; }
         .p-row { padding: 4px; }
-        #p-demolish, #p-edit, #p-test, #s-fire { min-height: 36px; }
+        #p-demolish, #p-edit, #p-test, #p-upgrade, #s-fire { min-height: 36px; }
         #modal .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
         #m-buttons button { min-height: 38px; }
         #track-bar {
@@ -338,6 +400,7 @@
       <div class="p-row"><span>하루 유지비</span><span id="p-upkeep"></span></div>
       <div class="p-row"><span>이용 요금</span><span id="p-price-ctl"></span></div>
       <div class="p-row"><span>적정 요금</span><span id="p-fair"></span></div>
+      <button id="p-upgrade" hidden></button>
       <button id="p-edit" hidden>트랙 편집</button>
       <button id="p-test" hidden>시운전</button>
       <button id="p-demolish"></button>
@@ -372,6 +435,7 @@
         <h2 id="m-title"></h2>
         <p id="m-msg"></p>
         <table id="m-rows"></table>
+        <input id="m-input" type="text" hidden autocomplete="off" />
         <div id="m-buttons"></div>
       </div>
     </div>

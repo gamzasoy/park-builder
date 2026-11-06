@@ -3,6 +3,9 @@ import type { ToolController } from '../input/tools';
 import { dateOf, setEntranceFee } from '../sim/economy';
 import { GOAL, goalProgress } from '../sim/goals';
 import { BUS_GUESTS } from '../sim/events';
+import { clockOf, isNight } from '../sim/daynight';
+import { rainbowAt } from '../sim/weather';
+import { floatError } from './toast';
 import type { World } from '../sim/world';
 import { Stepper } from './stepper';
 
@@ -38,6 +41,8 @@ export const EVENT_VIEW = {
   heatwave: { icon: '🔥', label: '폭염', tip: '폭염: 손님이 평소보다 훨씬 빨리 목말라집니다 · 음료·아이스크림을 준비하세요' },
   hype: { icon: '📸', label: '입소문', tip: '인기 블로거 방문: 잠시 동안 손님 입장이 2배' },
   blackout: { icon: '⚡', label: '정전', tip: '정전: 잠시 동안 놀이기구가 새 손님을 태우지 못합니다 · 줄 선 손님은 기다리다 지칩니다' },
+  vip: { icon: '👑', label: 'VIP 방문', tip: 'VIP 손님: 왕관을 쓴 손님이 타고 싶은 놀이기구를 태워 주면 상금을 받습니다' },
+  rainbow: { icon: '🌈', label: '무지개', tip: '무지개: 비 온 다음 날 아침, 손님들의 기분이 조금씩 좋아집니다' },
   fireworks: { icon: '🎆', label: '불꽃놀이', tip: '불꽃놀이: 공원 모든 손님의 기분이 오르고, 구경하러 손님이 더 옵니다' },
 } as const;
 
@@ -57,6 +62,7 @@ export class Hud {
   private goal = document.getElementById('goal')!;
   private hudEl = document.getElementById('hud')!;
   private hudH = -1;
+  private shownMsgAt = 0;
   private speedButtons = new Map<Speed, HTMLButtonElement>();
   private fee: Stepper;
   private shownSpeed: Speed | -1 = -1;
@@ -92,7 +98,9 @@ export class Hud {
     this.money.classList.toggle('neg', w.money < 0);
 
     const d = dateOf(w.tick);
-    setText(this.date, `${d.year}년차 ${d.month}월 ${d.day}일`);
+    const c = clockOf(w.tick);
+    const moon = isNight(w.tick) ? ' 🌙' : '';
+    setText(this.date, `${d.year}년차 ${d.month}월 ${d.day}일 ${c.hour}:${String(c.minute).padStart(2, '0')}${moon}`);
     setText(this.guests, `손님 ${w.guests.length}명`);
 
     const r = Math.round(w.rating);
@@ -107,8 +115,12 @@ export class Hud {
     const wv = WEATHER_VIEW[w.weather.kind];
     const ev = w.event ? EVENT_VIEW[w.event.kind] : null;
     const show = w.fireworks ? EVENT_VIEW.fireworks : null;
-    setText(this.weather, [`${wv.icon} ${wv.label}`, ev && `${ev.icon} ${ev.label}`, show && `${show.icon} ${show.label}`].filter(Boolean).join(' · '));
-    const tip = [wv.tip, ev?.tip, show?.tip].filter(Boolean).join('\n');
+    const rb = rainbowAt(w.weatherSeed, w.tick) ? EVENT_VIEW.rainbow : null;
+    // 이벤트가 하나면 이름까지, 여럿이면 아이콘만(설명은 툴팁) — HUD가 넘치지 않게
+    const extras = [ev, show, rb].filter((x) => x !== null);
+    const extraText = extras.length === 1 ? ` · ${extras[0].icon} ${extras[0].label}` : extras.length ? ` ${extras.map((x) => x.icon).join('')}` : '';
+    setText(this.weather, `${wv.icon} ${wv.label}${extraText}`);
+    const tip = [wv.tip, ev?.tip, show?.tip, rb?.tip].filter(Boolean).join('\n');
     // 노란 쪽지와 카드가 HUD 아래에 오도록 실제 높이를 CSS에 알린다
     const h = this.hudEl.offsetHeight;
     if (h !== this.hudH) {
@@ -126,7 +138,28 @@ export class Hud {
 
     this.updateGoal();
 
-    const text = performance.now() < this.tools.messageUntil ? this.tools.message : HINTS[this.tools.tool.kind];
+    const showing = performance.now() < this.tools.messageUntil;
+    const text = showing ? this.tools.message : HINTS[this.tools.tool.kind];
+    // 새 메시지가 오면 쪽지를 강조하고 튀어 오르게 한다(같은 메시지가 다시 와도 다시 튄다)
+    if (showing && this.tools.messageUntil !== this.shownMsgAt) {
+      this.shownMsgAt = this.tools.messageUntil;
+      const err = this.tools.messageTone === 'error';
+      this.hint.classList.remove('msg', 'err');
+      void this.hint.offsetWidth; // 애니메이션 다시 시작
+      this.hint.classList.add('msg');
+      if (err) {
+        this.hint.classList.add('err');
+        floatError(this.tools.message);
+        if (this.tools.message.includes('돈')) {
+          this.money.classList.remove('shake');
+          void this.money.offsetWidth;
+          this.money.classList.add('shake');
+          setTimeout(() => this.money.classList.remove('shake'), 600);
+        }
+      }
+    } else if (!showing && this.hint.classList.contains('msg')) {
+      this.hint.classList.remove('msg', 'err');
+    }
     setText(this.hint, text);
   }
 

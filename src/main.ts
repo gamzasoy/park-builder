@@ -9,7 +9,8 @@ import { pickTile } from './input/pick';
 import type { Tile } from './sim/map';
 import { loadFromStorage, saveToStorage } from './save/save';
 import { DAY_TICKS, DAYS_PER_MONTH, WAGE } from './sim/economy';
-import { createGuest } from './sim/guest';
+import { createGuest, VIP_REWARD, VIP_TICKS } from './sim/guest';
+import { getDef } from './data';
 import { stepWorld } from './sim/sim';
 import { hireStaff, STAFF_NAME } from './sim/staff';
 import { World } from './sim/world';
@@ -20,9 +21,14 @@ import { Sound } from './ui/sound';
 import { TrackEditor } from './ui/trackEditor';
 import { TestRun } from './render/testrun';
 import { TutorialPanel } from './ui/tutorial';
+import { Toasts, type ToastTone } from './ui/toast';
+import { isNight } from './sim/daynight';
+import { withObj, withRo } from './ui/josa';
+import { cleanParkName, MAX_PARK_NAME } from './sim/park';
+import { rainbowAt } from './sim/weather';
 import { MissionPanel } from './ui/missions';
 import { MISSIONS } from './sim/missions';
-import { BUS_GUESTS, FIREWORKS_COST, launchFireworks } from './sim/events';
+import { BUS_GUESTS, FIREWORKS_COST, launchFireworks, type EventKind } from './sim/events';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
 
@@ -36,6 +42,8 @@ const tools = new ToolController(world);
 const input = new Input(canvas, cam);
 input.getMap = () => world.map;
 const modal = new Modal();
+modal.bindInput();
+const toasts = new Toasts();
 const sound = new Sound();
 tools.onEvent = (e) => sound.play(e);
 
@@ -59,9 +67,9 @@ function saveNow(): boolean {
 const loaded = loadFromStorage();
 if (loaded.ok) {
   world.adopt(loaded.world);
-  tools.notify('저장된 공원을 불러왔습니다');
+  toasts.show('📂', world.parkName ? `${world.parkName}에 다시 오신 걸 환영해요` : '저장된 공원을 불러왔습니다', '', 'info');
 } else if (loaded.reason === 'corrupt' || loaded.reason === 'version') {
-  tools.notify('저장 데이터를 읽을 수 없어 새로 시작합니다 (이전 데이터는 백업됨)');
+  toasts.show('⚠️', '저장 데이터를 읽을 수 없어 새로 시작합니다', '이전 데이터는 백업해 두었어요', 'bad');
 }
 
 function newGame(): void {
@@ -74,10 +82,11 @@ function newGame(): void {
   tutorialPanel.reset();
   seenReports = world.reports.length;
   seenMissions = world.missions.completed.length;
+  seenVips = world.stats.vips;
   loop.speed = 1;
   modal.hide();
   saveNow();
-  tools.notify('새 게임을 시작했습니다');
+  toasts.show('🎡', '새 공원을 열었어요!', '입구에서 길을 깔아 시작해 보세요', 'info');
 }
 
 function confirmNewGame(): void {
@@ -92,37 +101,68 @@ function confirmNewGame(): void {
 }
 
 // ---- 월간 보고서 알림음 ----
-let seenReports = 0;
+let seenReports = world.reports.length; // 불러온 공원의 지난 보고서는 다시 알리지 않는다
+
 // ---- 랜덤 이벤트 시작 알림 ----
 let seenEvent = world.event?.start ?? -1;
-const EVENT_NOTICE = {
-  bus: `🚌 단체 관광버스 도착! 손님 ${BUS_GUESTS}명이 한꺼번에 들어옵니다`,
-  heatwave: '🔥 폭염 경보! 손님들이 금방 목말라져요. 음료를 준비하세요',
-  hype: '📸 인기 블로거가 공원을 소개했어요! 잠시 손님이 2배로 몰립니다',
-  blackout: '⚡ 정전! 잠시 놀이기구가 손님을 태우지 못합니다',
-} as const;
+const EVENT_NOTICE: Record<Exclude<EventKind, 'vip'>, [string, string, string, ToastTone]> = {
+  bus: ['🚌', '단체 관광버스 도착!', `손님 ${BUS_GUESTS}명이 한꺼번에 들어옵니다`, 'event'],
+  heatwave: ['🔥', '폭염 경보!', '손님들이 금방 목말라져요. 음료를 준비하세요', 'bad'],
+  hype: ['📸', '인기 블로거가 공원을 소개했어요!', '잠시 손님이 2배로 몰립니다', 'good'],
+  blackout: ['⚡', '정전!', '잠시 놀이기구가 손님을 태우지 못합니다', 'bad'],
+};
 function watchEvent(): void {
   const e = world.event;
   if (!e || e.start === seenEvent) return;
   seenEvent = e.start;
-  tools.notify(EVENT_NOTICE[e.kind]);
+  if (e.kind === 'vip') {
+    // VIP가 오지 못했으면(운영 중인 기구가 없거나 손님이 가득) 알리지 않는다
+    const v = world.guests.find((g) => g.vip && !g.vip.done && g.vip.until === e.start + VIP_TICKS);
+    if (!v?.vip) return;
+    toasts.show('👑', 'VIP 손님 방문!', `${withObj(getDef(v.vip.wish).name)} 타고 싶어 해요. 태워 주면 상금 ${won(VIP_REWARD)}`, 'event');
+  } else {
+    toasts.show(...EVENT_NOTICE[e.kind]);
+  }
   sound.play(e.kind === 'blackout' ? 'error' : 'chime');
 }
 
 // ---- 미션 달성 알림 ----
 let seenMissions = world.missions.completed.length;
+let rainbowShown = rainbowAt(world.weatherSeed, world.tick);
+function watchRainbow(): void {
+  const now = rainbowAt(world.weatherSeed, world.tick);
+  if (now && !rainbowShown) {
+    toasts.show('🌈', '무지개가 떴어요!', '비가 그친 하늘을 보며 손님들의 기분이 좋아집니다', 'good');
+    sound.play('chime');
+  }
+  rainbowShown = now;
+}
+
+let seenVips = world.stats.vips;
+function watchVips(): void {
+  if (world.stats.vips > seenVips) {
+    toasts.show('👑', 'VIP 손님이 아주 만족했어요!', `상금 +${won(VIP_REWARD)}`, 'good');
+    sound.play('win');
+  }
+  seenVips = world.stats.vips;
+}
+
 function watchMissions(): void {
   const done = world.missions.completed;
   if (done.length > seenMissions) {
     const m = MISSIONS.find((x) => x.id === done[done.length - 1]);
-    if (m) tools.notify(`🎉 미션 달성: ${m.title} (상금 +${won(m.reward)})`);
+    if (m) toasts.show('🎉', `미션 달성: ${m.title}`, `상금 +${won(m.reward)}`, 'good');
     sound.play('chime');
   }
   seenMissions = done.length;
 }
 
 function watchReports(): void {
-  if (world.reports.length > seenReports) sound.play('chime');
+  if (world.reports.length > seenReports) {
+    const r = world.reports[world.reports.length - 1];
+    toasts.show('📊', `${r.month}월 결산`, `순이익 ${r.net >= 0 ? '+' : ''}${won(r.net)} · 재무 창에서 자세히 볼 수 있어요`, r.net >= 0 ? 'good' : 'bad');
+    sound.play('chime');
+  }
   seenReports = world.reports.length;
 }
 
@@ -197,6 +237,8 @@ const loop = new GameLoop(
     watchReports();
     watchMissions();
     watchEvent();
+    watchVips();
+    watchRainbow();
     watchStatus();
     if (now - lastSaveAt > AUTOSAVE_MS) saveNow();
   },
@@ -213,28 +255,23 @@ const hud = new Hud(world, tools, loop, {
     missionPanel.toggle();
     if (missionPanel.open) financePanel.toggle(false);
   },
-  onSave: () => tools.notify(saveNow() ? '저장했습니다' : '저장할 수 없습니다 (브라우저 저장소 사용 불가)'),
+  onSave: () => (saveNow() ? tools.notify('저장했습니다') : tools.fail('저장할 수 없습니다 (브라우저 저장소 사용 불가)')),
   onNewGame: confirmNewGame,
 });
 const toolbar = new Toolbar(document.getElementById('toolbar')!, tools, (kind) => {
   const s = hireStaff(world, kind);
   if (s) {
-    const name = STAFF_NAME[kind];
-    // 받침이 있으면 '을', 없으면 '를'
-    const josa = (name.charCodeAt(name.length - 1) - 0xac00) % 28 ? '을' : '를';
-    tools.notify(`${name}${josa} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
+    tools.notify(`${withObj(STAFF_NAME[kind])} 고용했습니다 (하루 급여 ${won(WAGE[kind])})`);
     sound.play('build');
   } else {
-    tools.notify('더 이상 고용할 수 없습니다');
-    sound.play('error');
+    tools.fail('더 이상 고용할 수 없습니다');
   }
 }, () => {
   const err = launchFireworks(world);
   if (err) {
-    tools.notify(err);
-    sound.play('error');
+    tools.fail(err);
   } else {
-    tools.notify(`🎆 불꽃놀이를 시작했습니다! (${won(FIREWORKS_COST)})`);
+    toasts.show('🎆', '불꽃놀이 시작!', isNight(world.tick) ? '밤하늘이라 효과가 두 배예요' : `손님들이 하늘을 올려다봐요 (${won(FIREWORKS_COST)})`, 'event');
     sound.play('win');
   }
 });
@@ -261,6 +298,29 @@ window.addEventListener('resize', layoutToolbar);
 window.addEventListener('orientationchange', layoutToolbar);
 
 const buildingPanel = new BuildingPanel(world, tools, testRun);
+buildingPanel.onUpgrade = (ok) => sound.play(ok ? 'build' : 'error');
+
+// ---- 공원 이름: 도구 없이 입구를 누르면 이름을 짓는다 ----
+function renamePark(): void {
+  const save = (): void => {
+    world.parkName = cleanParkName(modal.inputValue);
+    modal.hide();
+    if (world.parkName) toasts.show('🏷️', `'${world.parkName}' 개장!`, `공원 이름을 '${world.parkName}'${withRo(world.parkName).slice(world.parkName.length)} 정했습니다`, 'info');
+    else tools.notify('공원 이름을 지웠습니다');
+    sound.play('chime');
+    saveNow();
+  };
+  modal.show('rename', {
+    title: '공원 이름 짓기',
+    message: `입구 간판에 걸릴 이름이에요 (최대 ${MAX_PARK_NAME}글자).`,
+    input: { value: world.parkName, maxLength: MAX_PARK_NAME * 2, placeholder: '예: 행복랜드', onEnter: save },
+    buttons: [
+      { label: '취소', onClick: () => modal.hide() },
+      { label: '정하기', primary: true, onClick: save },
+    ],
+  });
+}
+tools.onGate = renamePark;
 const guestPanel = new GuestPanel(world, tools);
 const staffPanel = new StaffPanel(world, tools);
 const trackEditor = new TrackEditor(world, tools, testRun);
