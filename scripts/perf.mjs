@@ -13,7 +13,8 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => window.__game);
-  await page.evaluate(() => document.querySelector('#m-buttons button.primary')?.click()); // 환영 화면 닫기
+  // 환영 화면·설치 안내 닫기
+  for (let i = 0; i < 3; i++) await page.evaluate(() => { if (!document.getElementById('modal').hidden) document.querySelector('#m-buttons button.primary')?.click(); });
 
   // 건물 여러 개 + 길 (화면에 보이는 규모)
   await page.evaluate(() => {

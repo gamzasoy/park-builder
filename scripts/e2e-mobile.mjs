@@ -30,11 +30,22 @@ async function drag(from, to, steps = 8) {
 const tapAt = async (p) => { await touch('touchStart', [p]); await touch('touchEnd', []); };
 
 try {
+  // 페이지가 뜨기 전에 한 번만 저장을 비운다(reload 방식은 pagehide 자동 저장 때문에 '처음 온 사람'이 되지 않는다)
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('e2e-cleared')) { localStorage.clear(); sessionStorage.setItem('e2e-cleared', '1'); }
+  });
   await page.goto(server.url);
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
   await page.waitForFunction(() => window.__game);
-  await page.evaluate(() => document.querySelector('#m-buttons button.primary')?.click()); // 환영 화면 닫기
+  // 첫 실행: 환영 화면 → 시작하기 → 홈 화면 설치 안내(휴대폰 브라우저에서만)
+  const modalTitle = () => game(() => (document.getElementById('modal').hidden ? '' : document.getElementById('m-title').textContent));
+  check((await modalTitle()).includes('환영'), '첫 실행 시 환영 화면');
+  await page.getByRole('button', { name: '시작하기' }).tap();
+  check((await modalTitle()).includes('앱처럼 설치'), '환영 화면을 닫으면 홈 화면 설치 안내가 뜸');
+  check(await game(() => window.__game.speed() === 0 && document.querySelectorAll('#m-rows tr').length >= 1), '설치 안내 중에는 게임이 멈추고 방법이 적혀 있음');
+  check(await game(() => document.querySelector('#modal .dialog').getBoundingClientRect().bottom <= window.innerHeight + 1), '설치 안내 창이 화면 안에 들어옴');
+  await shot('00-install');
+  await page.getByRole('button', { name: '확인' }).tap();
+  check(await game(() => document.getElementById('modal').hidden && window.__game.speed() === 1), '확인을 누르면 창이 닫히고 게임이 진행됨');
   const vp = page.viewportSize();
   check(vp.width > vp.height, `가로 화면 (${vp.width}x${vp.height})`);
 
@@ -72,6 +83,7 @@ try {
   await shot('01b-folded');
   await page.reload();
   await page.waitForFunction(() => window.__game);
+  check(await game(() => document.getElementById('modal').hidden), '다시 열면 환영 화면·설치 안내가 또 뜨지 않음');
   check((await tbTop()) === Infinity, '접은 상태가 새로고침 후에도 유지됨');
   await page.locator('#tb-toggle').tap();
   check(Math.abs((await tbTop()) - openTop) < 2, '펼치기 버튼으로 도구 막대가 다시 나타남');

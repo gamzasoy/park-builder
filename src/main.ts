@@ -39,6 +39,8 @@ import { FESTIVAL_COST, FESTIVAL_DAYS, FESTIVALS, seasonKey, startFestival } fro
 import { THIEF_BOUNTY } from './sim/thief';
 import { LEVEL_PX, type TrackType } from './sim/coaster';
 import { Toolbar } from './ui/toolbar';
+import { canPromptInstall, installSteps, isStandalone, platformOf, promptInstall, watchInstallPrompt } from './ui/install';
+import type { Speed } from './core/loop';
 
 const AUTOSAVE_MS = 15_000;
 
@@ -95,16 +97,30 @@ function newGame(id = DEFAULT_SCENARIO): void {
   seenDamage = null;
   shownSeason = seasonOf(world.tick);
   seenFestival = -1;
+  modalResume = null;
   loop.speed = 1;
   modal.hide();
   saveNow();
   const s = scenarioOf(world);
   toasts.show(s.icon, `${s.name} 개장!`, `목표: ${goalText(s)}`, 'info');
+  maybeShowInstallTip();
 }
 
 /** 시나리오 목표 한 줄 요약 */
 function goalText(s: Scenario): string {
   return `${s.months}개월 안에 손님 ${s.guests}명 · 평점 ${s.rating}${s.goalMoney ? ` · 잔고 ${won(s.goalMoney)}` : ''}`;
+}
+
+// ---- 안내 창이 떠 있는 동안 게임 멈춤 ----
+// 창끼리 오갈 때(설명 → 설치 안내 → 설명) 멈추기 전 속도를 한 번만 기억해 두고, 마지막 창을 닫을 때 되돌린다
+let modalResume: Speed | null = null;
+function pauseGame(): void {
+  if (modalResume === null) modalResume = loop.speed;
+  loop.speed = 0;
+}
+function resumeGame(): void {
+  if (modalResume !== null) loop.speed = modalResume;
+  modalResume = null;
 }
 
 // ---- 게임 설명 / 환영 화면 ----
@@ -127,28 +143,79 @@ const GUIDE_ROWS: [string, string][] = [
 
 /** 게임 설명 창. 여는 동안은 게임을 멈추고, 닫으면 원래 속도로(또는 back 화면으로) 돌아간다 */
 function showGuide(back?: () => void): void {
-  const prevSpeed = loop.speed;
-  loop.speed = 0;
+  pauseGame();
   const close = (): void => {
-    loop.speed = prevSpeed;
-    if (back) back();
-    else modal.hide();
+    if (back) return back();
+    modal.hide();
+    resumeGame();
   };
   modal.show('guide', {
     title: '📖 게임 설명',
     message: '나만의 놀이공원을 짓고 운영하는 게임이에요. 손님이 즐겁게 놀다 가도록 공원을 키워 보세요!',
     rows: GUIDE_ROWS,
     guide: true,
-    buttons: [{ label: back ? '돌아가기' : '닫기', primary: true, onClick: close }],
+    buttons: [
+      ...(offerInstall ? [{ label: '📲 앱으로 설치', onClick: () => showInstallTip(() => showGuide(back)) }] : []),
+      { label: back ? '돌아가기' : '닫기', primary: true, onClick: close },
+    ],
+  });
+}
+
+// ---- 휴대폰: 홈 화면에 추가해 앱처럼 쓰기 안내 ----
+const INSTALL_TIP_KEY = 'park-builder-install-tip';
+/** 휴대폰·태블릿 브라우저에서 열었고 아직 홈 화면 앱으로 실행한 게 아니면 안내한다 */
+const offerInstall = isTouch && !isStandalone();
+/** 첫 실행 환영 화면이 닫히면 설치 안내를 한 번 띄운다 */
+let installTipPending = false;
+watchInstallPrompt(() => toasts.show('📲', '홈 화면에 설치했어요!', '이제 홈 화면의 Park Builder 아이콘으로 바로 시작할 수 있어요', 'good'));
+
+function installTipSeen(): boolean {
+  try { return localStorage.getItem(INSTALL_TIP_KEY) === '1'; } catch { return true; }
+}
+
+function maybeShowInstallTip(): void {
+  if (!installTipPending) return;
+  installTipPending = false;
+  try { localStorage.setItem(INSTALL_TIP_KEY, '1'); } catch { /* 저장소 사용 불가 */ }
+  showInstallTip();
+}
+
+function showInstallTip(back?: () => void): void {
+  pauseGame();
+  const close = (): void => {
+    if (back) return back();
+    modal.hide();
+    resumeGame();
+  };
+  const oneTap = canPromptInstall();
+  const platform = platformOf(navigator.userAgent);
+  modal.show('install', {
+    title: '📲 앱처럼 설치하기',
+    message:
+      '홈 화면에 추가하면 앱처럼 아이콘을 눌러 바로 시작할 수 있어요.\n' +
+      '주소창 없이 전체 화면으로 넓게 보이고, 인터넷이 없어도 플레이할 수 있어요.' +
+      (oneTap ? '\n\n아래 「지금 설치」를 누르면 바로 설치돼요.' : ''),
+    rows: oneTap ? [] : installSteps(platform),
+    guide: true,
+    buttons: oneTap
+      ? [
+        { label: back ? '돌아가기' : '나중에', onClick: close },
+        { label: '지금 설치', primary: true, onClick: () => { void promptInstall().then(close); } },
+      ]
+      : [{ label: back ? '돌아가기' : '확인', primary: true, onClick: close }],
   });
 }
 
 /** 처음 실행했을 때 보여 주는 첫 화면 */
 function showWelcome(): void {
   const s = scenarioOf(world);
-  const prevSpeed = loop.speed;
-  loop.speed = 0;
-  const start = (): void => { loop.speed = prevSpeed || 1; modal.hide(); };
+  pauseGame();
+  const start = (): void => {
+    modal.hide();
+    resumeGame();
+    if (loop.speed === 0) loop.speed = 1;
+    maybeShowInstallTip();
+  };
   modal.show('welcome', {
     title: '🎡 Park Builder에 오신 걸 환영해요!',
     message:
@@ -189,7 +256,7 @@ function confirmNewGame(back?: () => void): void {
     })),
     buttons: [
       { label: '게임 설명', onClick: () => showGuide(reopen) },
-      { label: back ? '돌아가기' : '취소', onClick: () => (back ? back() : modal.hide()) },
+      { label: back ? '돌아가기' : '취소', onClick: () => { if (back) return back(); modal.hide(); resumeGame(); } },
     ],
   });
 }
@@ -769,7 +836,10 @@ seenReports = world.reports.length;
 financePanel.sync(); // 불러온 보고서 때문에 재무 패널이 저절로 열리지 않게
 loop.start();
 // 처음 온 사람(저장된 공원 없음)에게는 게임 소개 첫 화면을 보여 준다
-if (!loaded.ok && loaded.reason === 'empty') showWelcome();
+if (!loaded.ok && loaded.reason === 'empty') {
+  installTipPending = offerInstall && !installTipSeen();
+  showWelcome();
+}
 
 // 개발 모드 전용 디버그 훅: E2E 테스트에서 시간을 빨리감기 위해 사용 (프로덕션 빌드에서는 제거됨)
 if (import.meta.env.DEV) {
